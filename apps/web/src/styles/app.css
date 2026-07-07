@@ -45,6 +45,11 @@
   font-size: var(--text-base);
 }
 
+.table-expanded th,
+.table-expanded td {
+  font-size: var(--text-sm) !important;
+}
+
 /* Card header compact variant */
 .card-header.compact {
   padding: var(--space-3) var(--space-7);
@@ -169,8 +174,8 @@
   transition: border-color var(--tr-fast);
   outline: none;
 }
-.form-input:focus { border-color: var(--color-accent); }
-.form-input-sm { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); }
+.form-input:focus { border-color: var(--color-brand); }
+.form-input-sm { padding: var(--space-1) var(--space-2); font-size: var(--text-sm); }
 .form-error {
   font-size: var(--text-xs); color: var(--color-danger);
   padding: var(--space-2) var(--space-3);

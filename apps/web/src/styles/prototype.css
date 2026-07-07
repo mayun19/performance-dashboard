@@ -125,7 +125,7 @@
   --color-text-muted: #b8c7d6;
   --color-text-subtle: #8fa1b3;
   --color-text-sidebar: var(--color-text);
-  --color-text-sidebar-muted: var(--color-text-sidebar-muted);
+  --color-text-sidebar-muted: var(--color-text-sidebar);
   --color-accent: #f9af1c; /* keep SIMPP orange — pops on dark */
   --color-accent-hover: #ffc44a;
   --color-accent-tint: rgba(249, 175, 28, 0.18);
@@ -140,7 +140,7 @@
   --color-pill: var(--color-text);
   --color-table-head: #1e3a5f;
   --color-table-head-text: #f1f5f9;
-  --color-success-tint: rgba(70, 189, 13, 0.18);
+  --color-muted: --color-success-tint: rgba(70, 189, 13, 0.18);
   --color-warning-tint: rgba(251, 168, 6, 0.18);
   --color-danger-tint: rgba(236, 28, 36, 0.18);
   --color-info-tint: rgba(3, 162, 184, 0.18);
@@ -1362,7 +1362,7 @@ a {
   color-scheme: light;
 }
 .form-input:focus {
-  border-color: var(--color-accent);
+  border-color: var(--color-text-muted);
 }
 
 /* =========================================================
@@ -3102,6 +3102,11 @@ a {
 .data-table tbody tr.row-clickable {
   cursor: pointer;
 }
+
+.table-expanded th {
+  padding: var(--space-4) var(--space-3) !important;
+}
+
 .table-pagination {
   display: flex;
   align-items: center;
