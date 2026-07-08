@@ -13,7 +13,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:seed": "ts-node prisma/seed.ts",
     "db:setup": "prisma generate && ts-node prisma/seed.ts",
-    "prisma": "prisma"
+    "prisma": "prisma",
+    "env:local": "./scripts/use-env.sh local",
+    "env:remote": "./scripts/use-env.sh remote",
+    "dev:local": "./scripts/use-env.sh local && nest start --watch",
+    "dev:remote": "./scripts/use-env.sh remote && nest start --watch"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^2.3.0",

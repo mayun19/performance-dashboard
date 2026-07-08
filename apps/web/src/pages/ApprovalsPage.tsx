@@ -2123,7 +2123,9 @@ export function ApprovalsPage() {
               </span>
             )
           }>
-          <div className="table-wrap">
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
             <div className="table-scroll">
               <table className="data-table compact">
                 <thead>
@@ -2208,7 +2210,7 @@ export function ApprovalsPage() {
                               </strong>
                             </div>
                             <table
-                              className="data-table table-expanded "
+                              className="data-table table-expanded"
                               style={{ margin: 0 }}>
                               <thead>
                                 <tr>
@@ -2265,7 +2267,8 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-2)",
+                gap: "var(--space-4)",
+                padding: "0 var(--space-7) var(--space-7)",
               }}>
               {kmBundleKP.components.some((c) => c.status === "submitted") && (
                 <div
@@ -2429,7 +2432,7 @@ export function ApprovalsPage() {
                             <td
                               style={{
                                 color: "var(--color-text-muted)",
-                                fontSize: 11,
+                                fontSize: 14,
                               }}>
                               {items.length} bidang
                             </td>
@@ -2446,7 +2449,7 @@ export function ApprovalsPage() {
                                   />
                                   <td
                                     style={{
-                                      fontSize: 11,
+                                      fontSize: 14,
                                       color: "var(--color-text-muted)",
                                     }}>
                                     {c.bidang} · {c.submitter}
@@ -2499,7 +2502,7 @@ export function ApprovalsPage() {
                                         style={{
                                           padding:
                                             "var(--space-2) var(--space-3)",
-                                          fontSize: 11,
+                                          fontSize: 14,
                                           color: "var(--color-text-muted)",
                                         }}>
                                         Penanggung Jawab:{" "}
@@ -2511,7 +2514,7 @@ export function ApprovalsPage() {
                                         </strong>
                                       </div>
                                       <table
-                                        className="data-table compact"
+                                        className="data-table table-expanded"
                                         style={{ margin: 0 }}>
                                         <thead>
                                           <tr>
@@ -2541,7 +2544,7 @@ export function ApprovalsPage() {
                                               <td className="num">
                                                 {it.target}
                                               </td>
-                                              <td className="num var(--text-sm)">
+                                              <td className="num">
                                                 {it.target2}
                                               </td>
                                             </tr>

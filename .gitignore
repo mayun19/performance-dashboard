@@ -10,3 +10,4 @@ _design_extracted/
 *.zip
 .vite/
 coverage/
+apps/api/.env*
