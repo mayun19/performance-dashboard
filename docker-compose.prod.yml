@@ -7,6 +7,8 @@ services:
       POSTGRES_USER: pusmanpro
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pusmanpro}
       POSTGRES_DB: pusmanpro_db
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pusmanpro_pgdata_prod:/var/lib/postgresql/data
     restart: unless-stopped
