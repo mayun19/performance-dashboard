@@ -196,7 +196,7 @@ export function InputRealisasiPage() {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>Input Realisasi Bulanan — {selectedPeriodLabel}</div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
               <span>Periode:</span>
               <select
                 className="form-input form-input-sm"
@@ -224,16 +224,16 @@ export function InputRealisasiPage() {
               ) : (
                 <span style={{ fontWeight: 700, color: 'var(--color-accent)' }}>
                   {UNIT_OPTIONS.find((u) => u.code === lockedUnit)?.name ?? lockedUnit}
-                  <span style={{ fontSize: 9, color: 'var(--color-text-subtle)', marginLeft: 4 }}>(dikunci ke unit Anda)</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginLeft: 4 }}>(dikunci ke unit Anda)</span>
                 </span>
               )}
               <span>· {kpiList.length} indikator KM{isStaff && user?.bidang ? ` · Bidang: ${user.bidang}` : ''} · Deadline: Tanggal 3 setiap bulan</span>
             </div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Progress Isi</div>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Progress Isi</div>
             <div style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: completionPct === 100 ? 'var(--color-success)' : 'var(--color-accent)' }}>{completionPct}%</div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{filledCount}/{kpiList.length} terisi</div>
+            <div style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>{filledCount}/{kpiList.length} terisi</div>
           </div>
         </div>
         <div style={{ height: 4, background: 'var(--color-surface-2)', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)', overflow: 'hidden' }}>
