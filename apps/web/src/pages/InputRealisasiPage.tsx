@@ -724,7 +724,7 @@ export function InputRealisasiPage() {
                                         target="_blank"
                                         rel="noreferrer"
                                         style={{
-                                          color: "var(--color-accent)",
+                                        fontWeight: 600,
                                         }}>
                                         {a.name}
                                       </a>
