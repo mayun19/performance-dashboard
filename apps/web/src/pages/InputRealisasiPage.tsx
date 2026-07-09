@@ -494,7 +494,7 @@ export function InputRealisasiPage() {
                               borderColor: hasVal
                                 ? "rgba(34,197,94,0.5)"
                                 : undefined,
-                                fontWeight: hasVal ? 600 : undefined,
+                              fontWeight: hasVal ? 600 : undefined,
                             }}
                             value={val}
                             onChange={(e) =>
@@ -550,229 +550,245 @@ export function InputRealisasiPage() {
             </div>
             <span className="card-meta">{history.length} entri</span>
           </div>
-          <div className="table-wrap">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Unit</th>
-                  <th>Bidang</th>
-                  <th>Submitter</th>
-                  <th>Status</th>
-                  <th>Tanggal Submit</th>
-                  <th style={{ width: 90 }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((h, i) => {
-                  const item = h as Record<string, unknown>;
-                  const status = String(item.status ?? "");
-                  const itemSteps =
-                    (item.steps as { label?: string }[] | undefined) ?? [];
-                  const stepLabel =
-                    itemSteps[Number(item.currentStepIndex ?? 0)]?.label;
-                  const canDelete =
-                    status !== "approved" &&
-                    (item.submitterId === user?.id || user?.role === "GM");
-                  const atts =
-                    (item.attachments as
-                      | Array<{ id: string; name: string; size: number }>
-                      | undefined) ?? [];
-                  const rid = item.id as string;
-                  return (
-                    <Fragment key={i}>
-                      <tr>
-                        <td style={{ fontWeight: 600 }}>
-                          {(item.unitCode as string) ?? "—"}
-                        </td>
-                        <td
-                          style={{
-                            fontSize: 11,
-                            color: "var(--color-text-muted)",
-                          }}>
-                          {(item.bidang as string) ?? "—"}
-                        </td>
-                        <td>{(item.submitter as string) ?? "—"}</td>
-                        <td>
-                          <span
-                            className={`status-pill ${STATUS_PILL[status] ?? "in-review"}`}
-                            style={{ fontSize: 10 }}>
-                            {STATUS_LABEL[status] ?? status}
-                          </span>
-                          {status === "submitted" && stepLabel && (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "var(--color-text-muted)",
-                                marginTop: 2,
-                              }}>
-                              di {stepLabel}
-                            </div>
-                          )}
-                          {status === "rejected" && item.reviewNote ? (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "var(--color-danger)",
-                                marginTop: 2,
-                                maxWidth: 240,
-                              }}>
-                              {item.reviewNote as string}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td style={{ color: "var(--color-text-muted)" }}>
-                          {item.submittedAt
-                            ? new Date(
-                                item.submittedAt as string,
-                              ).toLocaleDateString("id-ID", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "—"}
-                        </td>
-                        <td>
-                          <div
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th>Bidang</th>
+                    <th>Submitter</th>
+                    <th>Status</th>
+                    <th>Tanggal Submit</th>
+                    <th style={{ width: 90, textAlign: "center" }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h, i) => {
+                    const item = h as Record<string, unknown>;
+                    const status = String(item.status ?? "");
+                    const itemSteps =
+                      (item.steps as { label?: string }[] | undefined) ?? [];
+                    const stepLabel =
+                      itemSteps[Number(item.currentStepIndex ?? 0)]?.label;
+                    const canDelete =
+                      status !== "approved" &&
+                      (item.submitterId === user?.id || user?.role === "GM");
+                    const atts =
+                      (item.attachments as
+                        | Array<{ id: string; name: string; size: number }>
+                        | undefined) ?? [];
+                    const rid = item.id as string;
+                    return (
+                      <Fragment key={i}>
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>
+                            {(item.unitCode as string) ?? "—"}
+                          </td>
+                          <td
                             style={{
-                              display: "flex",
-                              gap: 6,
-                              alignItems: "center",
+                              color: "var(--color-text-muted)",
                             }}>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() =>
-                                setEvidOpen(evidOpen === rid ? null : rid)
-                              }
-                              title="Lampiran evidence">
-                              <Paperclip size={14} /> {atts.length}
-                            </button>
-                            {canDelete && (
+                            {(item.bidang as string) ?? "—"}
+                          </td>
+                          <td>{(item.submitter as string) ?? "—"}</td>
+                          <td>
+                            <span
+                              className={`status-pill ${STATUS_PILL[status] ?? "in-review"}`}>
+                              {STATUS_LABEL[status] ?? status}
+                            </span>
+                            {status === "submitted" && stepLabel && (
+                              <div
+                                style={{
+                                  color: "var(--color-text-muted)",
+                                  marginTop: 4,
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                }}>
+                                di {stepLabel}
+                              </div>
+                            )}
+                            {status === "rejected" && item.reviewNote ? (
+                              <div
+                                style={{
+                                  color: "var(--color-danger)",
+                                  marginTop: 2,
+                                  maxWidth: 240,
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                }}>
+                                {item.reviewNote as string}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={{ color: "var(--color-text-muted)" }}>
+                            {item.submittedAt
+                              ? new Date(
+                                  item.submittedAt as string,
+                                ).toLocaleDateString("id-ID", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "—"}
+                          </td>
+                          <td>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 6,
+                                alignItems: "center",
+                                width: "100%",
+                              }}>
                               <button
                                 className="btn btn-ghost btn-sm"
-                                onClick={() => handleDelete(rid)}
-                                title="Hapus realisasi"
-                                style={{ color: "var(--color-danger)" }}>
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                      {evidOpen === rid && (
-                        <tr>
-                          <td
-                            colSpan={6}
-                            style={{
-                              background: "var(--color-surface-2)",
-                              padding: "var(--space-3)",
-                            }}>
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                marginBottom: 6,
-                              }}>
-                              Evidence Realisasi
-                            </div>
-                            {atts.length === 0 ? (
-                              <div
                                 style={{
-                                  fontSize: 11,
-                                  color: "var(--color-text-muted)",
-                                  marginBottom: 6,
-                                }}>
-                                Belum ada berkas.
-                              </div>
-                            ) : (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexDirection: "column",
+                                  fontSize: 14,
+                                  textAlign: "center",
                                   gap: 4,
-                                  marginBottom: 8,
-                                }}>
-                                {atts.map((a) => (
-                                  <div
-                                    key={a.id}
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 8,
-                                      fontSize: 11,
-                                    }}>
-                                    <Paperclip
-                                      size={12}
-                                      style={{
-                                        color: "var(--color-text-muted)",
-                                      }}
-                                    />
-                                    <a
-                                      href={inputRealisasi.evidenceUrl(
-                                        rid,
-                                        a.id,
-                                      )}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      style={{ color: "var(--color-accent)" }}>
-                                      {a.name}
-                                    </a>
-                                    <span
-                                      style={{
-                                        color: "var(--color-text-subtle)",
-                                      }}>
-                                      ({fmtSize(a.size)})
-                                    </span>
-                                    <button
-                                      className="btn btn-ghost btn-sm"
-                                      onClick={() =>
-                                        handleDeleteEvid(rid, a.id)
-                                      }
-                                      title="Hapus berkas"
-                                      style={{
-                                        color: "var(--color-danger)",
-                                        padding: "0 4px",
-                                      }}>
-                                      <X size={12} />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <input
-                              ref={evidInputRef}
-                              type="file"
-                              multiple
-                              accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png"
-                              style={{ display: "none" }}
-                              onChange={(e) =>
-                                handleUploadEvid(rid, e.target.files)
-                              }
-                            />
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              disabled={evidBusy || atts.length >= 5}
-                              onClick={() => evidInputRef.current?.click()}>
-                              <Upload size={12} />{" "}
-                              {evidBusy ? "Mengunggah…" : "Unggah Evidence"}
-                            </button>
-                            <span
-                              style={{
-                                fontSize: 10,
-                                color: "var(--color-text-muted)",
-                                marginLeft: 8,
-                              }}>
-                              Maks 5 berkas · ≤ 10 MB/berkas · PDF, Excel, Word,
-                              JPG/PNG{" "}
-                              {atts.length >= 5 ? "· (batas tercapai)" : ""}
-                            </span>
+                                  width: "100%",
+                                }}
+                                onClick={() =>
+                                  setEvidOpen(evidOpen === rid ? null : rid)
+                                }
+                                title="Lampiran evidence">
+                                <Paperclip size={14} /> {atts.length}
+                              </button>
+                              {canDelete && (
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => handleDelete(rid)}
+                                  title="Hapus realisasi"
+                                  style={{ color: "var(--color-danger)" }}>
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {evidOpen === rid && (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              style={{
+                                background: "var(--color-surface-2)",
+                                padding: "var(--space-3)",
+                              }}>
+                              <div
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 600,
+                                  marginBottom: 6,
+                                }}>
+                                Evidence Realisasi
+                              </div>
+                              {atts.length === 0 ? (
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    color: "var(--color-text-muted)",
+                                    marginBottom: 6,
+                                  }}>
+                                  Belum ada berkas.
+                                </div>
+                              ) : (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 4,
+                                    marginBottom: 8,
+                                  }}>
+                                  {atts.map((a) => (
+                                    <div
+                                      key={a.id}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        fontSize: 14,
+                                      }}>
+                                      <Paperclip
+                                        size={12}
+                                        style={{
+                                          color: "var(--color-text-muted)",
+                                        }}
+                                      />
+                                      <a
+                                        href={inputRealisasi.evidenceUrl(
+                                          rid,
+                                          a.id,
+                                        )}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{
+                                          color: "var(--color-accent)",
+                                        }}>
+                                        {a.name}
+                                      </a>
+                                      <span
+                                        style={{
+                                          color: "var(--color-text-subtle)",
+                                        }}>
+                                        ({fmtSize(a.size)})
+                                      </span>
+                                      <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() =>
+                                          handleDeleteEvid(rid, a.id)
+                                        }
+                                        title="Hapus berkas"
+                                        style={{
+                                          color: "var(--color-danger)",
+                                          padding: "0 4px",
+                                        }}>
+                                        <X size={12} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <input
+                                ref={evidInputRef}
+                                type="file"
+                                multiple
+                                accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png"
+                                style={{ display: "none" }}
+                                onChange={(e) =>
+                                  handleUploadEvid(rid, e.target.files)
+                                }
+                              />
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                  style={{
+                                    fontSize: 14,
+                                  }}
+                                disabled={evidBusy || atts.length >= 5}
+                                onClick={() => evidInputRef.current?.click()}>
+                                <Upload size={12} />{" "}
+                                {evidBusy ? "Mengunggah…" : "Unggah Evidence"}
+                              </button>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--color-text-muted)",
+                                  marginLeft: 8,
+                                }}>
+                                Maks 5 berkas · ≤ 10 MB/berkas · PDF, Excel,
+                                Word, JPG/PNG{" "}
+                                {atts.length >= 5 ? "· (batas tercapai)" : ""}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
