@@ -614,7 +614,7 @@ export function InputRealisasiPage() {
                               <div
                                 style={{
                                   color: "var(--color-danger)",
-                                  marginTop: 2,
+                                  marginTop: 4,
                                   maxWidth: 240,
                                   fontSize: 14,
                                   fontWeight: 500,
