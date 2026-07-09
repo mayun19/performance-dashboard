@@ -2658,6 +2658,7 @@ export function ApprovalsPage() {
               style={{
                 fontSize: "var(--text-sm)",
                 color: "var(--color-success)",
+                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle KM UPMK tahun ini telah disahkan oleh General Manager.
             </div>
@@ -2695,7 +2696,8 @@ export function ApprovalsPage() {
             <div
               className="table-wrap"
               style={{ paddingBottom: "var(--space-7)" }}>
-              <div className={`table-scroll ${realList.length > 0 && "able-scroll"}`}>
+              <div
+                className={`table-scroll ${realList.length > 0 && "able-scroll"}`}>
                 <table className="data-table compact">
                   <thead>
                     <tr>
