@@ -614,7 +614,7 @@ export function InputRealisasiPage() {
                               <div
                                 style={{
                                   color: "var(--color-danger)",
-                                  marginTop: 2,
+                                  marginTop: 4,
                                   maxWidth: 240,
                                   fontSize: 14,
                                   fontWeight: 500,
@@ -724,7 +724,7 @@ export function InputRealisasiPage() {
                                         target="_blank"
                                         rel="noreferrer"
                                         style={{
-                                          color: "var(--color-accent)",
+                                        fontWeight: 600,
                                         }}>
                                         {a.name}
                                       </a>
