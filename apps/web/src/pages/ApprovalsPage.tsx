@@ -1703,7 +1703,8 @@ export function ApprovalsPage() {
             <div
               className="table-wrap"
               style={{ paddingBottom: "var(--space-7)" }}>
-              <div className="table-scroll">
+              <div
+                className={`table-scroll ${kmList.length > 0 && "able-scroll"}`}>
                 <table className="data-table compact">
                   <thead>
                     <tr>
@@ -1714,7 +1715,9 @@ export function ApprovalsPage() {
                       <th>Jenjang Persetujuan</th>
                       <th>SLA</th>
                       <th>Tanggal</th>
-                      <th style={{ width: 260 }}>Tindakan</th>
+                      <th style={{ width: 260, textAlign: "center" }}>
+                        Tindakan
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1851,44 +1854,34 @@ export function ApprovalsPage() {
                                       gap: "var(--space-2)",
                                       flexWrap: "wrap",
                                     }}>
-                                    <button
-                                      className="btn btn-md"
+                                    <div
                                       style={{
-                                        background: "var(--color-success)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={kmBusy}
-                                      onClick={() =>
-                                        handleKmReview(k.id, "approve")
-                                      }>
-                                      <CheckCircle size={12} />{" "}
-                                      {kIsLast
-                                        ? "Setujui (Selesai → Bundle)"
-                                        : "Setujui & Teruskan"}
-                                    </button>
-                                    <button
-                                      className="btn btn-md"
-                                      style={{
-                                        background: "var(--color-danger)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={kmBusy}
-                                      onClick={() =>
-                                        handleKmReview(
-                                          k.id,
-                                          "reject",
-                                          "konseptor",
-                                        )
-                                      }
-                                      title="Kembalikan ke konseptor untuk revisi">
-                                      <XCircle size={12} /> Kembalikan ke
-                                      Konseptor
-                                    </button>
-                                    {kci >= 2 && (
+                                        display: "flex",
+                                        gap: "var(--space-2)",
+                                        width: "100%",
+                                      }}>
                                       <button
                                         className="btn btn-md"
                                         style={{
-                                          background: "var(--color-warning)",
+                                          background: "var(--color-success)",
+                                          color: "#fff",
+                                          width: "100%",
+                                          display: "flex",
+                                          justifyContent: "center",
+                                        }}
+                                        disabled={kmBusy}
+                                        onClick={() =>
+                                          handleKmReview(k.id, "approve")
+                                        }>
+                                        <CheckCircle size={12} />{" "}
+                                        {kIsLast
+                                          ? "Setujui (Selesai → Bundle)"
+                                          : "Setujui & Teruskan"}
+                                      </button>
+                                      <button
+                                        className="btn btn-md"
+                                        style={{
+                                          background: "var(--color-danger)",
                                           color: "#fff",
                                         }}
                                         disabled={kmBusy}
@@ -1896,21 +1889,56 @@ export function ApprovalsPage() {
                                           handleKmReview(
                                             k.id,
                                             "reject",
-                                            "previous",
+                                            "konseptor",
                                           )
-                                        }>
-                                        <XCircle size={12} /> Kembalikan ke{" "}
-                                        {kPrev ?? "langkah sebelumnya"}
+                                        }
+                                        title="Kembalikan ke konseptor untuk revisi">
+                                        <XCircle size={12} /> Kembalikan ke
+                                        Konseptor
+                                      </button>
+                                    </div>
+                                    {kci >= 2 ? (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                        }}>
+                                        <button
+                                          className="btn btn-md"
+                                          style={{
+                                            background: "var(--color-warning)",
+                                            color: "#fff",
+                                          }}
+                                          disabled={kmBusy}
+                                          onClick={() =>
+                                            handleKmReview(
+                                              k.id,
+                                              "reject",
+                                              "previous",
+                                            )
+                                          }>
+                                          <XCircle size={12} /> Kembalikan ke{" "}
+                                          {kPrev ?? "langkah sebelumnya"}
+                                        </button>
+                                        <button
+                                          className="btn btn-ghost btn-md"
+                                          onClick={() => {
+                                            setKmTarget(null);
+                                            setKmNote("");
+                                          }}>
+                                          Batal
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        className="btn btn-ghost btn-md"
+                                        onClick={() => {
+                                          setKmTarget(null);
+                                          setKmNote("");
+                                        }}>
+                                        Batal
                                       </button>
                                     )}
-                                    <button
-                                      className="btn btn-ghost btn-md"
-                                      onClick={() => {
-                                        setKmTarget(null);
-                                        setKmNote("");
-                                      }}>
-                                      Batal
-                                    </button>
                                   </div>
                                 </div>
                               ) : (
@@ -2544,7 +2572,7 @@ export function ApprovalsPage() {
                                               <td className="num">
                                                 {it.target}
                                               </td>
-                                              <td className="num">
+                                              <td className="num var(--text-sm)">
                                                 {it.target2}
                                               </td>
                                             </tr>
@@ -2630,6 +2658,7 @@ export function ApprovalsPage() {
               style={{
                 fontSize: "var(--text-sm)",
                 color: "var(--color-success)",
+                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle KM UPMK tahun ini telah disahkan oleh General Manager.
             </div>
@@ -2667,7 +2696,8 @@ export function ApprovalsPage() {
             <div
               className="table-wrap"
               style={{ paddingBottom: "var(--space-7)" }}>
-              <div className="table-scroll">
+              <div
+                className={`table-scroll ${realList.length > 0 && "able-scroll"}`}>
                 <table className="data-table compact">
                   <thead>
                     <tr>
@@ -2678,7 +2708,9 @@ export function ApprovalsPage() {
                       <th>Jenjang Persetujuan</th>
                       <th>SLA</th>
                       <th>Tanggal</th>
-                      <th style={{ width: 260 }}>Tindakan</th>
+                      <th style={{ width: 260, textAlign: "center" }}>
+                        Tindakan
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2807,7 +2839,7 @@ export function ApprovalsPage() {
                                   <textarea
                                     className="form-textarea"
                                     style={{
-                                      fontSize: "var(--text-xs)",
+                                      fontSize: "var(--text-sm)",
                                       minHeight: 48,
                                     }}
                                     placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
@@ -2822,43 +2854,31 @@ export function ApprovalsPage() {
                                       gap: "var(--space-2)",
                                       flexWrap: "wrap",
                                     }}>
-                                    <button
-                                      className="btn btn-md"
+                                    <div
                                       style={{
-                                        background: "var(--color-success)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={realBusy}
-                                      onClick={() =>
-                                        handleRealReview(rl.id, "approve")
-                                      }>
-                                      <CheckCircle size={12} />{" "}
-                                      {isLastStep
-                                        ? "Setujui (Selesai → Bundle)"
-                                        : "Setujui & Teruskan"}
-                                    </button>
-                                    <button
-                                      className="btn btn-md"
-                                      style={{
-                                        background: "var(--color-danger)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={realBusy}
-                                      onClick={() =>
-                                        handleRealReview(
-                                          rl.id,
-                                          "reject",
-                                          "konseptor",
-                                        )
-                                      }>
-                                      <XCircle size={12} /> Kembalikan ke
-                                      Konseptor
-                                    </button>
-                                    {ci >= 2 && (
+                                        display: "flex",
+                                        gap: "var(--space-2)",
+                                        width: "100%",
+                                      }}>
                                       <button
                                         className="btn btn-md"
                                         style={{
-                                          background: "var(--color-warning)",
+                                          background: "var(--color-success)",
+                                          color: "#fff",
+                                        }}
+                                        disabled={realBusy}
+                                        onClick={() =>
+                                          handleRealReview(rl.id, "approve")
+                                        }>
+                                        <CheckCircle size={12} />{" "}
+                                        {isLastStep
+                                          ? "Setujui (Selesai → Bundle)"
+                                          : "Setujui & Teruskan"}
+                                      </button>
+                                      <button
+                                        className="btn btn-md"
+                                        style={{
+                                          background: "var(--color-danger)",
                                           color: "#fff",
                                         }}
                                         disabled={realBusy}
@@ -2866,21 +2886,56 @@ export function ApprovalsPage() {
                                           handleRealReview(
                                             rl.id,
                                             "reject",
-                                            "previous",
+                                            "konseptor",
                                           )
                                         }>
-                                        <XCircle size={12} /> Kembalikan ke{" "}
-                                        {prevLabel ?? "langkah sebelumnya"}
+                                        <XCircle size={12} /> Kembalikan ke
+                                        Konseptor
+                                      </button>
+                                    </div>
+
+                                    {ci >= 2 ? (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                        }}>
+                                        <button
+                                          className="btn btn-md"
+                                          style={{
+                                            background: "var(--color-warning)",
+                                            color: "#fff",
+                                          }}
+                                          disabled={realBusy}
+                                          onClick={() =>
+                                            handleRealReview(
+                                              rl.id,
+                                              "reject",
+                                              "previous",
+                                            )
+                                          }>
+                                          <XCircle size={12} /> Kembalikan ke{" "}
+                                          {prevLabel ?? "langkah sebelumnya"}
+                                        </button>
+                                        <button
+                                          className="btn btn-ghost btn-md"
+                                          onClick={() => {
+                                            setRealTarget(null);
+                                            setRealNote("");
+                                          }}>
+                                          Batal
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        className="btn btn-ghost btn-md"
+                                        onClick={() => {
+                                          setRealTarget(null);
+                                          setRealNote("");
+                                        }}>
+                                        Batal
                                       </button>
                                     )}
-                                    <button
-                                      className="btn btn-ghost btn-md"
-                                      onClick={() => {
-                                        setRealTarget(null);
-                                        setRealNote("");
-                                      }}>
-                                      Batal
-                                    </button>
                                   </div>
                                 </div>
                               ) : (

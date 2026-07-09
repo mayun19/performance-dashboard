@@ -566,7 +566,7 @@ export function ExecutivePage() {
             </div>
             <div
               className="hero-health-subtitle"
-              style={{ marginTop: 4, fontSize: "var(--text-xs)" }}>
+              style={{ marginTop: 4, fontSize: "var(--text-sm)" }}>
               Agregat 14 indikator RKM 2026 — Kantor Induk + 5 UPMK bulan
               Februari 2026
             </div>
