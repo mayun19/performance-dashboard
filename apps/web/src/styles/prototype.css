@@ -3023,8 +3023,10 @@ a {
 }
 .table-scroll {
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--color-border);
+  -webkit-overflow-scrolling: touch;
 }
 .data-table {
   width: 100%;

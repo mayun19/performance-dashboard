@@ -1851,44 +1851,36 @@ export function ApprovalsPage() {
                                       gap: "var(--space-2)",
                                       flexWrap: "wrap",
                                     }}>
-                                    <button
-                                      className="btn btn-md"
+                                    <div
                                       style={{
-                                        background: "var(--color-success)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={kmBusy}
-                                      onClick={() =>
-                                        handleKmReview(k.id, "approve")
-                                      }>
-                                      <CheckCircle size={12} />{" "}
-                                      {kIsLast
-                                        ? "Setujui (Selesai → Bundle)"
-                                        : "Setujui & Teruskan"}
-                                    </button>
-                                    <button
-                                      className="btn btn-md"
-                                      style={{
-                                        background: "var(--color-danger)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={kmBusy}
-                                      onClick={() =>
-                                        handleKmReview(
-                                          k.id,
-                                          "reject",
-                                          "konseptor",
-                                        )
-                                      }
-                                      title="Kembalikan ke konseptor untuk revisi">
-                                      <XCircle size={12} /> Kembalikan ke
-                                      Konseptor
-                                    </button>
-                                    {kci >= 2 && (
+                                        display: "flex",
+                                        gap: "var(--space-2)",
+                                        width: "100%",
+                                       
+                                      }}>
                                       <button
                                         className="btn btn-md"
                                         style={{
-                                          background: "var(--color-warning)",
+                                          background: "var(--color-success)",
+                                          color: "#fff",
+                                          width: "100%",
+                                          display: "flex",
+                                          justifyContent: "center",
+                                      
+                                        }}
+                                        disabled={kmBusy}
+                                        onClick={() =>
+                                          handleKmReview(k.id, "approve")
+                                        }>
+                                        <CheckCircle size={12} />{" "}
+                                        {kIsLast
+                                          ? "Setujui (Selesai → Bundle)"
+                                          : "Setujui & Teruskan"}
+                                      </button>
+                                      <button
+                                        className="btn btn-md"
+                                        style={{
+                                          background: "var(--color-danger)",
                                           color: "#fff",
                                         }}
                                         disabled={kmBusy}
@@ -1896,21 +1888,55 @@ export function ApprovalsPage() {
                                           handleKmReview(
                                             k.id,
                                             "reject",
-                                            "previous",
+                                            "konseptor",
                                           )
-                                        }>
-                                        <XCircle size={12} /> Kembalikan ke{" "}
-                                        {kPrev ?? "langkah sebelumnya"}
+                                        }
+                                        title="Kembalikan ke konseptor untuk revisi">
+                                        <XCircle size={12} /> Kembalikan ke
+                                        Konseptor
+                                      </button>
+                                    </div>
+                                    {kci >= 2 ? (
+                                      <div style={{
+                                        display: "flex",
+                                        gap: "var(--space-2)",
+                                      }}>
+                                        <button
+                                          className="btn btn-md"
+                                          style={{
+                                            background: "var(--color-warning)",
+                                            color: "#fff",
+                                          }}
+                                          disabled={kmBusy}
+                                          onClick={() =>
+                                            handleKmReview(
+                                              k.id,
+                                              "reject",
+                                              "previous",
+                                            )
+                                          }>
+                                          <XCircle size={12} /> Kembalikan ke{" "}
+                                          {kPrev ?? "langkah sebelumnya"}
+                                        </button>
+                                        <button
+                                          className="btn btn-ghost btn-md"
+                                          onClick={() => {
+                                            setKmTarget(null);
+                                            setKmNote("");
+                                          }}>
+                                          Batal
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        className="btn btn-ghost btn-md"
+                                        onClick={() => {
+                                          setKmTarget(null);
+                                          setKmNote("");
+                                        }}>
+                                        Batal
                                       </button>
                                     )}
-                                    <button
-                                      className="btn btn-ghost btn-md"
-                                      onClick={() => {
-                                        setKmTarget(null);
-                                        setKmNote("");
-                                      }}>
-                                      Batal
-                                    </button>
                                   </div>
                                 </div>
                               ) : (
@@ -2544,7 +2570,7 @@ export function ApprovalsPage() {
                                               <td className="num">
                                                 {it.target}
                                               </td>
-                                              <td className="num">
+                                              <td className="num var(--text-sm)">
                                                 {it.target2}
                                               </td>
                                             </tr>
