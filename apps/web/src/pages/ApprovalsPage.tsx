@@ -1703,7 +1703,8 @@ export function ApprovalsPage() {
             <div
               className="table-wrap"
               style={{ paddingBottom: "var(--space-7)" }}>
-              <div className="table-scroll">
+              <div
+                className={`table-scroll ${kmList.length > 0 && "able-scroll"}`}>
                 <table className="data-table compact">
                   <thead>
                     <tr>
@@ -1714,7 +1715,9 @@ export function ApprovalsPage() {
                       <th>Jenjang Persetujuan</th>
                       <th>SLA</th>
                       <th>Tanggal</th>
-                      <th style={{ width: 260 }}>Tindakan</th>
+                      <th style={{ width: 260, textAlign: "center" }}>
+                        Tindakan
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1856,7 +1859,6 @@ export function ApprovalsPage() {
                                         display: "flex",
                                         gap: "var(--space-2)",
                                         width: "100%",
-                                       
                                       }}>
                                       <button
                                         className="btn btn-md"
@@ -1866,7 +1868,6 @@ export function ApprovalsPage() {
                                           width: "100%",
                                           display: "flex",
                                           justifyContent: "center",
-                                      
                                         }}
                                         disabled={kmBusy}
                                         onClick={() =>
@@ -1897,10 +1898,11 @@ export function ApprovalsPage() {
                                       </button>
                                     </div>
                                     {kci >= 2 ? (
-                                      <div style={{
-                                        display: "flex",
-                                        gap: "var(--space-2)",
-                                      }}>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                        }}>
                                         <button
                                           className="btn btn-md"
                                           style={{
@@ -2693,7 +2695,7 @@ export function ApprovalsPage() {
             <div
               className="table-wrap"
               style={{ paddingBottom: "var(--space-7)" }}>
-              <div className="table-scroll">
+              <div className={`table-scroll ${realList.length > 0 && "able-scroll"}`}>
                 <table className="data-table compact">
                   <thead>
                     <tr>
@@ -2704,7 +2706,9 @@ export function ApprovalsPage() {
                       <th>Jenjang Persetujuan</th>
                       <th>SLA</th>
                       <th>Tanggal</th>
-                      <th style={{ width: 260 }}>Tindakan</th>
+                      <th style={{ width: 260, textAlign: "center" }}>
+                        Tindakan
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2833,7 +2837,7 @@ export function ApprovalsPage() {
                                   <textarea
                                     className="form-textarea"
                                     style={{
-                                      fontSize: "var(--text-xs)",
+                                      fontSize: "var(--text-sm)",
                                       minHeight: 48,
                                     }}
                                     placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
@@ -2848,43 +2852,31 @@ export function ApprovalsPage() {
                                       gap: "var(--space-2)",
                                       flexWrap: "wrap",
                                     }}>
-                                    <button
-                                      className="btn btn-md"
+                                    <div
                                       style={{
-                                        background: "var(--color-success)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={realBusy}
-                                      onClick={() =>
-                                        handleRealReview(rl.id, "approve")
-                                      }>
-                                      <CheckCircle size={12} />{" "}
-                                      {isLastStep
-                                        ? "Setujui (Selesai → Bundle)"
-                                        : "Setujui & Teruskan"}
-                                    </button>
-                                    <button
-                                      className="btn btn-md"
-                                      style={{
-                                        background: "var(--color-danger)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={realBusy}
-                                      onClick={() =>
-                                        handleRealReview(
-                                          rl.id,
-                                          "reject",
-                                          "konseptor",
-                                        )
-                                      }>
-                                      <XCircle size={12} /> Kembalikan ke
-                                      Konseptor
-                                    </button>
-                                    {ci >= 2 && (
+                                        display: "flex",
+                                        gap: "var(--space-2)",
+                                        width: "100%",
+                                      }}>
                                       <button
                                         className="btn btn-md"
                                         style={{
-                                          background: "var(--color-warning)",
+                                          background: "var(--color-success)",
+                                          color: "#fff",
+                                        }}
+                                        disabled={realBusy}
+                                        onClick={() =>
+                                          handleRealReview(rl.id, "approve")
+                                        }>
+                                        <CheckCircle size={12} />{" "}
+                                        {isLastStep
+                                          ? "Setujui (Selesai → Bundle)"
+                                          : "Setujui & Teruskan"}
+                                      </button>
+                                      <button
+                                        className="btn btn-md"
+                                        style={{
+                                          background: "var(--color-danger)",
                                           color: "#fff",
                                         }}
                                         disabled={realBusy}
@@ -2892,21 +2884,56 @@ export function ApprovalsPage() {
                                           handleRealReview(
                                             rl.id,
                                             "reject",
-                                            "previous",
+                                            "konseptor",
                                           )
                                         }>
-                                        <XCircle size={12} /> Kembalikan ke{" "}
-                                        {prevLabel ?? "langkah sebelumnya"}
+                                        <XCircle size={12} /> Kembalikan ke
+                                        Konseptor
+                                      </button>
+                                    </div>
+
+                                    {ci >= 2 ? (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                        }}>
+                                        <button
+                                          className="btn btn-md"
+                                          style={{
+                                            background: "var(--color-warning)",
+                                            color: "#fff",
+                                          }}
+                                          disabled={realBusy}
+                                          onClick={() =>
+                                            handleRealReview(
+                                              rl.id,
+                                              "reject",
+                                              "previous",
+                                            )
+                                          }>
+                                          <XCircle size={12} /> Kembalikan ke{" "}
+                                          {prevLabel ?? "langkah sebelumnya"}
+                                        </button>
+                                        <button
+                                          className="btn btn-ghost btn-md"
+                                          onClick={() => {
+                                            setRealTarget(null);
+                                            setRealNote("");
+                                          }}>
+                                          Batal
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        className="btn btn-ghost btn-md"
+                                        onClick={() => {
+                                          setRealTarget(null);
+                                          setRealNote("");
+                                        }}>
+                                        Batal
                                       </button>
                                     )}
-                                    <button
-                                      className="btn btn-ghost btn-md"
-                                      onClick={() => {
-                                        setRealTarget(null);
-                                        setRealNote("");
-                                      }}>
-                                      Batal
-                                    </button>
                                   </div>
                                 </div>
                               ) : (
