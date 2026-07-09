@@ -289,7 +289,7 @@ export function InputKontrakPage() {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>Input Kontrak Manajemen Tahun {CURRENT_YEAR}</div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
               <span>Unit:</span>
               {canSelectUnit ? (
                 <select
@@ -305,7 +305,7 @@ export function InputKontrakPage() {
               ) : (
                 <span style={{ fontWeight: 700, color: 'var(--color-accent)' }}>
                   {UNIT_NAMES[lockedUnit] ?? lockedUnit}
-                  <span style={{ fontSize: 9, color: 'var(--color-text-subtle)', marginLeft: 4 }}>(dikunci ke unit Anda)</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginLeft: 4 }}>(dikunci ke unit Anda)</span>
                 </span>
               )}
               <span>· {visibleKontrak.length} kontrak · Draft: {draftCount} · Terkirim: {submittedCount}</span>
