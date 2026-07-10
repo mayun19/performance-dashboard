@@ -682,7 +682,7 @@ export function ExecutivePage() {
                 {penalty === 0 ? "Tidak ada pengurang" : `${penalty} poin`}
               </div>
             </div>
-            <div className="summary-hero-card total">
+            {/* <div className="summary-hero-card total">
               <div
                 className="summary-hero-label"
                 style={{ color: "var(--color-accent)" }}>
@@ -698,7 +698,7 @@ export function ExecutivePage() {
                   {totalStatus}
                 </span>
               </div>
-            </div>
+            </div> */}
           </div>
           <KpiTable rows={allKpiRows} />
           {kepatuhan.length > 0 && (
