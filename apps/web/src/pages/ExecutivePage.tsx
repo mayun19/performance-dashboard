@@ -867,7 +867,7 @@ export function ExecutivePage() {
       })()}
 
       {/* KPI Master-Detail */}
-      <FoldCard
+      {/* <FoldCard
         title={`Indikator Kinerja PUSMANPRO — ${kpis.length} KPI RKM ${currentYear}`}
         icon={<BarChart3 size={14} />}
         right={<span className="card-meta">Klik KPI untuk lihat detail</span>}>
@@ -1006,7 +1006,7 @@ export function ExecutivePage() {
             </div>
           )}
         </div>
-      </FoldCard>
+      </FoldCard> */}
 
       {/* Trend Nilai Kinerja — full width single card */}
       <FoldCard
