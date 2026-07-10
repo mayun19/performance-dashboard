@@ -944,24 +944,18 @@ export function ApprovalsPage() {
     let body = catRow("A. KANTOR INDUK") + kpBody;
     const getUpmkOrdR = (ind: string): number => {
       const s = ind.toLowerCase();
-      if (s.includes("kajian supervisi")) return 10;
-      if (s.includes("persentase pelaksanaan")) return 20;
-      if (s.includes("kapasitas pembangkit")) return 30;
-      if (s.includes("kapasitas transmisi")) return 40;
-      if (s.includes("kapasitas gardu induk")) return 50;
-      if (s.includes("pengendalian nac") || s.includes("non allowable"))
-        return 61;
-      if (s.includes("pengendalian") && s.includes("penggunaan anggaran"))
-        return 62;
-      if (s.includes("pemenuhan pdn") || s.includes("pdn korporat")) return 70;
-      if (
-        s.includes("evaluasi penyelesaian") ||
-        s.includes("penyelesaian proyek supervisi")
-      )
-        return 80;
-      if (s.includes("maturity level")) return 91;
-      if (s.includes("pengurang") && s.includes("kepatuhan")) return 92;
-      if (s.includes("tata kelola")) return 93;
+      if (s.includes('kajian supervisi')) return 10;
+      if (s.includes('persentase pelaksanaan')) return 20;
+      if (s.includes('kapasitas pembangkit')) return 30;
+      if (s.includes('kapasitas transmisi')) return 40;
+      if (s.includes('kapasitas gardu induk')) return 50;
+      if (s.includes('pengendalian nac') || s.includes('non allowable')) return 61;
+      if (s.includes('pengendalian') && s.includes('penggunaan anggaran')) return 62;
+      if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 70;
+      if (s.includes('evaluasi penyelesaian') || s.includes('penyelesaian proyek supervisi')) return 80;
+      if (s.includes('maturity level')) return 91;
+      if (s.includes('kepatuhan')) return 92;
+      if (s.includes('tata kelola')) return 93;
       return 999;
     };
     upmkGroups.forEach(([unitCode, comps], i) => {
@@ -1001,24 +995,20 @@ export function ApprovalsPage() {
           uS9 = 0;
         }
         if (iG6) {
-          const si = String(it["indikator"] ?? "").replace(
-            /^Pengendalian Anggaran\s*[-–]\s*/i,
-            "",
-          );
-          body +=
-            `<tr><td class="num" style="font-size:7pt">${slU(uS6++)}.</td>` +
+          const si = String(it['indikator'] ?? '')
+            .replace(/^Pengendalian Anggaran\s*[-–]\s*/i, '')
+            .replace(/^[a-c]\.\s*/i, '');
+          body += `<tr><td class="num" style="font-size:7pt">${slU(uS6++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
             `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["realisasi"] ?? "—"}</td>` +
             `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
         } else if (iG9) {
-          const si = String(it["indikator"] ?? "").replace(
-            /^Pengurang\s*[-–]\s*/i,
-            "",
-          );
-          body +=
-            `<tr><td class="num" style="font-size:7pt">${slU(uS9++)}.</td>` +
+          const si = String(it['indikator'] ?? '')
+            .replace(/^Pengurang\s*[-–]\s*/i, '')
+            .replace(/^[a-c]\.\s*/i, '');
+          body += `<tr><td class="num" style="font-size:7pt">${slU(uS9++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
             `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
@@ -1251,25 +1241,18 @@ export function ApprovalsPage() {
       let n = 1;
       const getUpmkOrd = (ind: string): number => {
         const s = ind.toLowerCase();
-        if (s.includes("kajian supervisi")) return 10;
-        if (s.includes("persentase pelaksanaan")) return 20;
-        if (s.includes("kapasitas pembangkit")) return 30;
-        if (s.includes("kapasitas transmisi")) return 40;
-        if (s.includes("kapasitas gardu induk")) return 50;
-        if (s.includes("pengendalian nac") || s.includes("non allowable"))
-          return 61;
-        if (s.includes("pengendalian") && s.includes("penggunaan anggaran"))
-          return 62;
-        if (s.includes("pemenuhan pdn") || s.includes("pdn korporat"))
-          return 70;
-        if (
-          s.includes("evaluasi penyelesaian") ||
-          s.includes("penyelesaian proyek supervisi")
-        )
-          return 80;
-        if (s.includes("maturity level")) return 91;
-        if (s.includes("pengurang") && s.includes("kepatuhan")) return 92;
-        if (s.includes("tata kelola")) return 93;
+        if (s.includes('kajian supervisi')) return 10;
+        if (s.includes('persentase pelaksanaan')) return 20;
+        if (s.includes('kapasitas pembangkit')) return 30;
+        if (s.includes('kapasitas transmisi')) return 40;
+        if (s.includes('kapasitas gardu induk')) return 50;
+        if (s.includes('pengendalian nac') || s.includes('non allowable')) return 61;
+        if (s.includes('pengendalian') && s.includes('penggunaan anggaran')) return 62;
+        if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 70;
+        if (s.includes('evaluasi penyelesaian') || s.includes('penyelesaian proyek supervisi')) return 80;
+        if (s.includes('maturity level')) return 91;
+        if (s.includes('kepatuhan')) return 92;
+        if (s.includes('tata kelola')) return 93;
         return 999;
       };
       const buildUpmkGroupRows = (comps: KmBundleComp[]): string => {
@@ -1302,24 +1285,20 @@ export function ApprovalsPage() {
             s9 = 0;
           }
           if (iG6) {
-            const si = String(it["indikator"] ?? "").replace(
-              /^Pengendalian Anggaran\s*[-–]\s*/i,
-              "",
-            );
-            rows +=
-              `<tr><td class="num" style="font-size:7pt">${sl(s6++)}.</td>` +
+            const si = String(it['indikator'] ?? '')
+              .replace(/^Pengendalian Anggaran\s*[-–]\s*/i, '')
+              .replace(/^[a-c]\.\s*/i, '');
+            rows += `<tr><td class="num" style="font-size:7pt">${sl(s6++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
               `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
               `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td>` +
               `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
           } else if (iG9) {
-            const si = String(it["indikator"] ?? "").replace(
-              /^Pengurang\s*[-–]\s*/i,
-              "",
-            );
-            rows +=
-              `<tr><td class="num" style="font-size:7pt">${sl(s9++)}.</td>` +
+            const si = String(it['indikator'] ?? '')
+              .replace(/^Pengurang\s*[-–]\s*/i, '')
+              .replace(/^[a-c]\.\s*/i, '');
+            rows += `<tr><td class="num" style="font-size:7pt">${sl(s9++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
               `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
