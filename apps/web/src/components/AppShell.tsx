@@ -172,8 +172,6 @@ export function AppShell() {
   const exportRef = useRef<HTMLDivElement>(null);
   const roleRef = useRef<HTMLDivElement>(null);
 
-  console.log("data period", periodId);
-
   // Accordion state for collapsible nav sections.
   // Lazy-init: any section containing the current active route starts open,
   // so a hard refresh on a deep route doesn't hide the active item.

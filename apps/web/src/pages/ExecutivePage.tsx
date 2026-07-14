@@ -357,6 +357,11 @@ export function ExecutivePage() {
   const piRows =
     opPis.length > 0 ? opPis : opKpis.filter((k) => k.id?.startsWith("pi"));
   const allKpiRows = [...kpiRows, ...piRows];
+
+  const totalMaxPenalty = kepatuhan.reduce(
+    (sum, item) => sum + item.maxPenalty,
+    0,
+  );
   const kpiNilai = (sm.kpiNilai ?? 0) + (sm.piNilai ?? 0);
   const kpiBobot = (sm.kpiBobot ?? 0) + (sm.piBobot ?? 0);
   const penalty = sm.kepatuhanPenalty ?? 0;
@@ -481,13 +486,13 @@ export function ExecutivePage() {
       <div
         className="hero-health"
         style={{
-          gridTemplateColumns: "320px 1fr",
-          gap: "var(--space-6)",
+          gridTemplateColumns: "420px 1fr",
+          gap: "var(--space-8)",
           padding: "var(--space-5)",
         }}>
         <div
           className="hero-health-gauge"
-          style={{ width: "100%", maxWidth: 320, height: 280 }}>
+          style={{ width: "100%", maxWidth: 420, height: 280 }}>
           <svg
             viewBox="0 0 320 200"
             preserveAspectRatio="xMidYMin meet"
@@ -556,18 +561,17 @@ export function ExecutivePage() {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: "var(--space-3)",
+            gap: "var(--space-6)",
             justifyContent: "center",
           }}>
           <div>
             <div
-              className="hero-health-title"
-              style={{ fontSize: "var(--text-lg)" }}>
+              className="hero-health-title">
               {String(hs.label ?? "Total Nilai Kinerja PUSMANPRO")}
             </div>
             <div
               className="hero-health-subtitle"
-              style={{ marginTop: 4, fontSize: "var(--text-sm)" }}>
+              style={{ marginTop: 8, fontSize: "var(--text-sm)" }}>
               Agregat 14 indikator RKM 2026 — Kantor Induk + 5 UPMK bulan {" "} 
               {String(selectedPeriod)}
             </div>
@@ -577,7 +581,7 @@ export function ExecutivePage() {
             className="hero-health-stats"
             style={{
               marginTop: 0,
-              paddingTop: "var(--space-3)",
+              paddingTop: "var(--space-6)",
               gridTemplateColumns: "repeat(4, 1fr)",
             }}>
             <div className="hero-stat">
@@ -677,7 +681,7 @@ export function ExecutivePage() {
               <div className="summary-hero-label">Pengurang Kepatuhan</div>
               <div className="summary-hero-value">
                 {penalty}
-                <span className="of">(max -30)</span>
+                <span className="of">(max {totalMaxPenalty})</span>
               </div>
               <div className="summary-hero-meta delta-positive">
                 {penalty === 0 ? "Tidak ada pengurang" : `${penalty} poin`}
@@ -721,7 +725,7 @@ export function ExecutivePage() {
                     fontWeight: 700,
                     color: "var(--color-danger)",
                   }}>
-                  Pengurang Kepatuhan — Maks −30 poin
+                  Pengurang Kepatuhan — Maks {totalMaxPenalty} poin
                 </span>
               </div>
               <div
