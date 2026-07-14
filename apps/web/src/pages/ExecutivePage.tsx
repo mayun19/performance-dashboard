@@ -255,6 +255,7 @@ export function ExecutivePage() {
   const [rekap, setRekap] = useState<Rekap | null>(null);
   const [opData, setOpData] = useState<{
     data: Record<string, unknown>;
+    period: Record<string, unknown>;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -314,6 +315,7 @@ export function ExecutivePage() {
   const hs = d.healthScore ?? {};
   const kpis = d.kpis ?? [];
   const selectedKpi = kpis[activeKpi];
+  const selectedPeriod = opData?.period?.label;
 
   // Integrasi C: bila ada realisasi DISETUJUI, pakai data nyata (live); jika belum, fallback ke seed.
   const isLive = !!rekap?.hasData;
@@ -450,7 +452,8 @@ export function ExecutivePage() {
         <div>
           <h1 className="page-title">Executive Summary</h1>
           <p className="page-subtitle">
-            Dashboard Kinerja PUSMANPRO — Februari 2026
+            Dashboard Kinerja PUSMANPRO —{" "}
+            {String(selectedPeriod) ?? "Periode tidak tersedia"}
           </p>
         </div>
         <div
@@ -472,7 +475,7 @@ export function ExecutivePage() {
               ● Data Realisasi Disetujui
             </span>
           )}
-          <span className="meta-pill">Februari 2026</span>
+          <span className="meta-pill">{String(selectedPeriod)}</span>
         </div>
       </div>
 
@@ -567,8 +570,8 @@ export function ExecutivePage() {
             <div
               className="hero-health-subtitle"
               style={{ marginTop: 4, fontSize: "var(--text-sm)" }}>
-              Agregat 14 indikator RKM 2026 — Kantor Induk + 5 UPMK bulan
-              Februari 2026
+              Agregat 14 indikator RKM 2026 — Kantor Induk + 5 UPMK bulan {" "} 
+              {String(selectedPeriod)}
             </div>
           </div>
 
@@ -587,18 +590,18 @@ export function ExecutivePage() {
               <div className="hero-stat-label">Bulan Lalu</div>
               <div className="hero-stat-value">{fmt(hs.previous)}</div>
             </div>
-            <div className="hero-stat">
+            {/* <div className="hero-stat">
               <div className="hero-stat-label">Δ vs Sebelumnya</div>
               <div
                 className={`hero-stat-value ${(hs.delta as number) >= 0 ? "delta-positive" : "delta-negative"}`}>
                 {(hs.delta as number) > 0 ? "+" : ""}
                 {fmt(hs.delta)}%
               </div>
-            </div>
-            <div className="hero-stat">
+            </div> */}
+            {/* <div className="hero-stat">
               <div className="hero-stat-label">KPI Aktif</div>
               <div className="hero-stat-value">{kpis.length} indikator</div>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
@@ -1015,7 +1018,10 @@ export function ExecutivePage() {
         right={<span className="card-meta">12 bulan terakhir</span>}>
         <div
           className="chart-container"
-          style={{ height: 280, padding: "var(--space-4) var(--space-7) var(--space-7)" }}>
+          style={{
+            height: 280,
+            padding: "var(--space-4) var(--space-7) var(--space-7)",
+          }}>
           <UnitTrendChart trend={d.unitTrend as Record<string, unknown>} />
         </div>
       </FoldCard>
