@@ -1593,7 +1593,7 @@ a {
   line-height: 1.1;
 }
 .page-subtitle {
-  color: var(--color-text-subtle);
+  color: var(--color-text-muted);
   font-size: var(--text-sm);
   margin-top: var(--space-2);
 }
@@ -2188,7 +2188,7 @@ a {
 .hero-health-title {
   font-family: "Manrope", system-ui, sans-serif;
   font-size: var(--text-xl);
-  font-weight: 400;
+  font-weight: 600;
   color: var(--color-text);
   letter-spacing: -0.005em;
   line-height: 1.2;
@@ -2217,7 +2217,8 @@ a {
 }
 .hero-stat-value {
   font-family: "Manrope", system-ui, sans-serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
+  font-weight: 500;
   color: var(--color-text);
   line-height: 1.1;
 }
@@ -2295,6 +2296,7 @@ a {
 }
 .card-meta {
   font-size: var(--text-sm);
+  font-weight: 500;
   color: var(--color-text-muted);
 }
 

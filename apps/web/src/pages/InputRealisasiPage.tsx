@@ -421,7 +421,7 @@ export function InputRealisasiPage() {
               message="Belum ada Kontrak Manajemen yang disetujui (final GM) untuk unit Anda. Selesaikan persetujuan KM terlebih dahulu di menu Input Kontrak Manajemen → Persetujuan."
             />
           ) : (
-            <div className="table-scroll">
+            <div className="table-scroll able-scroll">
               <table className="data-table compact">
                 <thead>
                   <tr>
@@ -433,7 +433,7 @@ export function InputRealisasiPage() {
                     <th className="num">Bobot</th>
                     <th className="num">Target Sem I</th>
                     <th className="num">Target {CURRENT_YEAR}</th>
-                    <th>Realisasi</th>
+                    <th className="num">Realisasi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -486,7 +486,7 @@ export function InputRealisasiPage() {
                         </td>
                         <td className="num">{kpi.target ?? "—"}</td>
                         <td className="num">{kpi.target2 ?? "—"}</td>
-                        <td style={{ minWidth: 140 }}>
+                        <td style={{ minWidth: 340 }}>
                           <input
                             type="text"
                             className="form-input form-input-sm"
@@ -553,7 +553,7 @@ export function InputRealisasiPage() {
           <div
             className="table-wrap"
             style={{ paddingBottom: "var(--space-7)" }}>
-            <div className="table-scroll">
+             <div className="table-scroll">
               <table className="data-table compact">
                 <thead>
                   <tr>
@@ -788,7 +788,7 @@ export function InputRealisasiPage() {
                   })}
                 </tbody>
               </table>
-            </div>
+             </div>
           </div>
         </div>
       )}
