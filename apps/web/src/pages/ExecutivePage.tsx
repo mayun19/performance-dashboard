@@ -392,9 +392,7 @@ export function ExecutivePage() {
                   k.achievement ?? (k.target ? (actual / k.target) * 100 : 0);
                 return (
                   <tr key={i}>
-                    <td style={{ color: "var(--color-text-muted)" }}>
-                      {k.no ?? k.id}
-                    </td>
+                    <td style={{ color: "var(--color-text-muted)" }}>{i +1}</td>
                     <td>
                       <div
                         style={{
