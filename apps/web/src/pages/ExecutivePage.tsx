@@ -8,7 +8,6 @@ import {
 import { executive, kinerja, operational } from "../lib/api";
 import { usePeriod } from "../context/PeriodContext";
 import {
-  BarChart3,
   LineChart,
   Trophy,
   Layers,
@@ -275,7 +274,7 @@ export function ExecutivePage() {
         else setError((sum.reason as Error)?.message ?? "Gagal memuat data");
         if (rk.status === "fulfilled") setRekap(rk.value as Rekap);
         if (op.status === "fulfilled")
-          setOpData(op.value as { data: Record<string, unknown> });
+          setOpData(op.value as { data: Record<string, unknown>; period: Record<string, unknown> });
       })
       .finally(() => setLoading(false));
   }, [periodId, mode]);
