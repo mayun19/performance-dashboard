@@ -2520,16 +2520,13 @@ export function ApprovalsPage() {
                               </button>
                             </td>
                             <td>
-                              <span
-                                className={`status-pill ${aggregateCls}`}
-                                style={{ fontSize: 10 }}>
+                              <span className={`status-pill ${aggregateCls}`}>
                                 {aggregateLabel}
                               </span>
                             </td>
                             <td
                               style={{
                                 color: "var(--color-text-muted)",
-                                fontSize: 11,
                               }}>
                               {items.length} bidang
                             </td>
@@ -2546,15 +2543,14 @@ export function ApprovalsPage() {
                                   />
                                   <td
                                     style={{
-                                      fontSize: 11,
+                                      fontSize: 14,
                                       color: "var(--color-text-muted)",
                                     }}>
                                     {c.bidang} · {c.submitter}
                                   </td>
                                   <td>
                                     <span
-                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                                      style={{ fontSize: 10 }}>
+                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
                                       {c.status === "ready"
                                         ? "Siap"
                                         : c.status === "approved"
@@ -2600,7 +2596,7 @@ export function ApprovalsPage() {
                                         style={{
                                           padding:
                                             "var(--space-2) var(--space-3)",
-                                          fontSize: 11,
+                                          fontSize: 14,
                                           color: "var(--color-text-muted)",
                                         }}>
                                         Penanggung Jawab:{" "}
@@ -3334,7 +3330,6 @@ export function ApprovalsPage() {
                         </td>
                         <td
                           style={{
-                            fontSize: 11,
                             color: "var(--color-text-muted)",
                           }}>
                           {c.bidang}
@@ -3344,8 +3339,7 @@ export function ApprovalsPage() {
                         </td>
                         <td>
                           <span
-                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                            style={{ fontSize: 10 }}>
+                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
                             {c.status === "ready"
                               ? "Siap (lolos SM RPC)"
                               : c.status === "approved"
@@ -3426,14 +3420,13 @@ export function ApprovalsPage() {
                             <td
                               style={{
                                 color: "var(--color-text-muted)",
-                                fontSize: 11,
                               }}>
                               {items.length} bidang
                             </td>
                             <td>
                               <span
                                 className={`status-pill ${aggrCls}`}
-                                style={{ fontSize: 10 }}>
+                                >
                                 {aggrLabel}
                               </span>
                             </td>
@@ -3448,7 +3441,7 @@ export function ApprovalsPage() {
                                 <td style={{ paddingLeft: "var(--space-5)" }} />
                                 <td
                                   style={{
-                                    fontSize: 11,
+                                    fontSize: 14,
                                     color: "var(--color-text-muted)",
                                   }}>
                                   {c.bidang}
@@ -3456,14 +3449,12 @@ export function ApprovalsPage() {
                                 <td
                                   style={{
                                     color: "var(--color-text-muted)",
-                                    fontSize: 11,
                                   }}>
                                   {c.submitter}
                                 </td>
                                 <td>
                                   <span
-                                    className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                                    style={{ fontSize: 10 }}>
+                                    className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
                                     {c.status === "ready"
                                       ? "Siap"
                                       : c.status === "approved"
