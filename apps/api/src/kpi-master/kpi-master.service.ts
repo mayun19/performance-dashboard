@@ -2,8 +2,15 @@ import { Injectable, Inject, ForbiddenException, BadRequestException, NotFoundEx
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
-import { Role, User } from '@prisma/client';
-import { CHECKER_ROLES, APPROVER_ROLES, RPC_BIDANG } from '../common/workflow-steps';
+import { Prisma, Role, User } from '@prisma/client';
+import { CHECKER_ROLES, APPROVER_ROLES, RPC_BIDANG, stepRecipientWhere } from '../common/workflow-steps';
+
+// Slot alur reviewer per-assignment (Kombinasi A+B): peran + opsi override orang.
+export type ReviewerSlot = {
+  role: 'ASMAN' | 'MANAJER' | 'SRMANAJER' | 'GM';
+  userId?: string; // ada → override orang spesifik (A); kosong → resolve peran (B)
+};
+export type ReviewerSlots = { checkers: ReviewerSlot[]; approver: ReviewerSlot | null };
 
 export interface AssignmentInput {
   unitCode: string;
@@ -13,6 +20,7 @@ export interface AssignmentInput {
   target?: string;
   target2?: string;
   persenAgregasi?: number; // bobot rollup ke parent (0-100), diinput RPC Perencanaan
+  reviewerSlots?: unknown; // default alur reviewer per-assignment (A+B); divalidasi di service
 }
 export interface SaveMasterInput {
   id?: string;
@@ -66,18 +74,98 @@ export class KpiMasterService {
     return { ...m, isPending, isCurrent: m.status === 'active' && !isPending };
   }
 
-  // Default reviewer (Fase C) untuk dokumen KM: cari masterKpiId pertama pada kpiItems
-  // dokumen tsb, lalu ambil defaultCheckerIds/defaultApproverId master-nya. Dipakai
-  // frontend untuk pre-fill ReviewerPickerModal — submitter tetap bisa mengubahnya.
+  // Default reviewer untuk pre-fill picker submit dokumen KM. Prioritas (Kombinasi A+B):
+  //   1. Slot per-assignment (reviewerSlots) yang cocok (masterKpiId, unitCode, bidang) dokumen —
+  //      slot peran di-resolve ke orang di-scope unit/bidang assignment; slot ber-userId = override.
+  //   2. Fallback: default reviewer master-level (defaultCheckerIds/defaultApproverId) dari
+  //      masterKpiId pertama dokumen (perilaku lama).
+  // Return kontrak tetap { checkerIds, approverId } (userId konkret) — hilir tak berubah.
   async getDefaultsForKm(kmId: string) {
     const km = await this.prisma.kontrakManajemen.findUnique({ where: { id: kmId } });
-    if (!km) return { checkerIds: [], approverId: null };
+    if (!km) return { checkerIds: [] as string[], approverId: null as string | null };
+
     const items = (Array.isArray(km.kpiItems) ? km.kpiItems : []) as Record<string, unknown>[];
-    const masterId = items.map((it) => it['masterKpiId']).find((v) => typeof v === 'string') as string | undefined;
-    if (!masterId) return { checkerIds: [], approverId: null };
-    const master = await this.prisma.kpiMaster.findUnique({ where: { id: masterId } });
+    const masterIds = items.map((it) => it['masterKpiId']).filter((v): v is string => typeof v === 'string');
+    if (masterIds.length === 0) return { checkerIds: [], approverId: null };
+
+    // (1) Cari assignment (unit,bidang) dokumen yang punya reviewerSlots terisi.
+    const assignments = await this.prisma.kpiAssignment.findMany({
+      where: { kpiMasterId: { in: masterIds }, unitCode: km.unitCode, bidang: km.bidang },
+    });
+    const withSlots = assignments.find((a) => this.parseReviewerSlots(a.reviewerSlots) !== null);
+    if (withSlots) {
+      const resolved = await this.resolveReviewerSlots(km.unitCode, km.bidang, this.parseReviewerSlots(withSlots.reviewerSlots)!);
+      if (resolved.checkerIds.length > 0 && resolved.approverId) return resolved;
+      // Hasil tak lengkap (mis. peran tak ketemu orang) → jatuh ke fallback master-level.
+    }
+
+    // (2) Fallback master-level dari masterKpiId pertama.
+    const master = await this.prisma.kpiMaster.findUnique({ where: { id: masterIds[0] } });
     if (!master) return { checkerIds: [], approverId: null };
     return { checkerIds: master.defaultCheckerIds, approverId: master.defaultApproverId };
+  }
+
+  private parseReviewerSlots(raw: unknown): ReviewerSlots | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const obj = raw as { checkers?: unknown; approver?: unknown };
+    const cleanSlot = (s: unknown): ReviewerSlot | null => {
+      if (!s || typeof s !== 'object') return null;
+      const slot = s as { role?: unknown; userId?: unknown };
+      if (typeof slot.role !== 'string') return null;
+      const out: ReviewerSlot = { role: slot.role as ReviewerSlot['role'] };
+      if (typeof slot.userId === 'string' && slot.userId.trim()) out.userId = slot.userId.trim();
+      return out;
+    };
+    const checkers = Array.isArray(obj.checkers)
+      ? obj.checkers.map(cleanSlot).filter((s): s is ReviewerSlot => s !== null)
+      : [];
+    const approver = cleanSlot(obj.approver);
+    if (checkers.length === 0 && !approver) return null;
+    return { checkers, approver };
+  }
+
+  // Normalisasi reviewerSlots dari input authoring → bentuk tersimpan bersih, atau null.
+  private sanitizeReviewerSlots(input: unknown): ReviewerSlots | null {
+    return this.parseReviewerSlots(input ?? null);
+  }
+
+  // Resolusi slot peran → userId konkret, di-scope ke (unitCode,bidang) dokumen.
+  // Aturan scoping: UPMK (unit≠KP) diidentifikasi by (role,unit) TANPA bidang (user UPMK
+  // bidang=null); KP sertakan bidang. Approver SRMANAJER selalu di KP per-bidang; GM tunggal.
+  // Slot ber-userId = override langsung. Tiap slot ambil satu orang deterministik (first).
+  private async resolveReviewerSlots(unitCode: string, bidang: string, slots: ReviewerSlots) {
+    const resolveOne = async (slot: ReviewerSlot, kind: 'checker' | 'approver'): Promise<User | null> => {
+      const role = slot.role as Role;
+      const allowed = kind === 'checker' ? CHECKER_ROLES : APPROVER_ROLES;
+      if (!allowed.includes(role)) return null;
+      if (slot.userId) {
+        const u = await this.prisma.user.findFirst({ where: stepRecipientWhere({ role, userId: slot.userId, label: '' }) });
+        return u && allowed.includes(u.role) ? u : null;
+      }
+      // Slot peran (B): scope by unit; KP tambah bidang; approver SM selalu KP per-bidang.
+      const where =
+        kind === 'approver'
+          ? role === Role.GM
+            ? stepRecipientWhere({ role, label: '' })
+            : stepRecipientWhere({ role, unit: 'KP', bidang, label: '' })
+          : unitCode === 'KP'
+            ? stepRecipientWhere({ role, unit: 'KP', bidang, label: '' })
+            : stepRecipientWhere({ role, unit: unitCode, label: '' });
+      return this.prisma.user.findFirst({ where, orderBy: { name: 'asc' } });
+    };
+
+    const checkerIds: string[] = [];
+    const seen = new Set<string>();
+    for (const slot of slots.checkers) {
+      const u = await resolveOne(slot, 'checker');
+      if (u && !seen.has(u.id)) { checkerIds.push(u.id); seen.add(u.id); }
+    }
+    let approverId: string | null = null;
+    if (slots.approver) {
+      const u = await resolveOne(slots.approver, 'approver');
+      if (u && !seen.has(u.id)) approverId = u.id;
+    }
+    return { checkerIds, approverId };
   }
 
   async getById(id: string) {
@@ -379,6 +467,24 @@ export class KpiMasterService {
       }
     }
 
+    // Validasi reviewerSlots per-assignment (A+B): role token harus valid per jenis; slot
+    // ber-override (userId) harus user aktif dengan role sesuai.
+    for (const a of dto.assignments) {
+      const slots = this.sanitizeReviewerSlots(a.reviewerSlots);
+      if (!slots) continue;
+      const check = async (slot: ReviewerSlot, allowed: Role[], labelKind: string) => {
+        if (!allowed.includes(slot.role as Role)) {
+          throw new BadRequestException(`Slot ${labelKind} (${a.unitCode}/${a.bidang}) harus berperan ${allowed.join('/')}`);
+        }
+        if (slot.userId) {
+          const u = await this.prisma.user.findFirst({ where: { id: slot.userId, isActive: true } });
+          if (!u || !allowed.includes(u.role)) throw new BadRequestException(`Override ${labelKind} (${a.unitCode}/${a.bidang}) harus user aktif berperan ${allowed.join('/')}`);
+        }
+      };
+      for (const c of slots.checkers) await check(c, CHECKER_ROLES, 'Checker');
+      if (slots.approver) await check(slots.approver, APPROVER_ROLES, 'Approver');
+    }
+
     const activePeriod = await this.prisma.period.findFirst({ where: { isActive: true } });
     if (!activePeriod) throw new BadRequestException('Tidak ada periode aktif');
     const kmType = dto.kmType === 'final' ? 'final' : 'draft';
@@ -441,11 +547,15 @@ export class KpiMasterService {
     }
 
     await this.prisma.kpiAssignment.createMany({
-      data: dto.assignments.map((a) => ({
-        kpiMasterId: master.id, unitCode: a.unitCode, bidang: a.bidang,
-        holder: a.holder ?? '', bobotKm: a.bobotKm ?? '', target: a.target ?? '', target2: a.target2 ?? '',
-        persenAgregasi: Number(a.persenAgregasi) || 0,
-      })),
+      data: dto.assignments.map((a) => {
+        const slots = this.sanitizeReviewerSlots(a.reviewerSlots);
+        return {
+          kpiMasterId: master.id, unitCode: a.unitCode, bidang: a.bidang,
+          holder: a.holder ?? '', bobotKm: a.bobotKm ?? '', target: a.target ?? '', target2: a.target2 ?? '',
+          persenAgregasi: Number(a.persenAgregasi) || 0,
+          reviewerSlots: slots === null ? Prisma.DbNull : (slots as unknown as Prisma.InputJsonValue),
+        };
+      }),
     });
 
     const assignments = await this.prisma.kpiAssignment.findMany({ where: { kpiMasterId: master.id } });

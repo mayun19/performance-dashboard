@@ -184,9 +184,14 @@ export const inputKontrak = {
     api.patch(`/input-kontrak/${id}/values`, { kpiItems }).then((r) => r.data),
 };
 
+// Slot alur reviewer per-assignment (Kombinasi A+B): peran + opsi override orang.
+export type ReviewerSlot = { role: 'ASMAN' | 'MANAJER' | 'SRMANAJER' | 'GM'; userId?: string };
+export type ReviewerSlots = { checkers: ReviewerSlot[]; approver: ReviewerSlot | null };
+
 export type KpiAssignmentInput = {
   unitCode: string; bidang: string; holder?: string; bobotKm?: string; target?: string; target2?: string;
   persenAgregasi?: number;
+  reviewerSlots?: ReviewerSlots | null;
 };
 export const kpiMaster = {
   list: (year?: string, kmType?: 'draft' | 'final') =>

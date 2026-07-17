@@ -1,5 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { kpiMaster, inputKontrak } from '../lib/api';
+import type { ReviewerSlot, ReviewerSlots } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { usePeriod } from '../context/PeriodContext';
 import {
@@ -72,7 +73,11 @@ export function KpiMasterPage() {
 type Assignment = {
   unitCode: string; bidang: string; holder: string; bobotKm: string; target: string; target2: string;
   persenAgregasi: number;
+  reviewerSlots: ReviewerSlots | null; // default alur reviewer per-assignment (Kombinasi A+B)
 };
+const CHECKER_ROLE_OPTIONS: Array<ReviewerSlot['role']> = ['ASMAN', 'MANAJER'];
+const APPROVER_ROLE_OPTIONS: Array<ReviewerSlot['role']> = ['SRMANAJER', 'GM'];
+const emptyReviewerSlots = (): ReviewerSlots => ({ checkers: [], approver: null });
 type KpiMasterRow = {
   id: string; year: string; kmType: 'draft' | 'final'; indikator: string; formula: string; satuan: string;
   targetParent: string; createdBy: string; createdAt: string;
@@ -83,6 +88,7 @@ type KpiMasterRow = {
   aggregationMethod: 'weighted' | 'sum';
 };
 const ROLE_LABEL: Record<string, string> = { ASMAN: 'ASMAN', MANAJER: 'Manajer', SRMANAJER: 'Senior Manajer', GM: 'General Manager' };
+const candDesc = (c: ReviewerCandidate) => `${ROLE_LABEL[c.role] ?? c.role}${c.unit && c.unit !== 'KP' ? ' · ' + (UNIT_NAMES[c.unit] ?? c.unit) : ''}`;
 type RollupBreakdown = { unitCode: string; bidang: string; persenAgregasi: number; realisasi: number | null; kontribusi: number; hasData: boolean };
 type Rollup = {
   masterId: string; indikator: string; targetParent: string; periodId: string; periodLabel: string;
@@ -90,7 +96,145 @@ type Rollup = {
   totalPersen: number; nilaiParent: number; isFullyConfigured: boolean; breakdown: RollupBreakdown[];
 };
 
-const emptyAssignment = (): Assignment => ({ unitCode: 'UPMK1', bidang: 'Operasi Manajemen Proyek', holder: '', bobotKm: '', target: '', target2: '', persenAgregasi: 0 });
+const emptyAssignment = (): Assignment => ({ unitCode: 'UPMK1', bidang: 'Operasi Manajemen Proyek', holder: '', bobotKm: '', target: '', target2: '', persenAgregasi: 0, reviewerSlots: null });
+
+// Panel inline "Alur Reviewer" per baris assignment (Kombinasi A+B). Peran (B) di-resolve
+// server-side saat submit (lihat kpi-master.service.ts resolveReviewerSlots); preview di sini
+// murni tampilan client-side yang meniru aturan scoping yang sama — bukan sumber kebenaran.
+type ReviewerSlotsPanelProps = {
+  unitCode: string; bidang: string; slots: ReviewerSlots;
+  onAddChecker: () => void; onRemoveChecker: (si: number) => void;
+  onUpdateChecker: (si: number, patch: Partial<ReviewerSlot>) => void;
+  onMoveChecker: (si: number, dir: -1 | 1) => void;
+  onSetApprover: (slot: ReviewerSlot | null) => void;
+  previewChecker: (slot: ReviewerSlot) => ReviewerCandidate | null;
+  previewApprover: (slot: ReviewerSlot) => ReviewerCandidate | null;
+  candidates: { checkers: ReviewerCandidate[]; approvers: ReviewerCandidate[] };
+  onApplyToAll?: () => void;
+};
+
+function ReviewerSlotsPanel({
+  unitCode, bidang, slots, onAddChecker, onRemoveChecker, onUpdateChecker, onMoveChecker,
+  onSetApprover, previewChecker, previewApprover, candidates, onApplyToAll,
+}: ReviewerSlotsPanelProps) {
+  const scopeLabel = unitCode === 'KP' ? `Kantor Induk — ${bidang}` : (UNIT_NAMES[unitCode] ?? unitCode);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+        Peran di bawah di-resolve ke orang untuk <b>{scopeLabel}</b> saat dokumen ini di-submit.
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <UserCheck size={12} /> Checker ({slots.checkers.length})
+        </div>
+        {slots.checkers.length === 0 && (
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6 }}>Belum ada slot checker — pakai Default Alur Reviewer di bawah.</div>
+        )}
+        {slots.checkers.map((slot, si) => {
+          const preview = previewChecker(slot);
+          return (
+            <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontSize: 11, minWidth: 14 }}>{si + 1}.</span>
+              <select
+                className="form-input form-input-sm" style={{ width: 110 }} value={slot.role}
+                onChange={(e) => onUpdateChecker(si, { role: e.target.value as ReviewerSlot['role'] })}
+              >
+                {CHECKER_ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              </select>
+              {slot.userId ? (
+                <select
+                  className="form-input form-input-sm" style={{ minWidth: 180 }} value={slot.userId}
+                  onChange={(e) => onUpdateChecker(si, { userId: e.target.value })}
+                >
+                  {candidates.checkers.filter((c) => c.role === slot.role).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} · {candDesc(c)}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: 11, color: preview ? 'var(--color-text)' : 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  {preview ? `→ ${preview.name}` : (<><AlertCircle size={11} /> tak ditemukan — jatuh ke Default Alur Reviewer</>)}
+                </span>
+              )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox" checked={!!slot.userId}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      const first = candidates.checkers.find((c) => c.role === slot.role);
+                      onUpdateChecker(si, { userId: first?.id ?? '' });
+                    } else {
+                      onUpdateChecker(si, { userId: undefined });
+                    }
+                  }}
+                /> orang spesifik
+              </label>
+              <button className="btn btn-ghost btn-sm" disabled={si === 0} onClick={() => onMoveChecker(si, -1)}><ArrowUp size={11} /></button>
+              <button className="btn btn-ghost btn-sm" disabled={si === slots.checkers.length - 1} onClick={() => onMoveChecker(si, 1)}><ArrowDown size={11} /></button>
+              <button className="btn btn-ghost btn-sm" onClick={() => onRemoveChecker(si)} style={{ color: 'var(--color-danger)' }}><X size={11} /></button>
+            </div>
+          );
+        })}
+        <button className="btn btn-ghost btn-sm" onClick={onAddChecker}><Plus size={12} /> Tambah Checker</button>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <ShieldCheck size={12} /> Approver
+        </div>
+        {!slots.approver ? (
+          <button className="btn btn-ghost btn-sm" onClick={() => onSetApprover({ role: 'SRMANAJER' })}><Plus size={12} /> Tambah Approver</button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <select
+              className="form-input form-input-sm" style={{ width: 130 }} value={slots.approver.role}
+              onChange={(e) => onSetApprover({ ...slots.approver!, role: e.target.value as ReviewerSlot['role'] })}
+            >
+              {APPROVER_ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            </select>
+            {slots.approver.userId ? (
+              <select
+                className="form-input form-input-sm" style={{ minWidth: 180 }} value={slots.approver.userId}
+                onChange={(e) => onSetApprover({ ...slots.approver!, userId: e.target.value })}
+              >
+                {candidates.approvers.filter((c) => c.role === slots.approver!.role).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} · {candDesc(c)}</option>
+                ))}
+              </select>
+            ) : (() => {
+              const preview = previewApprover(slots.approver!);
+              return (
+                <span style={{ fontSize: 11, color: preview ? 'var(--color-text)' : 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  {preview ? `→ ${preview.name}` : (<><AlertCircle size={11} /> tak ditemukan — jatuh ke Default Alur Reviewer</>)}
+                </span>
+              );
+            })()}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+              <input
+                type="checkbox" checked={!!slots.approver.userId}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    const first = candidates.approvers.find((c) => c.role === slots.approver!.role);
+                    onSetApprover({ ...slots.approver!, userId: first?.id ?? '' });
+                  } else {
+                    onSetApprover({ role: slots.approver!.role });
+                  }
+                }}
+              /> orang spesifik
+            </label>
+            <button className="btn btn-ghost btn-sm" onClick={() => onSetApprover(null)} style={{ color: 'var(--color-danger)' }}><X size={11} /></button>
+          </div>
+        )}
+      </div>
+
+      {onApplyToAll && (
+        <button className="btn btn-ghost btn-sm" onClick={onApplyToAll} style={{ alignSelf: 'flex-start' }}>
+          <Boxes size={12} /> Terapkan alur ini ke semua baris
+        </button>
+      )}
+    </div>
+  );
+}
 
 function DefinisiKpiTab() {
   const { user } = useAuth();
@@ -139,7 +283,6 @@ function DefinisiKpiTab() {
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
-  const candDesc = (c: ReviewerCandidate) => `${ROLE_LABEL[c.role] ?? c.role}${c.unit && c.unit !== 'KP' ? ' · ' + (UNIT_NAMES[c.unit] ?? c.unit) : ''}`;
 
   const load = () => {
     setLoading(true);
@@ -154,7 +297,7 @@ function DefinisiKpiTab() {
     setEditingId(null); setEditingIsPending(false); setKmType('draft'); setAggregationMethod('weighted');
     setIndikator(''); setFormula(''); setSatuan('');
     setTargetParent(''); setAssignments([emptyAssignment()]); setFormError(null); setShowForm(false);
-    setDefaultCheckerOrder([]); setDefaultApproverId('');
+    setDefaultCheckerOrder([]); setDefaultApproverId(''); setOpenReviewerRow(null);
   };
 
   const handleEdit = (m: KpiMasterRow) => {
@@ -165,6 +308,7 @@ function DefinisiKpiTab() {
     setAssignments(m.assignments.map((a) => ({
       unitCode: a.unitCode, bidang: a.bidang, holder: a.holder, bobotKm: a.bobotKm, target: a.target, target2: a.target2,
       persenAgregasi: a.persenAgregasi ?? 0,
+      reviewerSlots: a.reviewerSlots ?? null,
     })));
     setEditingIsPending(m.isPending);
     setShowForm(true); setFormError(null);
@@ -172,13 +316,69 @@ function DefinisiKpiTab() {
 
   const addAssignment = () => setAssignments((prev) => [...prev, emptyAssignment()]);
   const removeAssignment = (i: number) => setAssignments((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
-  const updateAssignment = (i: number, field: Exclude<keyof Assignment, 'persenAgregasi'>, value: string) =>
+  const updateAssignment = (i: number, field: Exclude<keyof Assignment, 'persenAgregasi' | 'reviewerSlots'>, value: string) =>
     setAssignments((prev) => prev.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
   const updatePersen = (i: number, value: string) => {
     const n = value === '' ? 0 : Number(value);
     setAssignments((prev) => prev.map((a, idx) => (idx === i ? { ...a, persenAgregasi: Number.isFinite(n) ? n : a.persenAgregasi } : a)));
   };
   const totalPersenForm = assignments.reduce((s, a) => s + (a.persenAgregasi || 0), 0);
+
+  // ===== Alur Reviewer per-assignment (Kombinasi A+B) =====
+  const [openReviewerRow, setOpenReviewerRow] = useState<number | null>(null);
+  const slotsOf = (i: number): ReviewerSlots => assignments[i].reviewerSlots ?? emptyReviewerSlots();
+  const setSlots = (i: number, slots: ReviewerSlots) =>
+    setAssignments((prev) => prev.map((a, idx) => (idx === i ? { ...a, reviewerSlots: slots } : a)));
+
+  const addCheckerSlot = (i: number) => setSlots(i, { ...slotsOf(i), checkers: [...slotsOf(i).checkers, { role: 'ASMAN' }] });
+  const removeCheckerSlot = (i: number, si: number) =>
+    setSlots(i, { ...slotsOf(i), checkers: slotsOf(i).checkers.filter((_, x) => x !== si) });
+  const updateCheckerSlot = (i: number, si: number, patch: Partial<ReviewerSlot>) =>
+    setSlots(i, { ...slotsOf(i), checkers: slotsOf(i).checkers.map((s, x) => (x === si ? { ...s, ...patch } : s)) });
+  const moveCheckerSlot = (i: number, si: number, dir: -1 | 1) => {
+    const checkers = [...slotsOf(i).checkers];
+    const j = si + dir;
+    if (j < 0 || j >= checkers.length) return;
+    [checkers[si], checkers[j]] = [checkers[j], checkers[si]];
+    setSlots(i, { ...slotsOf(i), checkers });
+  };
+  const setApproverSlot = (i: number, slot: ReviewerSlot | null) => setSlots(i, { ...slotsOf(i), approver: slot });
+  const applySlotsToAllRows = (i: number) => {
+    const template = slotsOf(i);
+    setAssignments((prev) => prev.map((a) => ({ ...a, reviewerSlots: { checkers: template.checkers.map((s) => ({ ...s })), approver: template.approver ? { ...template.approver } : null } })));
+  };
+
+  // Preview client-side — WAJIB meniru aturan scoping backend (resolveReviewerSlots di
+  // kpi-master.service.ts): UPMK identifikasi by (role,unit) TANPA bidang; KP sertakan bidang;
+  // approver SRMANAJER selalu KP per-bidang; GM tunggal. Ambil satu deterministik (orderBy name).
+  const previewChecker = (unitCode: string, bidang: string, slot: ReviewerSlot): ReviewerCandidate | null => {
+    if (slot.userId) return reviewerCandidates.checkers.find((c) => c.id === slot.userId) ?? null;
+    const pool = reviewerCandidates.checkers.filter((c) => c.role === slot.role);
+    const scoped = unitCode === 'KP' ? pool.filter((c) => c.unit === 'KP' && c.bidang === bidang) : pool.filter((c) => c.unit === unitCode);
+    return [...scoped].sort((a, b) => a.name.localeCompare(b.name))[0] ?? null;
+  };
+  const previewApprover = (bidang: string, slot: ReviewerSlot): ReviewerCandidate | null => {
+    if (slot.userId) return reviewerCandidates.approvers.find((c) => c.id === slot.userId) ?? null;
+    const pool = reviewerCandidates.approvers.filter((c) => c.role === slot.role);
+    const scoped = slot.role === 'GM' ? pool : pool.filter((c) => c.unit === 'KP' && c.bidang === bidang);
+    return [...scoped].sort((a, b) => a.name.localeCompare(b.name))[0] ?? null;
+  };
+  const reviewerSlotsSummary = (slots: ReviewerSlots | null): string => {
+    if (!slots || (slots.checkers.length === 0 && !slots.approver)) return 'Belum diatur';
+    const parts: string[] = [];
+    if (slots.checkers.length > 0) parts.push(`${slots.checkers.length} checker`);
+    if (slots.approver) parts.push('approver');
+    return parts.join(' + ');
+  };
+  // Fase 3 (polish): deteksi slot peran (bukan override) yang tak bisa di-resolve ke orang
+  // (mis. approver SRMANAJER di bidang tanpa Senior Manajer, seperti K3L/MRO) — beri sinyal
+  // di level ringkasan baris, bukan hanya di dalam panel, agar RPC sadar akan jatuh ke fallback.
+  const hasUnresolvedSlot = (unitCode: string, bidang: string, slots: ReviewerSlots | null): boolean => {
+    if (!slots) return false;
+    if (slots.checkers.some((s) => !s.userId && !previewChecker(unitCode, bidang, s))) return true;
+    if (slots.approver && !slots.approver.userId && !previewApprover(bidang, slots.approver)) return true;
+    return false;
+  };
   const anyPersenSet = assignments.some((a) => (a.persenAgregasi || 0) > 0);
 
   const fetchRollup = async (masterId: string) => {
@@ -327,12 +527,14 @@ function DefinisiKpiTab() {
                       <th>Unit</th><th>Bidang</th><th>Penanggung Jawab</th>
                       <th className="num">Bobot KM</th><th>Target Sem I</th><th>Target {CURRENT_YEAR}</th>
                       {aggregationMethod === 'weighted' && <th className="num">Bobot Agregasi (%)</th>}
+                      <th>Alur Reviewer</th>
                       <th style={{ width: 40 }} />
                     </tr>
                   </thead>
                   <tbody>
                     {assignments.map((a, i) => (
-                      <tr key={i}>
+                      <Fragment key={i}>
+                      <tr>
                         <td>
                           <select className="form-input form-input-sm" value={a.unitCode} onChange={(e) => updateAssignment(i, 'unitCode', e.target.value)}>
                             {UNIT_OPTIONS.map((u) => <option key={u.code} value={u.code}>{u.name}</option>)}
@@ -357,13 +559,50 @@ function DefinisiKpiTab() {
                           </td>
                         )}
                         <td>
+                          {(() => {
+                            const unresolved = hasUnresolvedSlot(a.unitCode, a.bidang, a.reviewerSlots);
+                            const empty = reviewerSlotsSummary(a.reviewerSlots) === 'Belum diatur';
+                            return (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => setOpenReviewerRow(openReviewerRow === i ? null : i)}
+                                title={unresolved ? 'Ada slot peran yang tak ketemu orangnya — akan jatuh ke Default Alur Reviewer' : undefined}
+                                style={{ fontSize: 11, color: unresolved ? 'var(--color-warning)' : empty ? 'var(--color-text-muted)' : 'var(--color-accent)' }}
+                              >
+                                {unresolved ? <AlertCircle size={12} /> : <UserCheck size={12} />} {reviewerSlotsSummary(a.reviewerSlots)}
+                                <ChevronDown size={11} style={{ transform: openReviewerRow === i ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+                              </button>
+                            );
+                          })()}
+                        </td>
+                        <td>
                           <button className="btn btn-ghost btn-sm" disabled={assignments.length <= 1} onClick={() => removeAssignment(i)} style={{ color: 'var(--color-danger)' }}><Trash2 size={13} /></button>
                         </td>
                       </tr>
+                      {openReviewerRow === i && (
+                        <tr>
+                          <td colSpan={aggregationMethod === 'weighted' ? 9 : 8} style={{ background: 'var(--color-surface-2)', padding: 'var(--space-3)' }}>
+                            <ReviewerSlotsPanel
+                              unitCode={a.unitCode} bidang={a.bidang}
+                              slots={slotsOf(i)}
+                              onAddChecker={() => addCheckerSlot(i)}
+                              onRemoveChecker={(si) => removeCheckerSlot(i, si)}
+                              onUpdateChecker={(si, patch) => updateCheckerSlot(i, si, patch)}
+                              onMoveChecker={(si, dir) => moveCheckerSlot(i, si, dir)}
+                              onSetApprover={(slot) => setApproverSlot(i, slot)}
+                              previewChecker={(slot) => previewChecker(a.unitCode, a.bidang, slot)}
+                              previewApprover={(slot) => previewApprover(a.bidang, slot)}
+                              candidates={reviewerCandidates}
+                              onApplyToAll={assignments.length > 1 ? () => applySlotsToAllRows(i) : undefined}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                     {aggregationMethod === 'weighted' && anyPersenSet && (
                       <tr style={{ background: 'var(--color-surface-2)' }}>
-                        <td colSpan={6} style={{ textAlign: 'right', fontWeight: 700, fontSize: 'var(--text-xs)' }}>Total Bobot Agregasi:</td>
+                        <td colSpan={7} style={{ textAlign: 'right', fontWeight: 700, fontSize: 'var(--text-xs)' }}>Total Bobot Agregasi:</td>
                         <td className="num" style={{ fontWeight: 700, color: Math.abs(totalPersenForm - 100) < 0.01 ? 'var(--color-success)' : 'var(--color-danger)' }}>
                           {totalPersenForm}%
                         </td>
@@ -373,6 +612,12 @@ function DefinisiKpiTab() {
                   </tbody>
                 </table>
               </div>
+              <p style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)', margin: 'var(--space-2) 0 0' }}>
+                <b>Alur Reviewer</b> per baris (opsional): pilih peran (mis. "ASMAN unit ini") agar tiap
+                Unit/Bidang otomatis mendapat checker/approver-nya sendiri saat submit — cocok untuk KPI
+                yang di-assign ke banyak UPMK. Bisa di-override ke orang spesifik. Kosongkan untuk memakai
+                Default Alur Reviewer di bawah.
+              </p>
             </div>
 
             {/* Default Alur Reviewer (Fase C) — diwariskan ke picker submit dokumen hasil fan-out */}

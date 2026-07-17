@@ -3,7 +3,7 @@ import { KpiMasterService } from './kpi-master.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
-import { IsArray, IsString, IsOptional, IsIn, IsNumber, ValidateNested } from 'class-validator';
+import { IsArray, IsString, IsOptional, IsIn, IsNumber, ValidateNested, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class AssignmentDto {
@@ -14,6 +14,9 @@ class AssignmentDto {
   @IsOptional() @IsString() target?: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsNumber() persenAgregasi?: number;
+  // reviewerSlots (A+B) divalidasi/normalisasi mendalam di service (sanitizeReviewerSlots);
+  // di sini cukup terima objek opsional (atau null).
+  @IsOptional() @IsObject() reviewerSlots?: Record<string, unknown> | null;
 }
 
 class SaveMasterDto {

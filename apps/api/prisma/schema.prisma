@@ -480,6 +480,12 @@ model KpiAssignment {
   // total seluruh assignment dalam satu master harus = 100. Dipakai untuk hitung
   // nilai_parent = Σ(realisasi_child × persenAgregasi/100) setelah realisasi disetujui.
   persenAgregasi Float    @default(0)
+  // Default alur reviewer per-assignment (A+B). Bentuk: { checkers: Slot[], approver: Slot|null }
+  // dengan Slot = { role: 'ASMAN'|'MANAJER'|'SRMANAJER'|'GM', userId?: string }.
+  //   role saja  → resolve ke orang saat submit, di-scope (unitCode,bidang) assignment (B)
+  //   userId ada → override ke orang spesifik (A)
+  //   null       → fallback ke default master-level (KpiMaster.defaultCheckerIds/ApproverId)
+  reviewerSlots  Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
