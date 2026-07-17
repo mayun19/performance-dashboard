@@ -6,6 +6,9 @@ import {
 import { UnitTrendChart } from '../components/UnitTrendChart';
 import { SkeletonKpiCards, SkeletonChart, SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
 import type { ExecutiveData } from '../lib/types';
+import { ComponentType, CSSProperties, ReactNode, useEffect, useState } from 'react';
+import { usePeriod } from '@/context/PeriodContext';
+import { executive, kinerja, operational } from '@/lib/api';
 
 const PILLARS: Array<{
   id: "growth" | "digital" | "nze" | "enabler";

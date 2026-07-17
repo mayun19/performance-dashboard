@@ -1,12 +1,35 @@
-import { useEffect, useState, Fragment, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { approvals as approvalsApi, inputKontrak, inputRealisasi, meta as metaApi, admin } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
-import { usePeriod } from '../context/PeriodContext';
-import { useNotif } from '../context/NotifContext';
-import type { Report, KontrakManajemen, RealisasiKinerja } from '../lib/types';
-import { CheckCircle, XCircle, Clock, CalendarClock, FileText, UsersRound, FileSignature, ChevronDown, ClipboardCheck, Timer, MessageSquare, Pencil, Layers, Printer, Unlock, Lock } from 'lucide-react';
-import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
+import { useEffect, useState, Fragment, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  approvals as approvalsApi,
+  inputKontrak,
+  inputRealisasi,
+  meta as metaApi,
+  admin,
+} from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import { usePeriod } from "../context/PeriodContext";
+import { useNotif } from "../context/NotifContext";
+import type { Report, KontrakManajemen, RealisasiKinerja } from "../lib/types";
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  CalendarClock,
+  FileText,
+  UsersRound,
+  FileSignature,
+  ChevronDown,
+  ClipboardCheck,
+  Timer,
+  MessageSquare,
+  Pencil,
+  Layers,
+  Printer,
+  Unlock,
+  Lock,
+} from "lucide-react";
+import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
 
 // Badge SLA approval (Task 6): hari tersisa hingga deadline tahap berjalan.
 function SlaBadge({ days }: { days?: number | null }) {
@@ -572,20 +595,26 @@ export function ApprovalsPage() {
       await admin.togglePeriodWindow(periodId, enabled);
       await refreshPeriods();
     } catch (e) {
-      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal mengubah window pengisian');
+      alert(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Gagal mengubah window pengisian",
+      );
     } finally {
       setWindowBusy(false);
     }
   };
   const [kmRefBusy, setKmRefBusy] = useState(false);
-  const handleSetKmReference = async (kmReference: 'draft' | 'final') => {
+  const handleSetKmReference = async (kmReference: "draft" | "final") => {
     if (!periodId) return;
     setKmRefBusy(true);
     try {
       await admin.setKmReference(periodId, kmReference);
       await refreshPeriods();
     } catch (e) {
-      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal mengubah acuan KM');
+      alert(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Gagal mengubah acuan KM",
+      );
     } finally {
       setKmRefBusy(false);
     }
@@ -640,13 +669,23 @@ export function ApprovalsPage() {
   const [kmBundleKPBusy, setKmBundleKPBusy] = useState(false);
   const [kmBundleUPMKBusy, setKmBundleUPMKBusy] = useState(false);
   const [kmBundleExpanded, setKmBundleExpanded] = useState<string | null>(null);
-  const [upmkGroupExpanded, setUpmkGroupExpanded] = useState<string | null>(null);
-  const [upmkRealGroupExpanded, setUpmkRealGroupExpanded] = useState<string | null>(null);
+  const [upmkGroupExpanded, setUpmkGroupExpanded] = useState<string | null>(
+    null,
+  );
+  const [upmkRealGroupExpanded, setUpmkRealGroupExpanded] = useState<
+    string | null
+  >(null);
   // Draft dan Final adalah dua bundle KM independen — tab ini menentukan mana yang ditinjau GM.
-  const [kmBundleType, setKmBundleType] = useState<'draft' | 'final'>('draft');
+  const [kmBundleType, setKmBundleType] = useState<"draft" | "final">("draft");
   const loadKmBundle = () => {
-    inputKontrak.bundle('KP', undefined, kmBundleType).then((d) => setKmBundleKP(d as KmBundleData)).catch(() => { });
-    inputKontrak.bundle('UPMK', undefined, kmBundleType).then((d) => setKmBundleUPMK(d as KmBundleData)).catch(() => { });
+    inputKontrak
+      .bundle("KP", undefined, kmBundleType)
+      .then((d) => setKmBundleKP(d as KmBundleData))
+      .catch(() => {});
+    inputKontrak
+      .bundle("UPMK", undefined, kmBundleType)
+      .then((d) => setKmBundleUPMK(d as KmBundleData))
+      .catch(() => {});
   };
 
   const load = () => {
@@ -695,8 +734,16 @@ export function ApprovalsPage() {
       .catch(() => {});
   };
 
-  useEffect(() => { load(); loadKm(); loadReal(); loadDocs(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadBundle(); loadKmBundle(); }, [periodId, kmBundleType]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+    loadKm();
+    loadReal();
+    loadDocs();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadBundle();
+    loadKmBundle();
+  }, [periodId, kmBundleType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleKmBundleKPReview = async (action: "approve" | "reject") => {
     if (!kmBundleKPNote.trim()) {
@@ -705,9 +752,17 @@ export function ApprovalsPage() {
     }
     setKmBundleKPBusy(true);
     try {
-      await inputKontrak.reviewBundle('KP', action, kmBundleKPNote, undefined, kmBundleType);
-      setKmBundleKPNote('');
-      loadKmBundle(); loadKm(); refreshNotif();
+      await inputKontrak.reviewBundle(
+        "KP",
+        action,
+        kmBundleKPNote,
+        undefined,
+        kmBundleType,
+      );
+      setKmBundleKPNote("");
+      loadKmBundle();
+      loadKm();
+      refreshNotif();
     } catch (e) {
       alert(
         (e as { response?: { data?: { message?: string } } })?.response?.data
@@ -724,9 +779,17 @@ export function ApprovalsPage() {
     }
     setKmBundleUPMKBusy(true);
     try {
-      await inputKontrak.reviewBundle('UPMK', action, kmBundleUPMKNote, undefined, kmBundleType);
-      setKmBundleUPMKNote('');
-      loadKmBundle(); loadKm(); refreshNotif();
+      await inputKontrak.reviewBundle(
+        "UPMK",
+        action,
+        kmBundleUPMKNote,
+        undefined,
+        kmBundleType,
+      );
+      setKmBundleUPMKNote("");
+      loadKmBundle();
+      loadKm();
+      refreshNotif();
     } catch (e) {
       alert(
         (e as { response?: { data?: { message?: string } } })?.response?.data
@@ -931,18 +994,24 @@ export function ApprovalsPage() {
     let body = catRow("A. KANTOR INDUK") + kpBody;
     const getUpmkOrdR = (ind: string): number => {
       const s = ind.toLowerCase();
-      if (s.includes('kajian supervisi')) return 10;
-      if (s.includes('persentase pelaksanaan')) return 20;
-      if (s.includes('kapasitas pembangkit')) return 30;
-      if (s.includes('kapasitas transmisi')) return 40;
-      if (s.includes('kapasitas gardu induk')) return 50;
-      if (s.includes('pengendalian nac') || s.includes('non allowable')) return 61;
-      if (s.includes('pengendalian') && s.includes('penggunaan anggaran')) return 62;
-      if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 70;
-      if (s.includes('evaluasi penyelesaian') || s.includes('penyelesaian proyek supervisi')) return 80;
-      if (s.includes('maturity level')) return 91;
-      if (s.includes('kepatuhan')) return 92;
-      if (s.includes('tata kelola')) return 93;
+      if (s.includes("kajian supervisi")) return 10;
+      if (s.includes("persentase pelaksanaan")) return 20;
+      if (s.includes("kapasitas pembangkit")) return 30;
+      if (s.includes("kapasitas transmisi")) return 40;
+      if (s.includes("kapasitas gardu induk")) return 50;
+      if (s.includes("pengendalian nac") || s.includes("non allowable"))
+        return 61;
+      if (s.includes("pengendalian") && s.includes("penggunaan anggaran"))
+        return 62;
+      if (s.includes("pemenuhan pdn") || s.includes("pdn korporat")) return 70;
+      if (
+        s.includes("evaluasi penyelesaian") ||
+        s.includes("penyelesaian proyek supervisi")
+      )
+        return 80;
+      if (s.includes("maturity level")) return 91;
+      if (s.includes("kepatuhan")) return 92;
+      if (s.includes("tata kelola")) return 93;
       return 999;
     };
     upmkGroups.forEach(([unitCode, comps], i) => {
@@ -982,20 +1051,22 @@ export function ApprovalsPage() {
           uS9 = 0;
         }
         if (iG6) {
-          const si = String(it['indikator'] ?? '')
-            .replace(/^Pengendalian Anggaran\s*[-–]\s*/i, '')
-            .replace(/^[a-c]\.\s*/i, '');
-          body += `<tr><td class="num" style="font-size:7pt">${slU(uS6++)}.</td>` +
+          const si = String(it["indikator"] ?? "")
+            .replace(/^Pengendalian Anggaran\s*[-–]\s*/i, "")
+            .replace(/^[a-c]\.\s*/i, "");
+          body +=
+            `<tr><td class="num" style="font-size:7pt">${slU(uS6++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
             `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["realisasi"] ?? "—"}</td>` +
             `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
         } else if (iG9) {
-          const si = String(it['indikator'] ?? '')
-            .replace(/^Pengurang\s*[-–]\s*/i, '')
-            .replace(/^[a-c]\.\s*/i, '');
-          body += `<tr><td class="num" style="font-size:7pt">${slU(uS9++)}.</td>` +
+          const si = String(it["indikator"] ?? "")
+            .replace(/^Pengurang\s*[-–]\s*/i, "")
+            .replace(/^[a-c]\.\s*/i, "");
+          body +=
+            `<tr><td class="num" style="font-size:7pt">${slU(uS9++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
             `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
@@ -1228,18 +1299,25 @@ export function ApprovalsPage() {
       let n = 1;
       const getUpmkOrd = (ind: string): number => {
         const s = ind.toLowerCase();
-        if (s.includes('kajian supervisi')) return 10;
-        if (s.includes('persentase pelaksanaan')) return 20;
-        if (s.includes('kapasitas pembangkit')) return 30;
-        if (s.includes('kapasitas transmisi')) return 40;
-        if (s.includes('kapasitas gardu induk')) return 50;
-        if (s.includes('pengendalian nac') || s.includes('non allowable')) return 61;
-        if (s.includes('pengendalian') && s.includes('penggunaan anggaran')) return 62;
-        if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 70;
-        if (s.includes('evaluasi penyelesaian') || s.includes('penyelesaian proyek supervisi')) return 80;
-        if (s.includes('maturity level')) return 91;
-        if (s.includes('kepatuhan')) return 92;
-        if (s.includes('tata kelola')) return 93;
+        if (s.includes("kajian supervisi")) return 10;
+        if (s.includes("persentase pelaksanaan")) return 20;
+        if (s.includes("kapasitas pembangkit")) return 30;
+        if (s.includes("kapasitas transmisi")) return 40;
+        if (s.includes("kapasitas gardu induk")) return 50;
+        if (s.includes("pengendalian nac") || s.includes("non allowable"))
+          return 61;
+        if (s.includes("pengendalian") && s.includes("penggunaan anggaran"))
+          return 62;
+        if (s.includes("pemenuhan pdn") || s.includes("pdn korporat"))
+          return 70;
+        if (
+          s.includes("evaluasi penyelesaian") ||
+          s.includes("penyelesaian proyek supervisi")
+        )
+          return 80;
+        if (s.includes("maturity level")) return 91;
+        if (s.includes("kepatuhan")) return 92;
+        if (s.includes("tata kelola")) return 93;
         return 999;
       };
       const buildUpmkGroupRows = (comps: KmBundleComp[]): string => {
@@ -1272,20 +1350,22 @@ export function ApprovalsPage() {
             s9 = 0;
           }
           if (iG6) {
-            const si = String(it['indikator'] ?? '')
-              .replace(/^Pengendalian Anggaran\s*[-–]\s*/i, '')
-              .replace(/^[a-c]\.\s*/i, '');
-            rows += `<tr><td class="num" style="font-size:7pt">${sl(s6++)}.</td>` +
+            const si = String(it["indikator"] ?? "")
+              .replace(/^Pengendalian Anggaran\s*[-–]\s*/i, "")
+              .replace(/^[a-c]\.\s*/i, "");
+            rows +=
+              `<tr><td class="num" style="font-size:7pt">${sl(s6++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
               `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
               `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td>` +
               `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
           } else if (iG9) {
-            const si = String(it['indikator'] ?? '')
-              .replace(/^Pengurang\s*[-–]\s*/i, '')
-              .replace(/^[a-c]\.\s*/i, '');
-            rows += `<tr><td class="num" style="font-size:7pt">${sl(s9++)}.</td>` +
+            const si = String(it["indikator"] ?? "")
+              .replace(/^Pengurang\s*[-–]\s*/i, "")
+              .replace(/^[a-c]\.\s*/i, "");
+            rows +=
+              `<tr><td class="num" style="font-size:7pt">${sl(s9++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
               `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
@@ -2098,17 +2178,21 @@ export function ApprovalsPage() {
       {/* Bundle Konsolidasi KM Tahunan — persetujuan akhir GM */}
       {/* Tab KM Draft / KM Final — bundle & konsolidasi terpisah untuk masing-masing tipe */}
       {canReview && (
-        <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)', alignItems: 'center' }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "var(--space-2)",
+            marginBottom: "var(--space-3)",
+            alignItems: "center",
+          }}>
           <button
-            className={`btn btn-sm ${kmBundleType === 'draft' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setKmBundleType('draft')}
-          >
+            className={`btn btn-sm ${kmBundleType === "draft" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setKmBundleType("draft")}>
             Bundle KM Draft
           </button>
           <button
-            className={`btn btn-sm ${kmBundleType === 'final' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setKmBundleType('final')}
-          >
+            className={`btn btn-sm ${kmBundleType === "final" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setKmBundleType("final")}>
             Bundle KM Final
           </button>
         </div>
@@ -2120,18 +2204,35 @@ export function ApprovalsPage() {
           highlight={highlight === "kmbundle"}
           accent="var(--color-accent)"
           icon={<Layers size={14} />}
-          title={`Konsolidasi KM ${kmBundleType === 'draft' ? 'Draft' : 'Final'} Tahunan — Kantor Induk${kmBundleKP.year ? ' ' + kmBundleKP.year : ''}`}
-          right={kmBundleKP.status === 'approved' ? <span className="status-pill completed" style={{ fontWeight: 700 }}>Disahkan GM</span> : <span className="status-pill" style={{ fontWeight: 700 }}>{kmBundleKP.readyCount}/{kmBundleKP.total} siap</span>}
-        >
-          <div className="table-wrap">
-            <table className="data-table compact">
-              <thead><tr><th>Bidang</th><th>Penyusun</th><th>Status</th><th>Review</th></tr></thead>
-              <tbody>
-                {kmBundleKP.components.length === 0 && (
-                  <tr><td colSpan={4}><EmptyState title="Belum ada KM" message="Belum ada KM Kantor Induk yang masuk konsolidasi tahun ini." /></td></tr>
-                )}
-                {kmBundleKP.components.map((c) => (
-                  <Fragment key={c.id}>
+          title={`Konsolidasi KM ${kmBundleType === "draft" ? "Draft" : "Final"} Tahunan — Kantor Induk${kmBundleKP.year ? " " + kmBundleKP.year : ""}`}
+          right={
+            kmBundleKP.status === "approved" ? (
+              <span
+                className="status-pill completed"
+                style={{ fontWeight: 700 }}>
+                Disahkan GM
+              </span>
+            ) : (
+              <span className="status-pill" style={{ fontWeight: 700 }}>
+                {kmBundleKP.readyCount}/{kmBundleKP.total} siap
+              </span>
+            )
+          }>
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Bidang</th>
+                    <th>Penyusun</th>
+                    <th>Status</th>
+                    <th>Review</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kmBundleKP.components.length === 0 && (
                     <tr>
                       <td colSpan={4}>
                         <EmptyState
@@ -2320,64 +2421,115 @@ export function ApprovalsPage() {
           id="card-km-bundle-upmk"
           accent="var(--color-accent)"
           icon={<Layers size={14} />}
-          title={`Konsolidasi KM ${kmBundleType === 'draft' ? 'Draft' : 'Final'} Tahunan — UPMK${kmBundleUPMK.year ? ' ' + kmBundleUPMK.year : ''}`}
-          right={kmBundleUPMK.status === 'approved' ? <span className="status-pill completed" style={{ fontWeight: 700 }}>Disahkan GM</span> : <span className="status-pill" style={{ fontWeight: 700 }}>{kmBundleUPMK.readyCount}/{kmBundleUPMK.total} siap</span>}
-        >
-          <div className="table-wrap">
-            <table className="data-table compact">
-              <thead><tr><th>Unit</th><th>Bidang / Penyusun</th><th>Status</th><th>Review</th></tr></thead>
-              <tbody>
-                {kmBundleUPMK.components.length === 0 && (
-                  <tr><td colSpan={4}><EmptyState title="Belum ada KM UPMK" message="Belum ada KM UPMK yang masuk konsolidasi tahun ini." /></td></tr>
-                )}
-                {Object.entries(
-                  kmBundleUPMK.components
-                    .reduce<Record<string, KmBundleComp[]>>((acc, c) => { (acc[c.unitCode] ??= []).push(c); return acc; }, {})
-                ).sort(([a], [b]) => a.localeCompare(b)).map(([unitCode, items]) => {
-                  const allApproved = items.every((c) => c.status === 'approved');
-                  const allReady = items.every((c) => c.status === 'ready' || c.status === 'approved');
-                  const anySubmitted = items.some((c) => c.status === 'submitted');
-                  const readyCount = items.filter((c) => c.status === 'ready' || c.status === 'approved').length;
-                  const isOpen = upmkGroupExpanded === unitCode;
-                  const aggregateLabel = allApproved ? 'Disahkan GM' : allReady ? 'Siap' : anySubmitted ? 'Dalam review' : `${readyCount}/${items.length} siap`;
-                  const aggregateCls = allApproved ? 'completed' : allReady ? 'at-risk' : anySubmitted ? 'in-review' : '';
-                  return (
-                    <Fragment key={unitCode}>
-                      <tr style={{ background: 'var(--color-surface-2)' }}>
-                        <td colSpan={2} style={{ fontWeight: 700 }}>
-                          <button className="btn btn-ghost btn-sm" style={{ gap: 'var(--space-1)' }} onClick={() => setUpmkGroupExpanded(isOpen ? null : unitCode)}>
-                            <ChevronDown size={12} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }} />
-                            {UNIT_NAMES[unitCode] ?? unitCode}
-                          </button>
-                        </td>
-                        <td><span className={`status-pill ${aggregateCls}`} style={{ fontSize: 10 }}>{aggregateLabel}</span></td>
-                        <td style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>{items.length} bidang</td>
-                      </tr>
-                      {isOpen && sortByBidang(items).map((c) => (
-                        <Fragment key={c.id}>
-                          <tr style={{ background: 'var(--color-surface-2)' }}>
-                            <td style={{ paddingLeft: 'var(--space-5)' }} />
-                            <td style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{c.bidang} · {c.submitter}</td>
-                            <td>
-                              <span className={`status-pill ${c.status === 'approved' ? 'completed' : c.status === 'ready' ? 'at-risk' : 'in-review'}`} style={{ fontSize: 10 }}>
-                                {c.status === 'ready' ? 'Siap' : c.status === 'approved' ? 'Disahkan GM' : 'Dalam review'}
-                              </span>
-                            </td>
-                            <td>
-                              <button className="btn btn-ghost btn-sm" onClick={() => setKmBundleExpanded(kmBundleExpanded === c.id ? null : c.id)} title="Tinjau detail KPI">
-                                <ClipboardCheck size={12} /> {(c.kpiItems?.length ?? 0)} KPI
-                                <ChevronDown size={12} style={{ transform: kmBundleExpanded === c.id ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+          title={`Konsolidasi KM ${kmBundleType === "draft" ? "Draft" : "Final"} Tahunan — UPMK${kmBundleUPMK.year ? " " + kmBundleUPMK.year : ""}`}
+          right={
+            kmBundleUPMK.status === "approved" ? (
+              <span
+                className="status-pill completed"
+                style={{ fontWeight: 700 }}>
+                Disahkan GM
+              </span>
+            ) : (
+              <span className="status-pill" style={{ fontWeight: 700 }}>
+                {kmBundleUPMK.readyCount}/{kmBundleUPMK.total} siap
+              </span>
+            )
+          }>
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th>Bidang / Penyusun</th>
+                    <th>Status</th>
+                    <th>Review</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kmBundleUPMK.components.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          title="Belum ada KM UPMK"
+                          message="Belum ada KM UPMK yang masuk konsolidasi tahun ini."
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  {Object.entries(
+                    kmBundleUPMK.components.reduce<
+                      Record<string, KmBundleComp[]>
+                    >((acc, c) => {
+                      (acc[c.unitCode] ??= []).push(c);
+                      return acc;
+                    }, {}),
+                  )
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([unitCode, items]) => {
+                      const allApproved = items.every(
+                        (c) => c.status === "approved",
+                      );
+                      const allReady = items.every(
+                        (c) => c.status === "ready" || c.status === "approved",
+                      );
+                      const anySubmitted = items.some(
+                        (c) => c.status === "submitted",
+                      );
+                      const readyCount = items.filter(
+                        (c) => c.status === "ready" || c.status === "approved",
+                      ).length;
+                      const isOpen = upmkGroupExpanded === unitCode;
+                      const aggregateLabel = allApproved
+                        ? "Disahkan GM"
+                        : allReady
+                          ? "Siap"
+                          : anySubmitted
+                            ? "Dalam review"
+                            : `${readyCount}/${items.length} siap`;
+                      const aggregateCls = allApproved
+                        ? "completed"
+                        : allReady
+                          ? "at-risk"
+                          : anySubmitted
+                            ? "in-review"
+                            : "";
+                      return (
+                        <Fragment key={unitCode}>
+                          <tr style={{ background: "var(--color-surface-2)" }}>
+                            <td colSpan={2} style={{ fontWeight: 700 }}>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ gap: "var(--space-1)" }}
+                                onClick={() =>
+                                  setUpmkGroupExpanded(isOpen ? null : unitCode)
+                                }>
+                                <ChevronDown
+                                  size={12}
+                                  style={{
+                                    transform: isOpen
+                                      ? "rotate(180deg)"
+                                      : "none",
+                                    transition: "transform .2s",
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                {UNIT_NAMES[unitCode] ?? unitCode}
                               </button>
                             </td>
                             <td>
-                              <span className={`status-pill ${aggregateCls}`}>
+                              <span
+                                className={`status-pill ${aggregateCls}`}
+                                style={{ fontSize: 10 }}>
                                 {aggregateLabel}
                               </span>
                             </td>
                             <td
                               style={{
                                 color: "var(--color-text-muted)",
-                                fontSize: 14,
+                                fontSize: 11,
                               }}>
                               {items.length} bidang
                             </td>
@@ -2394,14 +2546,15 @@ export function ApprovalsPage() {
                                   />
                                   <td
                                     style={{
-                                      fontSize: 14,
+                                      fontSize: 11,
                                       color: "var(--color-text-muted)",
                                     }}>
                                     {c.bidang} · {c.submitter}
                                   </td>
                                   <td>
                                     <span
-                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
+                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                                      style={{ fontSize: 10 }}>
                                       {c.status === "ready"
                                         ? "Siap"
                                         : c.status === "approved"
@@ -2411,7 +2564,7 @@ export function ApprovalsPage() {
                                   </td>
                                   <td>
                                     <button
-                                      className="btn btn-ghost btn-md"
+                                      className="btn btn-ghost btn-sm"
                                       onClick={() =>
                                         setKmBundleExpanded(
                                           kmBundleExpanded === c.id
@@ -2447,7 +2600,7 @@ export function ApprovalsPage() {
                                         style={{
                                           padding:
                                             "var(--space-2) var(--space-3)",
-                                          fontSize: 14,
+                                          fontSize: 11,
                                           color: "var(--color-text-muted)",
                                         }}>
                                         Penanggung Jawab:{" "}
@@ -2459,7 +2612,7 @@ export function ApprovalsPage() {
                                         </strong>
                                       </div>
                                       <table
-                                        className="data-table table-expanded"
+                                        className="data-table compact"
                                         style={{ margin: 0 }}>
                                         <thead>
                                           <tr>
@@ -2468,30 +2621,22 @@ export function ApprovalsPage() {
                                             <th>Formula</th>
                                             <th>Satuan</th>
                                             <th className="num">Bobot</th>
-                                            <th className="num">
-                                              Target Sem I
-                                            </th>
-                                            <th className="num">{`Target ${new Date().getFullYear()}`}</th>
+                                            <th>Target Sem I</th>
+                                            <th>{`Target ${new Date().getFullYear()}`}</th>
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {(c.kpiItems ?? []).map((it, idx) => (
                                             <tr key={idx}>
-                                              <td className="var(--text-sm)">
-                                                {idx + 1}
-                                              </td>
+                                              <td>{idx + 1}</td>
                                               <td>{it.indikator}</td>
                                               <td>{it.formula}</td>
                                               <td>{it.satuan}</td>
                                               <td className="num">
                                                 {it.bobot}
                                               </td>
-                                              <td className="num">
-                                                {it.target}
-                                              </td>
-                                              <td className="num var(--text-sm)">
-                                                {it.target2}
-                                              </td>
+                                              <td>{it.target}</td>
+                                              <td>{it.target2}</td>
                                             </tr>
                                           ))}
                                         </tbody>
@@ -2516,7 +2661,7 @@ export function ApprovalsPage() {
                 padding: "var(--space-1) var(--space-3)",
               }}>
               <button
-                className="btn btn-ghost btn-md"
+                className="btn btn-ghost btn-sm"
                 onClick={() => handlePrintKmBundle("UPMK")}
                 title="Cetak / Print Preview KM UPMK">
                 <Printer size={12} /> Cetak Preview
@@ -2529,15 +2674,15 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-4)",
                 padding: "0 var(--space-7) var(--space-7)",
+                gap: "var(--space-2)",
               }}>
               {kmBundleUPMK.components.some(
                 (c) => c.status === "submitted",
               ) && (
                 <div
                   style={{
-                    fontSize: "var(--text-sm)",
+                    fontSize: "var(--text-xs)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua KM UPMK "siap" — GM dapat mengesahkan setelah
@@ -2546,21 +2691,21 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM UPMK (wajib)"
                 value={kmBundleUPMKNote}
                 onChange={(e) => setKmBundleUPMKNote(e.target.value)}
               />
               <div style={{ display: "flex", gap: "var(--space-2)" }}>
                 <button
-                  className="btn btn-md"
+                  className="btn btn-sm"
                   style={{ background: "var(--color-success)", color: "#fff" }}
                   disabled={kmBundleUPMKBusy || !kmBundleUPMK.canApprove}
                   onClick={() => handleKmBundleUPMKReview("approve")}>
                   <CheckCircle size={12} /> Sahkan KM UPMK (Final)
                 </button>
                 <button
-                  className="btn btn-md"
+                  className="btn btn-sm"
                   style={{ background: "var(--color-danger)", color: "#fff" }}
                   disabled={kmBundleUPMKBusy || kmBundleUPMK.total === 0}
                   onClick={() => handleKmBundleUPMKReview("reject")}>
@@ -2573,7 +2718,7 @@ export function ApprovalsPage() {
             <div
               className="card-body"
               style={{
-                fontSize: "var(--text-sm)",
+                fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
                 padding: "0 var(--space-7) var(--space-4)",
               }}>
@@ -3003,32 +3148,82 @@ export function ApprovalsPage() {
           title={`Window Pengisian Realisasi — ${selectedPeriodForWindow.label}`}
           defaultOpen={!selectedPeriodForWindow.fillWindow.isOpen}
           right={
-            <span className={`status-pill ${selectedPeriodForWindow.fillWindow.isOpen ? 'at-risk' : 'delayed'}`} style={{ fontWeight: 700 }}>
+            <span
+              className={`status-pill ${selectedPeriodForWindow.fillWindow.isOpen ? "at-risk" : "delayed"}`}
+              style={{ fontWeight: 700 }}>
               {selectedPeriodForWindow.fillWindow.isOpen
-                ? (selectedPeriodForWindow.fillWindow.overrideActive ? 'Dibuka manual' : 'Terbuka')
-                : 'Tertutup'}
+                ? selectedPeriodForWindow.fillWindow.overrideActive
+                  ? "Dibuka manual"
+                  : "Terbuka"
+                : "Tertutup"}
             </span>
-          }
-        >
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-              Jadwal normal: <b>{new Date(selectedPeriodForWindow.fillWindow.start).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</b> s.d. <b>{new Date(selectedPeriodForWindow.fillWindow.end).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</b>.
-              Di luar jadwal ini, Staff/ASMAN tidak dapat mengirim realisasi kecuali dibuka manual di sini.
+          }>
+          <div
+            className="card-body"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-3)",
+            }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "var(--text-sm)",
+                color: "var(--color-text-secondary)",
+              }}>
+              Jadwal normal:{" "}
+              <b>
+                {new Date(
+                  selectedPeriodForWindow.fillWindow.start,
+                ).toLocaleDateString("id-ID", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </b>{" "}
+              s.d.{" "}
+              <b>
+                {new Date(
+                  selectedPeriodForWindow.fillWindow.end,
+                ).toLocaleDateString("id-ID", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </b>
+              . Di luar jadwal ini, Staff/ASMAN tidak dapat mengirim realisasi
+              kecuali dibuka manual di sini.
             </p>
             {selectedPeriodForWindow.fillWindow.overrideActive && (
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)' }}>
-                Dibuka manual oleh <b>{selectedPeriodForWindow.overrideBy ?? '—'}</b>
-                {selectedPeriodForWindow.overrideAt ? ` pada ${new Date(selectedPeriodForWindow.overrideAt).toLocaleString('id-ID')}` : ''}.
+              <div
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--color-warning)",
+                }}>
+                Dibuka manual oleh{" "}
+                <b>{selectedPeriodForWindow.overrideBy ?? "—"}</b>
+                {selectedPeriodForWindow.overrideAt
+                  ? ` pada ${new Date(selectedPeriodForWindow.overrideAt).toLocaleString("id-ID")}`
+                  : ""}
+                .
               </div>
             )}
             <div>
               {selectedPeriodForWindow.windowOverride ? (
-                <button className="btn btn-secondary" disabled={windowBusy} onClick={() => handleToggleWindow(false)}>
-                  <Lock size={14} /> {windowBusy ? 'Memproses…' : 'Kembalikan ke Jadwal Normal'}
+                <button
+                  className="btn btn-secondary"
+                  disabled={windowBusy}
+                  onClick={() => handleToggleWindow(false)}>
+                  <Lock size={14} />{" "}
+                  {windowBusy ? "Memproses…" : "Kembalikan ke Jadwal Normal"}
                 </button>
               ) : (
-                <button className="btn btn-primary" disabled={windowBusy} onClick={() => handleToggleWindow(true)}>
-                  <Unlock size={14} /> {windowBusy ? 'Memproses…' : 'Buka Window Sekarang'}
+                <button
+                  className="btn btn-primary"
+                  disabled={windowBusy}
+                  onClick={() => handleToggleWindow(true)}>
+                  <Unlock size={14} />{" "}
+                  {windowBusy ? "Memproses…" : "Buka Window Sekarang"}
                 </button>
               )}
             </div>
@@ -3046,30 +3241,46 @@ export function ApprovalsPage() {
           defaultOpen={false}
           right={
             <span className="status-pill at-risk" style={{ fontWeight: 700 }}>
-              {selectedPeriodForWindow.kmReference === 'final' ? 'KM Final' : 'KM Draft'}
+              {selectedPeriodForWindow.kmReference === "final"
+                ? "KM Final"
+                : "KM Draft"}
             </span>
-          }
-        >
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-              Menentukan KM mana yang jadi acuan indikator saat unit mengisi realisasi periode ini.
-              Default: Jan-Jun memakai <b>KM Draft</b>, Jul-Des memakai <b>KM Final</b> (setelah disahkan Direksi).
-              Jika KM Final belum disahkan/masih berubah, kembalikan acuan ke Draft di sini.
+          }>
+          <div
+            className="card-body"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-3)",
+            }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "var(--text-sm)",
+                color: "var(--color-text-secondary)",
+              }}>
+              Menentukan KM mana yang jadi acuan indikator saat unit mengisi
+              realisasi periode ini. Default: Jan-Jun memakai <b>KM Draft</b>,
+              Jul-Des memakai <b>KM Final</b> (setelah disahkan Direksi). Jika
+              KM Final belum disahkan/masih berubah, kembalikan acuan ke Draft
+              di sini.
             </p>
-            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
               <button
-                className={`btn ${selectedPeriodForWindow.kmReference !== 'final' ? 'btn-primary' : 'btn-secondary'}`}
-                disabled={kmRefBusy || selectedPeriodForWindow.kmReference !== 'final'}
-                onClick={() => handleSetKmReference('draft')}
-              >
-                {kmRefBusy ? 'Memproses…' : 'Pakai KM Draft'}
+                className={`btn ${selectedPeriodForWindow.kmReference !== "final" ? "btn-primary" : "btn-secondary"}`}
+                disabled={
+                  kmRefBusy || selectedPeriodForWindow.kmReference !== "final"
+                }
+                onClick={() => handleSetKmReference("draft")}>
+                {kmRefBusy ? "Memproses…" : "Pakai KM Draft"}
               </button>
               <button
-                className={`btn ${selectedPeriodForWindow.kmReference === 'final' ? 'btn-primary' : 'btn-secondary'}`}
-                disabled={kmRefBusy || selectedPeriodForWindow.kmReference === 'final'}
-                onClick={() => handleSetKmReference('final')}
-              >
-                {kmRefBusy ? 'Memproses…' : 'Pakai KM Final'}
+                className={`btn ${selectedPeriodForWindow.kmReference === "final" ? "btn-primary" : "btn-secondary"}`}
+                disabled={
+                  kmRefBusy || selectedPeriodForWindow.kmReference === "final"
+                }
+                onClick={() => handleSetKmReference("final")}>
+                {kmRefBusy ? "Memproses…" : "Pakai KM Final"}
               </button>
             </div>
           </div>
@@ -3082,7 +3293,7 @@ export function ApprovalsPage() {
           id="card-real-bundle"
           highlight={highlight === "realbundle"}
           accent="var(--color-brand, #125D72)"
-          icon={<Layers size={16} />}
+          icon={<Layers size={14} />}
           title={`Konsolidasi Realisasi Periode${bundle.period?.label ? " — " + bundle.period.label : ""}`}
           right={
             <span className="status-pill" style={{ fontWeight: 700 }}>
@@ -3101,28 +3312,48 @@ export function ApprovalsPage() {
                     <th>Penyusun</th>
                     <th>Status</th>
                   </tr>
-                ))}
-                {/* UPMK — satu baris grup per unit, expand ke sub-rows per bidang (urut BIDANG_ORDER) */}
-                {Object.entries(
-                  bundle.components
-                    .filter((c) => c.unitCode !== 'KP')
-                    .reduce<Record<string, typeof bundle.components>>((acc, c) => { (acc[c.unitCode] ??= []).push(c); return acc; }, {})
-                ).sort(([a], [b]) => a.localeCompare(b)).map(([unitCode, items]) => {
-                  const allApproved  = items.every((c) => c.status === 'approved');
-                  const allReady     = items.every((c) => c.status === 'ready' || c.status === 'approved');
-                  const anySubmitted = items.some((c) => c.status === 'submitted');
-                  const readyCount   = items.filter((c) => c.status === 'ready' || c.status === 'approved').length;
-                  const isOpen       = upmkRealGroupExpanded === unitCode;
-                  const aggrLabel    = allApproved ? 'Disetujui GM' : allReady ? 'Siap' : anySubmitted ? 'Dalam review' : `${readyCount}/${items.length} siap`;
-                  const aggrCls      = allApproved ? 'completed' : allReady ? 'at-risk' : anySubmitted ? 'in-review' : '';
-                  return (
-                    <Fragment key={unitCode}>
-                      <tr style={{ background: 'var(--color-surface-2)' }}>
-                        <td colSpan={2} style={{ fontWeight: 700 }}>
-                          <button className="btn btn-ghost btn-sm" style={{ gap: 'var(--space-1)' }} onClick={() => setUpmkRealGroupExpanded(isOpen ? null : unitCode)}>
-                            <ChevronDown size={12} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }} />
-                            {UNIT_NAMES[unitCode] ?? unitCode}
-                          </button>
+                </thead>
+                <tbody>
+                  {bundle.components.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          title="Belum ada realisasi"
+                          message="Belum ada realisasi yang masuk konsolidasi periode ini."
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  {/* KP — flat per bidang */}
+                  {bundle.components
+                    .filter((c) => c.unitCode === "KP")
+                    .map((c) => (
+                      <tr key={c.id}>
+                        <td style={{ fontWeight: 600 }}>
+                          {UNIT_NAMES[c.unitCode] ?? c.unitCode}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: 11,
+                            color: "var(--color-text-muted)",
+                          }}>
+                          {c.bidang}
+                        </td>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {c.submitter}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                            style={{ fontSize: 10 }}>
+                            {c.status === "ready"
+                              ? "Siap (lolos SM RPC)"
+                              : c.status === "approved"
+                                ? "Disetujui GM"
+                                : c.status === "submitted"
+                                  ? "Dalam proses review"
+                                  : c.status}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -3169,10 +3400,10 @@ export function ApprovalsPage() {
                             : "";
                       return (
                         <Fragment key={unitCode}>
-                          <tr style={{ background: "var(--color-surface-1)" }}>
+                          <tr style={{ background: "var(--color-surface-2)" }}>
                             <td colSpan={2} style={{ fontWeight: 700 }}>
                               <button
-                                className="btn btn-ghost btn-md"
+                                className="btn btn-ghost btn-sm"
                                 style={{ gap: "var(--space-1)" }}
                                 onClick={() =>
                                   setUpmkRealGroupExpanded(
@@ -3257,7 +3488,7 @@ export function ApprovalsPage() {
                 padding: "var(--space-1) var(--space-3)",
               }}>
               <button
-                className="btn btn-ghost btn-md"
+                className="btn btn-ghost btn-sm"
                 onClick={handlePrintRealBundle}
                 title="Cetak / Print Preview Konsolidasi Realisasi">
                 <Printer size={12} /> Cetak Preview
@@ -3270,13 +3501,13 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-4)",
+                gap: "var(--space-2)",
                 padding: "0 var(--space-7) var(--space-7)",
               }}>
               {!bundle.canApprove && bundle.total > 0 && (
                 <div
                   style={{
-                    fontSize: "var(--text-sm)",
+                    fontSize: "var(--text-xs)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua komponen "siap" — GM dapat menyetujui setelah
@@ -3285,21 +3516,21 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
                 placeholder="Catatan persetujuan/penolakan bundle (wajib)"
                 value={bundleNote}
                 onChange={(e) => setBundleNote(e.target.value)}
               />
               <div style={{ display: "flex", gap: "var(--space-2)" }}>
                 <button
-                  className="btn btn-md"
+                  className="btn btn-sm"
                   style={{ background: "var(--color-success)", color: "#fff" }}
                   disabled={bundleBusy || !bundle.canApprove}
                   onClick={() => handleBundleReview("approve")}>
                   <CheckCircle size={12} /> Setujui Seluruh Bundle (Final)
                 </button>
                 <button
-                  className="btn btn-md"
+                  className="btn btn-sm"
                   style={{ background: "var(--color-danger)", color: "#fff" }}
                   disabled={bundleBusy || bundle.total === 0}
                   onClick={() => handleBundleReview("reject")}>
@@ -3312,8 +3543,9 @@ export function ApprovalsPage() {
             <div
               className="card-body"
               style={{
-                fontSize: "var(--text-sm)",
+                fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
+                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle periode ini telah disetujui penuh oleh General Manager.
             </div>

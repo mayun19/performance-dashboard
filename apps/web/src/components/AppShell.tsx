@@ -19,13 +19,24 @@ type NavItem = {
   end?: boolean; hideForUpmk?: boolean; devOnly?: boolean;
 };
 
-const NAV_ITEMS: Array<{ section: string; items: NavItem[] }> = [
+const NAV_ITEMS: Array<{ section: string; items: NavItem[], icon: LucideIcon }> = [
   {
-    section: 'Aksi Saya', items: [
-      { to: '/approvals',      label: 'Persetujuan',             icon: CheckSquare },
-      { to: '/kpi-master',     label: 'Manajemen KPI',           icon: Layers,      hideForUpmk: true },
-      { to: '/input-realisasi',label: 'Input Realisasi Bulanan', icon: ClipboardEdit },
-    ]
+    section: "Dashboard Kinerja",
+    icon: LayoutDashboard,
+    items: [
+      { to: "/approvals", label: "Persetujuan", icon: CheckSquare },
+      {
+        to: "/kpi-master",
+        label: "Manajemen KPI",
+        icon: Layers,
+        hideForUpmk: true,
+      },
+      {
+        to: "/input-realisasi",
+        label: "Input Realisasi Bulanan",
+        icon: ClipboardEdit,
+      },
+    ],
   },
   {
     section: "Pengaturan",
