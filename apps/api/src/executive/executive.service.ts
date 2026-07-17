@@ -167,6 +167,42 @@ export class ExecutiveService {
     };
     const alerts = [newAlert, ...((base.alerts ?? []) as Record<string, unknown>[])].slice(0, 5);
 
+    // Akurasi Self-Assessment UPMK: headline ringkas dari selisih skor self-assessment
+    // (dikunci saat submit) vs skor hasil evaluasi berjenjang (values setelah dikoreksi RPC/KI).
+    const scoreFromSource = (records: typeof allRecords, pick: (r: typeof records[0]) => unknown): number => {
+      let total = 0;
+      for (const r of records) {
+        const src = (pick(r) ?? {}) as Record<string, Record<string, unknown>>;
+        for (const it of Object.values(src)) {
+          const bobot = num(it['bobot']);
+          const target = num(it['target2'] ?? it['target']);
+          const actual = num(it['realisasi']);
+          const satuan = String(it['satuan'] ?? '').toLowerCase();
+          if (bobot > 0 && target > 0 && actual > 0) {
+            const inv = satuan === 'hari kerja';
+            const capaian = inv ? Math.min((target / actual) * 100, 110) : Math.min((actual / target) * 100, 110);
+            total += (capaian / 100) * bobot;
+          }
+        }
+      }
+      return r2(total);
+    };
+    const byUnitUpmk: Record<string, typeof allRecords> = {};
+    for (const r of allRecords) {
+      if (r.unitCode === 'KP' || r.selfAssessment == null) continue;
+      (byUnitUpmk[r.unitCode] ??= []).push(r);
+    }
+    const unitGaps = Object.values(byUnitUpmk).map((records) => {
+      const selfScore = scoreFromSource(records, (r) => r.selfAssessment);
+      const evaluatedScore = scoreFromSource(records, (r) => r.values);
+      return Math.abs(r2(evaluatedScore - selfScore));
+    });
+    const avgGap = unitGaps.length ? r2(unitGaps.reduce((s, g) => s + g, 0) / unitGaps.length) : 0;
+    const selfAssessmentAccuracy = {
+      avgGap, unitsWithData: unitGaps.length,
+      status: unitGaps.length === 0 ? 'no-data' : avgGap <= 2 ? 'akurat' : avgGap <= 5 ? 'perlu-perhatian' : 'signifikan',
+    };
+
     const newData: Record<string, unknown> = {
       ...base,
       healthScore: {
@@ -178,7 +214,7 @@ export class ExecutiveService {
       efficiency: mergeField('efficiency', pctItem),
       csat:       mergeField('csat', iqcItem),
       safety:     mergeField('safety', kepatuhanItem),
-      capacityAddition, kpis: kpisUpdated, alerts,
+      capacityAddition, kpis: kpisUpdated, alerts, selfAssessmentAccuracy,
     };
 
     await this.prisma.executiveSnapshot.upsert({

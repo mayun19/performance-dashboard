@@ -13,18 +13,79 @@ export const KKU_BIDANG = 'Keuangan, Komunikasi & Umum';
 export const K3L_BIDANG = 'K3L';
 export const MRO_BIDANG = 'MRO';
 
-// Langkah alur. Langkah ASMAN/Manajer/SM dicocokkan ke JABATAN spesifik (roleVariant.code);
-// langkah Staff (PIC) dicocokkan ke (role + bidang/unit).
+// Langkah alur. Tiga mode pencocokan (diperiksa berurutan di stepMatches):
+//   1. userId  → langkah ditujukan ke ORANG spesifik (alur reviewer pilihan submitter).
+//   2. variant → langkah dicocokkan ke JABATAN spesifik (roleVariant.code).
+//   3. role (+bidang/unit) → langkah dicocokkan ke peran generik (mesin template lama).
 export interface Step {
   role: Role;
   variant?: string; // kode jabatan (roleVariant) — pembeda sub-posisi dalam satu bidang
   bidang?: string;
   unit?: string;
+  userId?: string;   // pengguna spesifik (alur checker/approver terpilih)
+  userName?: string; // nama untuk tampilan/riwayat
   label: string;
+  kind?: 'submitter' | 'checker' | 'approver'; // peran langkah pada alur terpilih
 }
 
 // User minimal untuk pencocokan langkah (req.user menyertakan roleVariant).
-export type WorkflowUser = { role: Role; bidang?: string | null; unit?: string | null; roleVariant?: { code: string } | null };
+export type WorkflowUser = { id?: string; role: Role; bidang?: string | null; unit?: string | null; roleVariant?: { code: string } | null };
+
+// ===== Alur reviewer terpilih (Fase 2) =====
+// Submitter memilih daftar Checker (berurutan) + satu Approver. Kandidat dibatasi role.
+export const CHECKER_ROLES: Role[] = [Role.ASMAN, Role.MANAJER];
+export const APPROVER_ROLES: Role[] = [Role.SRMANAJER, Role.GM];
+
+const ROLE_LABEL: Record<string, string> = {
+  STAFF: 'Staff', ASMAN: 'ASMAN', MANAJER: 'Manajer', SRMANAJER: 'Senior Manajer', GM: 'General Manager',
+};
+
+// Peserta alur minimal untuk membangun langkah.
+export type ReviewerParticipant = { id: string; name: string; role: Role; unit?: string | null; bidang?: string | null };
+
+function participantLabel(p: ReviewerParticipant): string {
+  const roleTxt = ROLE_LABEL[p.role] ?? p.role;
+  const unitTxt = p.unit && p.unit !== 'KP' ? ` ${uname(p.unit)}` : '';
+  return `${p.name} — ${roleTxt}${unitTxt}`;
+}
+
+// Bangun template langkah dari pilihan submitter:
+//   [0] submitter (penyusun) → [1..n] checker (berurutan) → [n+1] approver.
+export function buildReviewerSteps(
+  submitter: ReviewerParticipant,
+  checkers: ReviewerParticipant[],
+  approver: ReviewerParticipant,
+): Step[] {
+  const steps: Step[] = [
+    { role: submitter.role, userId: submitter.id, userName: submitter.name, kind: 'submitter', label: `Penyusun — ${submitter.name}` },
+  ];
+  checkers.forEach((c, i) => {
+    steps.push({ role: c.role, userId: c.id, userName: c.name, kind: 'checker', label: `Checker ${i + 1}: ${participantLabel(c)}` });
+  });
+  steps.push({ role: approver.role, userId: approver.id, userName: approver.name, kind: 'approver', label: `Approver: ${participantLabel(approver)}` });
+  return steps;
+}
+
+// Validasi pilihan reviewer terhadap aturan role & keunikan. Melempar pesan bila tidak valid.
+export function validateReviewerSelection(
+  submitterId: string,
+  checkers: ReviewerParticipant[],
+  approver: ReviewerParticipant | undefined,
+): string | null {
+  if (!checkers || checkers.length === 0) return 'Pilih minimal satu Checker';
+  if (!approver) return 'Pilih satu Approver';
+  const ids = new Set<string>();
+  for (const c of checkers) {
+    if (!CHECKER_ROLES.includes(c.role)) return `Checker "${c.name}" harus ASMAN atau Manajer`;
+    if (c.id === submitterId) return 'Checker tidak boleh sama dengan penyusun';
+    if (ids.has(c.id)) return `Checker "${c.name}" terpilih ganda`;
+    ids.add(c.id);
+  }
+  if (!APPROVER_ROLES.includes(approver.role)) return 'Approver harus Senior Manajer atau General Manager';
+  if (approver.id === submitterId) return 'Approver tidak boleh sama dengan penyusun';
+  if (ids.has(approver.id)) return 'Approver tidak boleh merangkap sebagai Checker';
+  return null;
+}
 
 // Rantai sub-jabatan dalam-bidang (sesudah Staff PIC, sebelum konsolidasi RPC).
 const KI_CHAIN: Record<string, Step[]> = {
@@ -107,6 +168,7 @@ export function buildSteps(unitCode: string, bidang: string, mode: 'realisasi' |
 
 export function stepMatches(step: Step | undefined, user: WorkflowUser): boolean {
   if (!step) return false;
+  if (step.userId) return user.id === step.userId;             // pencocokan by orang spesifik
   if (step.variant) return user.roleVariant?.code === step.variant; // pencocokan by jabatan
   if (user.role !== step.role) return false;
   if (step.bidang && user.bidang !== step.bidang) return false;
@@ -116,6 +178,7 @@ export function stepMatches(step: Step | undefined, user: WorkflowUser): boolean
 
 // Klausa Prisma untuk mencari penerima notifikasi langkah.
 export function stepRecipientWhere(step: Step): Prisma.UserWhereInput {
+  if (step.userId) return { id: step.userId, isActive: true };
   if (step.variant) return { isActive: true, roleVariant: { code: step.variant } };
   return {
     role: step.role, isActive: true,

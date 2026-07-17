@@ -5,7 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Role, User } from '@prisma/client';
 import { ExecutiveService } from '../executive/executive.service';
 import { OperationalService } from '../operational/operational.service';
-import { Step, buildSteps, stepMatches, stepRecipientWhere, slaRemainingDays, uname } from '../common/workflow-steps';
+import {
+  Step, stepMatches, stepRecipientWhere, slaRemainingDays, uname,
+  buildReviewerSteps, validateReviewerSelection, CHECKER_ROLES, APPROVER_ROLES,
+  type ReviewerParticipant,
+} from '../common/workflow-steps';
+import { getFillWindowStatus } from '../common/period-window';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -42,20 +47,63 @@ export class InputRealisasiService {
     });
   }
 
-  // PIC/Staff menyusun & submit realisasi (per unit, per bidang) → mulai jenjang alur.
-  async submit(user: User, unitCode: string, bidang: string, values: Record<string, unknown>, periodId?: string) {
-    if (!bidang) throw new BadRequestException('Bidang wajib diisi');
+  // Daftar kandidat reviewer (Checker: ASMAN/Manajer, Approver: SRManajer/GM).
+  async getReviewerCandidates() {
+    const users = await this.prisma.user.findMany({
+      where: { isActive: true, role: { in: [...CHECKER_ROLES, ...APPROVER_ROLES] } },
+      orderBy: [{ role: 'asc' }, { unit: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, role: true, unit: true, bidang: true },
+    });
+    return {
+      checkers: users.filter((u) => CHECKER_ROLES.includes(u.role)),
+      approvers: users.filter((u) => APPROVER_ROLES.includes(u.role)),
+    };
+  }
 
-    const steps = buildSteps(unitCode, bidang);
-    // Penyusun harus cocok dengan langkah-0 (PIC/Staff unit/bidang ybs).
-    if (!stepMatches(steps[0], user)) {
-      throw new ForbiddenException('Anda bukan PIC/Staff Kinerja untuk unit/bidang ini');
-    }
+  // PIC/Staff menyusun & submit realisasi (per unit, per bidang) → mulai jenjang alur reviewer terpilih.
+  async submit(
+    user: User,
+    unitCode: string,
+    bidang: string,
+    values: Record<string, unknown>,
+    checkerIds: string[],
+    approverId: string,
+    periodId?: string,
+  ) {
+    if (!bidang) throw new BadRequestException('Bidang wajib diisi');
+    if (!Array.isArray(checkerIds) || checkerIds.length === 0) throw new BadRequestException('Pilih minimal satu Checker');
+    if (!approverId) throw new BadRequestException('Pilih satu Approver');
+
+    // Ambil kandidat & pertahankan urutan checker sesuai pilihan submitter.
+    const picked = await this.prisma.user.findMany({
+      where: { id: { in: [...checkerIds, approverId] }, isActive: true },
+      select: { id: true, name: true, role: true, unit: true, bidang: true },
+    });
+    const checkers = checkerIds.map((id) => picked.find((u) => u.id === id)).filter(Boolean) as ReviewerParticipant[];
+    const approver = picked.find((u) => u.id === approverId) as ReviewerParticipant | undefined;
+    if (checkers.length !== checkerIds.length) throw new BadRequestException('Sebagian Checker tidak ditemukan atau nonaktif');
+
+    const submitter: ReviewerParticipant = { id: user.id, name: user.name, role: user.role, unit: user.unit, bidang: user.bidang };
+    const invalid = validateReviewerSelection(user.id, checkers, approver);
+    if (invalid) throw new BadRequestException(invalid);
+
+    const steps = buildReviewerSteps(submitter, checkers, approver!);
 
     const period = periodId
       ? await this.prisma.period.findUnique({ where: { id: periodId } })
       : await this.prisma.period.findFirst({ where: { isActive: true } });
     if (!period) throw new BadRequestException(periodId ? 'Periode tidak ditemukan' : 'Tidak ada periode aktif');
+
+    // Window pengisian: tanggal 25 bulan periode s.d. tanggal 5 bulan berikutnya
+    // (atau dibuka manual via Period.windowOverride oleh GM/Admin).
+    const win = getFillWindowStatus(period.yearMonth, period.windowOverride);
+    if (!win.isOpen) {
+      const fmt = (d: Date) => d.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+      throw new ForbiddenException(
+        `Pengisian realisasi periode ${period.label} hanya dibuka ${fmt(win.start)} s.d. ${fmt(win.end)}. ` +
+        (win.daysUntilOpen > 0 ? `Window akan dibuka dalam ${win.daysUntilOpen} hari.` : 'Window pengisian telah berakhir.'),
+      );
+    }
 
     const existing = await this.prisma.inputRealisasi.findUnique({
       where: { periodId_unitCode_bidang: { periodId: period.id, unitCode, bidang } },
@@ -63,16 +111,21 @@ export class InputRealisasiService {
     const baseHistory = existing && Array.isArray(existing.history) ? (existing.history as object[]) : [];
     const history = [...baseHistory, { stepIndex: 0, actor: user.name, role: user.role, action: 'submitted', label: steps[0].label, ts: new Date().toISOString() }];
 
+    // selfAssessment: snapshot nilai persis seperti diinput submitter — dikunci di sini,
+    // TIDAK PERNAH diubah lagi oleh reviewer (mereka hanya mengoreksi `values`/working copy).
+    // Diperbarui hanya saat submit BARU/re-submit (mis. setelah ditolak ke konseptor).
+    const selfAssessment = values;
     const result = await this.prisma.inputRealisasi.upsert({
       where: { periodId_unitCode_bidang: { periodId: period.id, unitCode, bidang } },
       update: {
-        values: values as object, submitter: user.name, submitterId: user.id,
+        values: values as object, selfAssessment: selfAssessment as object, submitter: user.name, submitterId: user.id,
         status: 'submitted', steps: steps as object, currentStepIndex: 1, currentStage: 1,
         history, reviewer: null, reviewNote: null, reviewedAt: null, submittedAt: new Date(),
       },
       create: {
         periodId: period.id, unitCode, bidang, submitter: user.name, submitterId: user.id,
-        values: values as object, status: 'submitted', steps: steps as object, currentStepIndex: 1, currentStage: 1, history,
+        values: values as object, selfAssessment: selfAssessment as object,
+        status: 'submitted', steps: steps as object, currentStepIndex: 1, currentStage: 1, history,
       },
     });
 

@@ -47,11 +47,14 @@ export class OperationalService {
       UPMK3: 'UPMK III', UPMK4: 'UPMK IV', UPMK5: 'UPMK V',
     };
 
-    // KP records only for kpis/kepatuhan
-    const kpRecords = await this.prisma.inputRealisasi.findMany({
-      where: { periodId, status: 'approved', unitCode: 'KP' },
+    // Semua record approved periode ini — dipakai bersama oleh bagian KP (kpis/kepatuhan)
+    // dan bagian lintas-unit (buComparison/selfAssessmentGap) agar keduanya independen:
+    // absennya submission KP tidak boleh menghalangi perhitungan gap self-assessment UPMK.
+    const allRecords = await this.prisma.inputRealisasi.findMany({
+      where: { periodId, status: 'approved' },
     });
-    if (kpRecords.length === 0) return;
+    if (allRecords.length === 0) return;
+    const kpRecords = allRecords.filter(r => r.unitCode === 'KP');
 
     const allItems = kpRecords.flatMap(r =>
       Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>)
@@ -73,10 +76,12 @@ export class OperationalService {
       base = (fallback?.data ?? {}) as Record<string, unknown>;
     }
     const existingKpis = (base.kpis ?? []) as Record<string, unknown>[];
+    const hasKpData = kpRecords.length > 0;
 
-    // Build kpis from positive-bobot items
+    // Build kpis from positive-bobot items (hanya bila ADA submission KP periode ini —
+    // jika tidak, pertahankan data KP terakhir dari base agar tidak tertimpa kosong).
     let kpiNo = 1;
-    const kpis = regularItems.map(({ it, bidang }) => {
+    const kpisBuilt = regularItems.map(({ it, bidang }) => {
       const name = String(it['indikator'] ?? '');
       const nameLow = name.toLowerCase();
       const existingKpi = existingKpis.find(k => {
@@ -121,7 +126,7 @@ export class OperationalService {
     // Build kepatuhan from negative-bobot items
     const existingKepatuhan = (base.kepatuhan ?? []) as Record<string, unknown>[];
     const SUB = 'abcdefghij';
-    const kepatuhan = pengurangItems.map(({ it }, idx) => {
+    const kepatuhanBuilt = pengurangItems.map(({ it }, idx) => {
       const fullName = String(it['indikator'] ?? '');
       const name = fullName.replace(/^Pengurang\s*[-–:]\s*/i, '');
       const applied = num(it['realisasi']);
@@ -135,20 +140,20 @@ export class OperationalService {
       };
     });
 
+    const kpis = (hasKpData ? kpisBuilt : existingKpis) as Record<string, unknown>[];
+    const kepatuhan = (hasKpData ? kepatuhanBuilt : existingKepatuhan) as Record<string, unknown>[];
+
     // Summary totals
     const kpiGroup = kpis.filter(k => k.category === 'KPI');
     const piGroup  = kpis.filter(k => k.category === 'PI');
-    const kpiBobot = r2(kpiGroup.reduce((s, k) => s + k.bobot, 0));
-    const kpiNilai = r2(kpiGroup.reduce((s, k) => s + k.nilai, 0));
-    const piBobot  = r2(piGroup.reduce((s, k) => s + k.bobot, 0));
-    const piNilai  = r2(piGroup.reduce((s, k) => s + k.nilai, 0));
-    const kepatuhanPenalty = r2(kepatuhan.reduce((s, k) => s + k.applied, 0));
+    const kpiBobot = r2(kpiGroup.reduce((s, k) => s + Number(k.bobot ?? 0), 0));
+    const kpiNilai = r2(kpiGroup.reduce((s, k) => s + Number(k.nilai ?? 0), 0));
+    const piBobot  = r2(piGroup.reduce((s, k) => s + Number(k.bobot ?? 0), 0));
+    const piNilai  = r2(piGroup.reduce((s, k) => s + Number(k.nilai ?? 0), 0));
+    const kepatuhanPenalty = r2(kepatuhan.reduce((s, k) => s + Number(k.applied ?? 0), 0));
     const totalNilai = r2(kpiNilai + piNilai + kepatuhanPenalty);
 
-    // buComparison from all approved units
-    const allRecords = await this.prisma.inputRealisasi.findMany({
-      where: { periodId, status: 'approved' },
-    });
+    // buComparison from all approved units (allRecords sudah diambil di awal fungsi)
     const byUnit: Record<string, typeof allRecords> = {};
     for (const r of allRecords) (byUnit[r.unitCode] ??= []).push(r);
     const unitScoreMap: Record<string, number> = {};
@@ -177,17 +182,61 @@ export class OperationalService {
         .sort((a, b) => b.score - a.score),
     };
 
+    // Self-Assessment (UPMK) vs Evaluasi (hasil koreksi berjenjang s.d. SM RPC).
+    // `selfAssessment` = snapshot dikunci saat submit; `values` = salinan kerja yang
+    // dapat dikoreksi reviewer sepanjang alur → representasi hasil evaluasi akhir.
+    const scoreFromSource = (records: typeof allRecords, pick: (r: typeof records[0]) => unknown): number => {
+      let total = 0;
+      for (const r of records) {
+        const src = (pick(r) ?? {}) as Record<string, Record<string, unknown>>;
+        for (const it of Object.values(src)) {
+          const bobot = num(it['bobot']);
+          const target = num(it['target2'] ?? it['target']);
+          const actual = num(it['realisasi']);
+          const satuan = String(it['satuan'] ?? '').toLowerCase();
+          if (bobot > 0 && target > 0 && actual > 0) {
+            const inv = satuan === 'hari kerja';
+            const capaian = inv ? Math.min((target / actual) * 100, 110) : Math.min((actual / target) * 100, 110);
+            total += (capaian / 100) * bobot;
+          }
+        }
+      }
+      return r2(total);
+    };
+    const byUnitUpmk: Record<string, typeof allRecords> = {};
+    for (const r of allRecords) {
+      if (r.unitCode === 'KP') continue;
+      if (r.selfAssessment == null) continue; // record lama sebelum fitur ini — tidak punya snapshot
+      (byUnitUpmk[r.unitCode] ??= []).push(r);
+    }
+    const selfAssessmentGap = Object.entries(byUnitUpmk)
+      .map(([code, records]) => {
+        const selfScore = scoreFromSource(records, (r) => r.selfAssessment);
+        const evaluatedScore = scoreFromSource(records, (r) => r.values);
+        const gap = r2(evaluatedScore - selfScore);
+        return {
+          code, unit: UNIT_NAMES[code] ?? code,
+          selfScore, evaluatedScore, gap,
+          gapPct: selfScore !== 0 ? r2((gap / selfScore) * 100) : 0,
+          status: Math.abs(gap) <= 2 ? 'akurat' : Math.abs(gap) <= 5 ? 'perlu-perhatian' : 'signifikan',
+        };
+      })
+      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+
+    const summary = hasKpData ? {
+      kpiBobot, kpiNilai, piBobot, piNilai,
+      totalBobot: r2(kpiBobot + piBobot),
+      totalNilai, kepatuhanPenalty,
+      status: totalNilai >= 100 ? 'Baik' : totalNilai >= 90 ? 'Hati-hati' : 'Perhatian',
+    } : (base.summary ?? {});
+
     const newData: Record<string, unknown> = {
       ...base,
       kpis,
       kepatuhan,
-      summary: {
-        kpiBobot, kpiNilai, piBobot, piNilai,
-        totalBobot: r2(kpiBobot + piBobot),
-        totalNilai, kepatuhanPenalty,
-        status: totalNilai >= 100 ? 'Baik' : totalNilai >= 90 ? 'Hati-hati' : 'Perhatian',
-      },
+      summary,
       buComparison,
+      selfAssessmentGap,
     };
 
     await this.prisma.operationalSnapshot.upsert({

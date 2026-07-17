@@ -5,12 +5,14 @@ import { InputRealisasiService } from './input-realisasi.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
-import { IsObject, IsString, IsOptional, IsIn } from 'class-validator';
+import { IsObject, IsString, IsOptional, IsIn, IsArray } from 'class-validator';
 
 class SubmitDto {
   @IsString() unitCode: string;
   @IsString() bidang: string;
   @IsObject() values: Record<string, unknown>;
+  @IsArray() @IsString({ each: true }) checkerIds: string[];
+  @IsString() approverId: string;
   @IsOptional() @IsString() periodId?: string;
 }
 
@@ -45,6 +47,11 @@ export class InputRealisasiController {
     return this.svc.getReviewList(user);
   }
 
+  @Get('reviewer-candidates')
+  reviewerCandidates() {
+    return this.svc.getReviewerCandidates();
+  }
+
   // Bundle periode (deklarasikan sebelum rute :id agar tidak tertangkap param)
   @Get('bundle')
   bundle(@Query('periodId') periodId?: string) {
@@ -58,7 +65,7 @@ export class InputRealisasiController {
 
   @Put('submit')
   submit(@CurrentUser() user: User, @Body() dto: SubmitDto) {
-    return this.svc.submit(user, dto.unitCode, dto.bidang, dto.values, dto.periodId);
+    return this.svc.submit(user, dto.unitCode, dto.bidang, dto.values, dto.checkerIds, dto.approverId, dto.periodId);
   }
 
   @Patch(':id/values')

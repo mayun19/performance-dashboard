@@ -23,6 +23,7 @@ import { GcgEsgModule } from './gcg-esg/gcg-esg.module';
 import { PetaModule } from './peta/peta.module';
 import { KinerjaModule } from './kinerja/kinerja.module';
 import { AdminModule } from './admin/admin.module';
+import { KpiMasterModule } from './kpi-master/kpi-master.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { AdminModule } from './admin/admin.module';
     PetaModule,
     KinerjaModule,
     AdminModule,
+    KpiMasterModule,
   ],
 })
 export class AppModule {}

@@ -5,116 +5,35 @@ import { useTheme } from "../context/ThemeContext";
 import { useNotif } from "../context/NotifContext";
 import { usePeriod } from "../context/PeriodContext";
 import {
-  LayoutDashboard,
-  TrendingUp,
-  Settings,
-  Activity,
-  Target,
-  Users,
-  CheckSquare,
-  AlertTriangle,
-  FileText,
-  ClipboardEdit,
-  Bell,
-  Moon,
-  Sun,
-  LogOut,
-  ChevronDown,
-  Menu,
-  Tv2,
-  Search,
-  Download,
-  User,
-  HelpCircle,
-  FilePlus,
-  LineChart,
-  FileSpreadsheet,
-  Image,
-  Printer,
-  ExternalLink,
-  Workflow,
-  Network,
-  Leaf,
-  MapPin,
-  ShieldAlert,
-} from "lucide-react";
+  LayoutDashboard, TrendingUp, Settings, Activity, Target,
+  Users, CheckSquare, AlertTriangle, FileText, ClipboardEdit,
+  Bell, Moon, Sun, LogOut, ChevronDown, Menu, ChevronsLeft,
+  Tv2, Search, Download, User, HelpCircle, FilePlus, LineChart,
+  FileSpreadsheet, Image, Printer, ExternalLink,
+  Workflow, Network, Leaf, MapPin, ShieldAlert, Layers,
+  type LucideIcon,
+} from 'lucide-react';
 
-const NAV_ITEMS = [
+type NavItem = {
+  to: string; label: string; icon: LucideIcon;
+  end?: boolean; hideForUpmk?: boolean; devOnly?: boolean;
+};
+
+const NAV_ITEMS: Array<{ section: string; items: NavItem[] }> = [
   {
-    section: "Dashboard Kinerja",
-    submenus: [
-      { to: "/approvals", label: "Persetujuan", icon: CheckSquare },
-      {
-        to: "/input-kontrak",
-        label: "Input Kontrak Manajemen",
-        icon: FileText,
-        hideForUpmk: true,
-      },
-      {
-        to: "/input-realisasi",
-        label: "Input Realisasi Bulanan",
-        icon: ClipboardEdit,
-      },
-      { to: "/", label: "Executive Summary", icon: LayoutDashboard, end: true },
-      {
-        to: "/financial",
-        label: "Cost & Capex",
-        icon: TrendingUp,
-        devOnly: true,
-      },
-      {
-        to: "/operational",
-        label: "Operational KPIs",
-        icon: Activity,
-        devOnly: true,
-      },
-      {
-        to: "/proses-bisnis",
-        label: "Proses Bisnis L2",
-        icon: Workflow,
-        devOnly: true,
-      },
-      {
-        to: "/struktur-organisasi",
-        label: "Struktur Organisasi",
-        icon: Network,
-        devOnly: true,
-      },
-      { to: "/gcg-esg", label: "GCG & ESG", icon: Leaf, devOnly: true },
-      {
-        to: "/strategic",
-        label: "Strategic Targets",
-        icon: Target,
-        devOnly: true,
-      },
-      {
-        to: "/human-capital",
-        label: "Human Capital",
-        icon: Users,
-        devOnly: true,
-      },
-      {
-        to: "/risk",
-        label: "Manajemen Risiko",
-        icon: AlertTriangle,
-        devOnly: true,
-      },
-      {
-        to: "/peta",
-        label: "Peta Geografis UPMK",
-        icon: MapPin,
-        devOnly: true,
-      },
-    ],
-    icon: LayoutDashboard,
+    section: 'Aksi Saya', items: [
+      { to: '/approvals',      label: 'Persetujuan',             icon: CheckSquare },
+      { to: '/kpi-master',     label: 'Manajemen KPI',           icon: Layers,      hideForUpmk: true },
+      { to: '/input-realisasi',label: 'Input Realisasi Bulanan', icon: ClipboardEdit },
+    ]
   },
   {
     section: "Pengaturan",
-    icon: Settings,
-    submenus: [
+    items: [
       { to: "/settings", label: "Settings", icon: Settings },
       { to: "/admin", label: "Admin Tools", icon: ShieldAlert, devOnly: true },
     ],
+    icon: Settings,
   },
 ];
 
@@ -129,23 +48,24 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROUTE_NAMES: Record<string, string> = {
-  "/": "Executive Summary",
-  "/financial": "Cost & Capex",
-  "/operational": "Operational KPIs",
-  "/proses-bisnis": "Proses Bisnis L2",
-  "/struktur-organisasi": "Struktur Organisasi",
-  "/gcg-esg": "GCG & ESG",
-  "/strategic": "Strategic Targets",
-  "/human-capital": "Human Capital",
-  "/risk": "Manajemen Risiko",
-  "/peta": "Peta Geografis UPMK",
-  "/approvals": "Persetujuan",
-  "/input-realisasi": "Input Realisasi",
-  "/input-kontrak": "Input Kontrak Manajemen",
-  "/workflow-km/usulan": "Proses Usulan KM",
-  "/workflow-km/realisasi": "Proses Realisasi KM",
-  "/settings": "Settings",
-  "/admin": "Admin Tools",
+  '/': 'Executive Summary',
+  '/financial': 'Cost & Capex',
+  '/operational': 'Operational KPIs',
+  '/proses-bisnis': 'Proses Bisnis L2',
+  '/struktur-organisasi': 'Struktur Organisasi',
+  '/gcg-esg': 'GCG & ESG',
+  '/strategic': 'Strategic Targets',
+  '/human-capital': 'Human Capital',
+  '/risk': 'Manajemen Risiko',
+  '/peta': 'Peta Geografis UPMK',
+  '/approvals': 'Persetujuan',
+  '/input-realisasi': 'Input Realisasi',
+  '/input-kontrak': 'Manajemen KPI',
+  '/kpi-master': 'Manajemen KPI',
+  '/workflow-km/usulan': 'Proses Usulan KM',
+  '/workflow-km/realisasi': 'Proses Realisasi KM',
+  '/settings': 'Settings',
+  '/admin': 'Admin Tools',
 };
 
 export function AppShell() {
@@ -179,7 +99,7 @@ export function AppShell() {
     () => {
       const initial: Record<string, boolean> = {};
       NAV_ITEMS.forEach((section) => {
-        const isActive = section.submenus.some(
+        const isActive = section.items.some(
           ({ to, end }) =>
             location.pathname === to ||
             (!end && to !== "/" && location.pathname.startsWith(to)),
@@ -254,12 +174,10 @@ export function AppShell() {
             // hideForUpmk: sembunyikan dari user unit UPMK (non-KP)
             const isUpmkUser = user?.unit && user.unit !== "KP";
             // devOnly: hanya tampil untuk SUPERADMIN dan DEVELOPER
-            const isPrivileged =
-              user?.role === "SUPERADMIN" || user?.role === "DEVELOPER";
-            const visibleItems = section.submenus.filter((it) => {
-              const nav = it as { hideForUpmk?: boolean; devOnly?: boolean };
-              if (isUpmkUser && nav.hideForUpmk) return false;
-              if (nav.devOnly && !isPrivileged) return false;
+            const isPrivileged = user?.role === 'SUPERADMIN' || user?.role === 'DEVELOPER';
+            const visibleItems = section.items.filter((it) => {
+              if (isUpmkUser && it.hideForUpmk) return false;
+              if (it.devOnly && !isPrivileged) return false;
               return true;
             });
             if (visibleItems.length === 0) return null;
@@ -267,7 +185,7 @@ export function AppShell() {
             const SectionIcon = (
               section as { icon?: React.ComponentType<{ size?: number }> }
             ).icon;
-            const hasMultipleSubmenus = section.submenus?.length > 1;
+            const hasMultipleSubmenus = section.items.length > 1;
             const showSectionIcon = hasMultipleSubmenus && SectionIcon;
 
             // Cek apakah salah satu submenu di section ini sedang aktif

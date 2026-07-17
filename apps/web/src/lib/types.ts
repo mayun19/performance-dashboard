@@ -22,11 +22,25 @@ export interface User {
   roleVariant?: RoleVariant | null;
 }
 
+export interface FillWindow {
+  start: string;
+  end: string;
+  isOpen: boolean;
+  overrideActive: boolean;
+  daysUntilClose: number;
+  daysUntilOpen: number;
+}
+
 export interface Period {
   id: string;
   yearMonth: string;
   label: string;
   isActive: boolean;
+  fillWindow?: FillWindow;
+  windowOverride?: boolean;
+  overrideBy?: string | null;
+  overrideAt?: string | null;
+  kmReference?: 'draft' | 'final';
 }
 
 export interface Kpi {
@@ -100,6 +114,7 @@ export interface ExecutiveData {
   efficiency: { value: number; target: number; label: string };
   csat: { value: number; max: number; responses: number; label: string; isInverse: boolean };
   safety: { value: number; target: number; isInverse: boolean; label: string; unit: string };
+  selfAssessmentAccuracy?: { avgGap: number; unitsWithData: number; status: string };
 }
 
 export interface Report {
@@ -202,6 +217,7 @@ export interface KontrakManajemen {
   holder: string;
   kpiItems: Record<string, unknown>[];
   status: 'draft' | 'submitted' | 'ready' | 'approved' | 'rejected';
+  kmType: 'draft' | 'final';
   currentStage: number;
   history?: Array<Record<string, unknown>>;
   submitter: string;

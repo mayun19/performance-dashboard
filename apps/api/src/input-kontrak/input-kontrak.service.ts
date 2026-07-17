@@ -3,8 +3,11 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role, User } from '@prisma/client';
-import * as XLSX from 'xlsx';
-import { Step, buildSteps, stepMatches, stepRecipientWhere, slaRemainingDays, uname } from '../common/workflow-steps';
+import {
+  Step, stepMatches, stepRecipientWhere, slaRemainingDays, uname,
+  buildReviewerSteps, validateReviewerSelection, CHECKER_ROLES, APPROVER_ROLES,
+  type ReviewerParticipant,
+} from '../common/workflow-steps';
 
 @Injectable()
 export class InputKontrakService {
@@ -13,11 +16,12 @@ export class InputKontrakService {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
-  async getList(unitCode?: string, periodId?: string) {
+  async getList(unitCode?: string, periodId?: string, kmType?: string) {
     return this.prisma.kontrakManajemen.findMany({
       where: {
         ...(unitCode ? { unitCode } : {}),
         ...(periodId ? { periodId } : {}),
+        ...(kmType ? { kmType } : {}),
       },
       orderBy: { submittedAt: 'desc' },
     });
@@ -30,7 +34,8 @@ export class InputKontrakService {
   // Registri KM yang sudah DISETUJUI penuh (final oleh GM).
   // KM bersifat TAHUNAN: acuan realisasi dicocokkan per-tahun (bukan per-bulan),
   // sehingga realisasi bulan apa pun pada tahun yg sama memakai KM tahun itu.
-  async getApproved(unitCode?: string, year?: string) {
+  // `kmType` memfilter dokumen Draft vs Final — dua registri terpisah, tidak dicampur.
+  async getApproved(unitCode?: string, year?: string, kmType?: string) {
     let periodIdsInYear: string[] | undefined;
     if (year) {
       const periods = await this.prisma.period.findMany({
@@ -44,6 +49,7 @@ export class InputKontrakService {
         status: 'approved',
         ...(unitCode ? { unitCode } : {}),
         ...(periodIdsInYear ? { periodId: { in: periodIdsInYear } } : {}),
+        ...(kmType ? { kmType } : {}),
       },
       orderBy: [{ unitCode: 'asc' }, { reviewedAt: 'desc' }],
     });
@@ -58,7 +64,9 @@ export class InputKontrakService {
     bidang: string,
     holder: string,
     kpiItems: object,
+    kmType: string = 'draft',
   ) {
+    if (kmType !== 'draft' && kmType !== 'final') throw new BadRequestException('kmType harus "draft" atau "final"');
     // Hanya Kantor Induk yang membuat KM (termasuk KM untuk UPMK). UPMK hanya mengisi realisasi.
     if (user.unit !== 'KP') throw new ForbiddenException('Kontrak Manajemen hanya dapat dibuat oleh Kantor Induk');
     // KM untuk unit UPMK: Staff RPC dapat memilih bidang mana pun (setiap KPI UPMK punya bidang penanggung jawab tersendiri).
@@ -77,6 +85,7 @@ export class InputKontrakService {
       if (existing.status === 'submitted' || existing.status === 'approved') {
         throw new ForbiddenException('Kontrak yang sudah dikirim tidak dapat diubah');
       }
+      // kmType tidak dapat diubah setelah dibuat — Draft dan Final adalah dokumen independen.
       result = await this.prisma.kontrakManajemen.update({
         where: { id },
         data: { bidang, holder, kpiItems: kpiItems as object, submitter: user.name, submitterId: user.id },
@@ -84,7 +93,7 @@ export class InputKontrakService {
     } else {
       result = await this.prisma.kontrakManajemen.create({
         data: {
-          periodId: period.id, unitCode, bidang, holder,
+          periodId: period.id, unitCode, bidang, holder, kmType,
           kpiItems: kpiItems as object, submitter: user.name, submitterId: user.id, status: 'draft',
         },
       });
@@ -112,17 +121,44 @@ export class InputKontrakService {
     });
   }
 
-  // Submit untuk review → mulai jenjang alur (rantai bidang KI → RPC).
-  async submit(user: User, id: string) {
+  // Daftar kandidat reviewer (Checker: ASMAN/Manajer, Approver: SRManajer/GM).
+  async getReviewerCandidates() {
+    const users = await this.prisma.user.findMany({
+      where: { isActive: true, role: { in: [...CHECKER_ROLES, ...APPROVER_ROLES] } },
+      orderBy: [{ role: 'asc' }, { unit: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, role: true, unit: true, bidang: true },
+    });
+    return {
+      checkers: users.filter((u) => CHECKER_ROLES.includes(u.role)),
+      approvers: users.filter((u) => APPROVER_ROLES.includes(u.role)),
+    };
+  }
+
+  // Submit untuk review → mulai jenjang alur reviewer terpilih submitter.
+  async submit(user: User, id: string, checkerIds: string[], approverId: string) {
     if (user.unit !== 'KP') throw new ForbiddenException('Kontrak Manajemen hanya dapat dikirim oleh Kantor Induk');
     const kontrak = await this.prisma.kontrakManajemen.findUnique({ where: { id } });
     if (!kontrak) throw new NotFoundException('Kontrak tidak ditemukan');
-
-    // KM selalu rantai bidang KI (mode 'km'), termasuk KM untuk UPMK.
-    const steps = buildSteps(kontrak.unitCode, kontrak.bidang, 'km');
-    if (!stepMatches(steps[0], user)) {
-      throw new ForbiddenException('Hanya PIC/Staff Kinerja bidang terkait yang dapat mengirim KM ini');
+    if (!Array.isArray(checkerIds) || checkerIds.length === 0) throw new BadRequestException('Pilih minimal satu Checker');
+    if (!approverId) throw new BadRequestException('Pilih satu Approver');
+    // Hanya penyusun (pembuat draft) yang dapat mengirim KM ini.
+    if (kontrak.submitterId && kontrak.submitterId !== user.id) {
+      throw new ForbiddenException('Hanya penyusun KM ini yang dapat mengirimnya');
     }
+
+    const picked = await this.prisma.user.findMany({
+      where: { id: { in: [...checkerIds, approverId] }, isActive: true },
+      select: { id: true, name: true, role: true, unit: true, bidang: true },
+    });
+    const checkers = checkerIds.map((cid) => picked.find((u) => u.id === cid)).filter(Boolean) as ReviewerParticipant[];
+    const approver = picked.find((u) => u.id === approverId) as ReviewerParticipant | undefined;
+    if (checkers.length !== checkerIds.length) throw new BadRequestException('Sebagian Checker tidak ditemukan atau nonaktif');
+
+    const submitter: ReviewerParticipant = { id: user.id, name: user.name, role: user.role, unit: user.unit, bidang: user.bidang };
+    const invalid = validateReviewerSelection(user.id, checkers, approver);
+    if (invalid) throw new BadRequestException(invalid);
+
+    const steps = buildReviewerSteps(submitter, checkers, approver!);
     const history = [
       ...(Array.isArray(kontrak.history) ? (kontrak.history as object[]) : []),
       { stepIndex: 0, actor: user.name, role: user.role, action: 'submitted', label: steps[0].label, ts: new Date().toISOString() },
@@ -291,15 +327,15 @@ export class InputKontrakService {
     return active ? active.yearMonth.slice(0, 4) : String(new Date().getFullYear());
   }
 
-  async getBundle(scope: 'KP' | 'UPMK' = 'KP', year?: string) {
+  async getBundle(scope: 'KP' | 'UPMK' = 'KP', year?: string, kmType: string = 'draft') {
     const yr = await this.resolveYear(year);
     const pids = await this.periodIdsForYear(yr);
     const unitFilter = scope === 'KP' ? { unitCode: 'KP' } : { unitCode: { not: 'KP' } };
     const components = await this.prisma.kontrakManajemen.findMany({
-      where: { periodId: { in: pids }, status: { in: ['submitted', 'ready', 'approved'] }, ...unitFilter },
+      where: { periodId: { in: pids }, status: { in: ['submitted', 'ready', 'approved'] }, kmType, ...unitFilter },
       orderBy: [{ unitCode: 'asc' }, { bidang: 'asc' }],
     });
-    const bundle = await this.prisma.kMBundle.findUnique({ where: { year_scope: { year: yr, scope } } });
+    const bundle = await this.prisma.kMBundle.findUnique({ where: { year_scope_kmType: { year: yr, scope, kmType } } });
     const readyCount = components.filter((c) => c.status === 'ready').length;
     const submittedCount = components.filter((c) => c.status === 'submitted').length;
     const canApprove = readyCount > 0 && submittedCount === 0;
@@ -308,7 +344,7 @@ export class InputKontrakService {
     const allApproved = components.length > 0 && components.every((c) => c.status === 'approved');
     const effectiveStatus = readyCount > 0 ? 'open' : allApproved ? 'approved' : (bundle?.status ?? 'open');
     return {
-      year: yr, scope, status: effectiveStatus, reviewer: bundle?.reviewer ?? null,
+      year: yr, scope, kmType, status: effectiveStatus, reviewer: bundle?.reviewer ?? null,
       reviewNote: bundle?.reviewNote ?? null, reviewedAt: bundle?.reviewedAt ?? null,
       total: components.length, readyCount, canApprove,
       components: components.map((c) => ({
@@ -318,19 +354,19 @@ export class InputKontrakService {
     };
   }
 
-  async reviewBundle(user: User, scope: 'KP' | 'UPMK', action: 'approve' | 'reject', note: string, year?: string) {
+  async reviewBundle(user: User, scope: 'KP' | 'UPMK', action: 'approve' | 'reject', note: string, year?: string, kmType: string = 'draft') {
     if (user.role !== Role.GM) throw new ForbiddenException('Hanya General Manager yang menyetujui bundle KM');
     if (!note?.trim()) throw new BadRequestException('Catatan/komentar wajib diisi');
     const yr = await this.resolveYear(year);
     const pids = await this.periodIdsForYear(yr);
     const unitFilter = scope === 'KP' ? { unitCode: 'KP' } : { unitCode: { not: 'KP' } };
-    const scopeLabel = scope === 'KP' ? 'Kantor Induk' : 'UPMK';
-    const components = await this.prisma.kontrakManajemen.findMany({ where: { periodId: { in: pids }, status: { in: ['submitted', 'ready'] }, ...unitFilter } });
+    const scopeLabel = `${scope === 'KP' ? 'Kantor Induk' : 'UPMK'} (${kmType === 'draft' ? 'Draft' : 'Final'})`;
+    const components = await this.prisma.kontrakManajemen.findMany({ where: { periodId: { in: pids }, status: { in: ['submitted', 'ready'] }, kmType, ...unitFilter } });
     if (components.length === 0) throw new BadRequestException(`Tidak ada KM ${scopeLabel} yang siap dikonsolidasi pada tahun ini`);
 
     if (action === 'approve') {
       if (!components.every((c) => c.status === 'ready')) throw new ForbiddenException(`Masih ada KM ${scopeLabel} yang belum lolos sampai SM Perencanaan & PC`);
-      await this.prisma.kontrakManajemen.updateMany({ where: { periodId: { in: pids }, status: 'ready', ...unitFilter }, data: { status: 'approved', reviewer: user.name, reviewedAt: new Date() } });
+      await this.prisma.kontrakManajemen.updateMany({ where: { periodId: { in: pids }, status: 'ready', kmType, ...unitFilter }, data: { status: 'approved', reviewer: user.name, reviewedAt: new Date() } });
     } else {
       // GM tolak bundle → kembalikan tiap komponen 'ready' ke langkah Manajer Perencanaan.
       for (const c of components.filter((x) => x.status === 'ready')) {
@@ -350,17 +386,18 @@ export class InputKontrakService {
       }
     }
     const bundle = await this.prisma.kMBundle.upsert({
-      where: { year_scope: { year: yr, scope } },
+      where: { year_scope_kmType: { year: yr, scope, kmType } },
       update: { status: action === 'approve' ? 'approved' : 'rejected', reviewer: user.name, reviewNote: note, reviewedAt: new Date() },
-      create: { year: yr, scope, status: action === 'approve' ? 'approved' : 'rejected', reviewer: user.name, reviewNote: note, reviewedAt: new Date() },
+      create: { year: yr, scope, kmType, status: action === 'approve' ? 'approved' : 'rejected', reviewer: user.name, reviewNote: note, reviewedAt: new Date() },
     });
+    const kmTypeLabel = kmType === 'draft' ? 'Draft' : 'Final';
     if (action === 'approve') {
       const submitterIds = [...new Set(components.map((c) => c.submitterId).filter(Boolean))] as string[];
       if (submitterIds.length) {
         await this.prisma.notification.createMany({
           data: submitterIds.map((sid) => ({
             userId: sid, type: 'success', title: 'Bundle KM Disetujui GM',
-            msg: `Kontrak Manajemen tahun ${yr} disahkan penuh oleh ${user.name}.`,
+            msg: `Kontrak Manajemen ${kmTypeLabel} tahun ${yr} disahkan penuh oleh ${user.name}.`,
             route: '/input-kontrak', unread: true,
           })),
         });
@@ -372,7 +409,7 @@ export class InputKontrakService {
         await this.prisma.notification.createMany({
           data: manPer.map((u) => ({
             userId: u.id, type: 'alert', title: 'Bundle KM Dikembalikan GM',
-            msg: `${user.name} menolak bundle KM tahun ${yr}. Komponen dikembalikan ke Manajer Perencanaan untuk ditinjau: ${note}`,
+            msg: `${user.name} menolak bundle KM ${kmTypeLabel} tahun ${yr}. Komponen dikembalikan ke Manajer Perencanaan untuk ditinjau: ${note}`,
             route: '/approvals?type=km', unread: true,
           })),
         });
@@ -381,100 +418,5 @@ export class InputKontrakService {
     await this.prisma.auditLog.create({ data: { actor: user.name, userId: user.id, action: `kontrak.bundle.${action}`, entity: 'KMBundle', targetId: bundle.id, note } });
     for (const c of components) await this.cache.del(`kontrak:${c.unitCode}`);
     return bundle;
-  }
-
-  // Alias kolom yang dikenali (case-insensitive). Boleh ada baris judul di atas tabel.
-  private static readonly COLUMN_ALIASES: Record<string, string[]> = {
-    indikator: ['indikator kinerja', 'indikator', 'kpi', 'nama indikator', 'indikator kpi'],
-    formula: ['formula', 'rumus', 'metode', 'cara hitung'],
-    satuan: ['satuan', 'unit'],
-    bobot: ['bobot', 'bobot (%)', 'bobot %', 'weight', 'persen'],
-    target: ['target semester i', 'target sem i', 'target semester 1', 'target sem 1', 'target sem1', 'target s1', 'target semester'],
-    target2: ['target tahun', 'target tahunan', 'target setahun', 'target ' + new Date().getFullYear(), 'target (tahun)', 'target akhir', 'target tahun ini'],
-  };
-
-  // Parse file Excel/CSV → kembalikan kpiItems untuk mengisi form.
-  // Robust: mendeteksi baris header otomatis (mengabaikan baris judul/kop di atasnya).
-  parseExcel(file?: { buffer: Buffer; originalname?: string }) {
-    if (!file?.buffer) throw new BadRequestException('File tidak ditemukan. Pilih file Excel (.xlsx/.xls) atau CSV.');
-
-    let grid: string[][];
-    try {
-      const wb = XLSX.read(file.buffer, { type: 'buffer' });
-      if (!wb.SheetNames.length) throw new Error('no sheet');
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', blankrows: false });
-      grid = raw.map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? '').trim()) : []));
-    } catch {
-      throw new BadRequestException('File tidak dapat dibaca. Pastikan formatnya .xlsx, .xls, atau .csv yang valid.');
-    }
-
-    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-    const matchKey = (cell: string): string | null => {
-      const n = norm(cell);
-      if (!n) return null;
-      for (const [key, aliases] of Object.entries(InputKontrakService.COLUMN_ALIASES)) {
-        if (aliases.some((a) => n === norm(a) || n.startsWith(norm(a)))) return key;
-      }
-      return null;
-    };
-
-    // Cari baris header: baris yang punya sel cocok "indikator".
-    let headerRow = -1;
-    const colMap: Record<string, number> = {};
-    for (let i = 0; i < grid.length; i++) {
-      const row = grid[i];
-      const localMap: Record<string, number> = {};
-      row.forEach((cell, idx) => {
-        const key = matchKey(cell);
-        if (key && localMap[key] === undefined) localMap[key] = idx;
-      });
-      if (localMap.indikator !== undefined) {
-        headerRow = i;
-        Object.assign(colMap, localMap);
-        break;
-      }
-    }
-
-    if (headerRow === -1) {
-      throw new BadRequestException(
-        'Kolom "Indikator Kinerja" tidak ditemukan. Pastikan baris header memuat kolom: ' +
-        'Indikator Kinerja, Formula, Satuan, Bobot, Target Semester I, Target (tahun). ' +
-        'Unduh Template untuk format yang benar.',
-      );
-    }
-
-    const get = (row: string[], key: string) => {
-      const idx = colMap[key];
-      return idx === undefined ? '' : String(row[idx] ?? '').trim();
-    };
-
-    const kpiItems = grid
-      .slice(headerRow + 1)
-      .map((row) => ({
-        indikator: get(row, 'indikator'),
-        formula: get(row, 'formula'),
-        satuan: get(row, 'satuan'),
-        bobot: get(row, 'bobot'),
-        target: get(row, 'target'),
-        target2: get(row, 'target2'),
-      }))
-      .filter((it) => it.indikator !== '');
-
-    if (kpiItems.length === 0) {
-      throw new BadRequestException('Header ditemukan tetapi tidak ada baris indikator berisi data. Isi minimal satu indikator.');
-    }
-    return { kpiItems, count: kpiItems.length };
-  }
-
-  // Template Excel siap-isi (buffer .xlsx)
-  buildTemplate(): Buffer {
-    const header = ['Indikator Kinerja', 'Formula', 'Satuan', 'Bobot', 'Target Semester I', `Target ${new Date().getFullYear()}`];
-    const example = ['Progress Konstruksi Jaringan', 'realisasi / rencana x 100', '%', '30', '50', '95'];
-    const ws = XLSX.utils.aoa_to_sheet([header, example]);
-    ws['!cols'] = [{ wch: 32 }, { wch: 26 }, { wch: 10 }, { wch: 8 }, { wch: 16 }, { wch: 14 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Kontrak Manajemen');
-    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 }

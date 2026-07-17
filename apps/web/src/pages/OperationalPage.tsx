@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { operational, kinerja } from "../lib/api";
-import { usePeriod } from "../context/PeriodContext";
-import { Target, ShieldAlert, ClipboardCheck } from "lucide-react";
-import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
+import { useEffect, useState } from 'react';
+import { operational, kinerja } from '../lib/api';
+import { usePeriod } from '../context/PeriodContext';
+import { Target, ShieldAlert, ClipboardCheck, GitCompare } from 'lucide-react';
+import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
 
 interface RekapKpi {
   indikator: string;
@@ -60,12 +60,9 @@ type Summary = {
   status: string;
 };
 
-type Kepatuhan = {
-  name: string;
-  maxPenalty: number;
-  applied: number;
-  target: string;
-  status: string;
+type Kepatuhan = { name: string; maxPenalty: number; applied: number; target: string; status: string };
+type SelfAssessmentGap = {
+  code: string; unit: string; selfScore: number; evaluatedScore: number; gap: number; gapPct: number; status: string;
 };
 
 function fmt(v: number, d = 2) {
@@ -169,6 +166,7 @@ export function OperationalPage() {
   const kpis = (d.kpis ?? []) as Kpi[];
   const pis = (d.pis ?? d.pi ?? []) as Kpi[];
   const kepatuhan = (d.kepatuhan ?? []) as Kepatuhan[];
+  const selfAssessmentGap = (d.selfAssessmentGap ?? []) as SelfAssessmentGap[];
 
   if (!data?.data || (kpis.length === 0 && pis.length === 0)) {
     return <EmptyState title="Data Operational KPI tidak tersedia" />;
@@ -612,6 +610,48 @@ export function OperationalPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Akurasi Self-Assessment UPMK vs Evaluasi RPC */}
+      {selfAssessmentGap.length > 0 && (
+        <div className="card p-0" style={{ marginTop: 'var(--space-6)' }}>
+          <div className="card-header compact">
+            <div className="card-title"><GitCompare size={14} />Akurasi Self-Assessment UPMK</div>
+            <span className="card-meta">Self-assessment (dikunci saat submit) vs hasil evaluasi berjenjang s.d. SM RPC</span>
+          </div>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Unit</th>
+                  <th className="num">Self-Assessment</th>
+                  <th className="num">Hasil Evaluasi</th>
+                  <th className="num">Selisih</th>
+                  <th className="num">Selisih %</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selfAssessmentGap.map((g) => (
+                  <tr key={g.code}>
+                    <td style={{ fontWeight: 600 }}>{g.unit}</td>
+                    <td className="num">{fmt(g.selfScore)}</td>
+                    <td className="num" style={{ fontWeight: 700 }}>{fmt(g.evaluatedScore)}</td>
+                    <td className={`num ${g.gap > 0 ? 'delta-positive' : g.gap < 0 ? 'delta-negative' : ''}`} style={{ fontWeight: 700 }}>
+                      {g.gap > 0 ? '+' : ''}{fmt(g.gap)}
+                    </td>
+                    <td className="num">{g.gap > 0 ? '+' : ''}{pct(g.gapPct)}</td>
+                    <td>
+                      <span className={`status-pill ${g.status === 'akurat' ? 'completed' : g.status === 'perlu-perhatian' ? 'at-risk' : 'delayed'}`}>
+                        {g.status === 'akurat' ? '✓ Akurat' : g.status === 'perlu-perhatian' ? '⚠ Perlu Perhatian' : '✗ Signifikan'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

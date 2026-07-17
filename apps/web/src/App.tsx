@@ -16,7 +16,7 @@ import { ApprovalsPage } from './pages/ApprovalsPage';
 import { WorkflowKmUsulanPage } from './pages/WorkflowKmUsulanPage';
 import { WorkflowKmRealisasiPage } from './pages/WorkflowKmRealisasiPage';
 import { InputRealisasiPage } from './pages/InputRealisasiPage';
-import { InputKontrakPage } from './pages/InputKontrakPage';
+import { KpiMasterPage } from './pages/KpiMasterPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 
@@ -45,7 +45,9 @@ export default function App() {
         <Route path="workflow-km/usulan" element={<WorkflowKmUsulanPage />} />
         <Route path="workflow-km/realisasi" element={<WorkflowKmRealisasiPage />} />
         <Route path="input-realisasi" element={<InputRealisasiPage />} />
-        <Route path="input-kontrak" element={<InputKontrakPage />} />
+        {/* Input Kontrak Manajemen kini digabung ke "Manajemen KPI" (tab Dokumen KM) */}
+        <Route path="input-kontrak" element={<Navigate to="/kpi-master" replace />} />
+        <Route path="kpi-master" element={<KpiMasterPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

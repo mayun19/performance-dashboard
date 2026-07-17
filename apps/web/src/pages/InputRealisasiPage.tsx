@@ -1,17 +1,10 @@
-import { useEffect, useRef, useState, Fragment } from "react";
-import { inputRealisasi, inputKontrak, meta } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
-import {
-  ClipboardEdit,
-  CheckCircle,
-  Clock,
-  Trash2,
-  Paperclip,
-  Upload,
-  X,
-} from "lucide-react";
-import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
-import type { KontrakManajemen, Period } from "../lib/types";
+import { useEffect, useRef, useState, Fragment } from 'react';
+import { inputRealisasi, inputKontrak, meta } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { ClipboardEdit, CheckCircle, Clock, Trash2, Paperclip, Upload, X } from 'lucide-react';
+import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
+import ReviewerPickerModal from '../components/ReviewerPickerModal';
+import type { KontrakManajemen, Period } from '../lib/types';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const RPC_BIDANG = "Perencanaan & Project Control";
@@ -77,6 +70,7 @@ export function InputRealisasiPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   // Evidence (lampiran)
   const [evidOpen, setEvidOpen] = useState<string | null>(null);
   const [evidBusy, setEvidBusy] = useState(false);
@@ -140,12 +134,13 @@ export function InputRealisasiPage() {
     const loadData = async () => {
       try {
         // KM bersifat tahunan → acuan realisasi ditarik per TAHUN dari periode terpilih.
-        const selectedYear = periods
-          .find((p) => p.id === selectedPeriodId)
-          ?.yearMonth?.slice(0, 4);
+        // kmReference periode menentukan apakah KPI ditarik dari KM Draft atau KM Final.
+        const periodObj = periods.find((p) => p.id === selectedPeriodId);
+        const selectedYear = periodObj?.yearMonth?.slice(0, 4);
+        const kmType = periodObj?.kmReference ?? 'draft';
         const [histRes, approvedRes] = await Promise.allSettled([
           inputRealisasi.history(selectedUnit, selectedPeriodId),
-          inputKontrak.approved(selectedUnit, selectedYear),
+          inputKontrak.approved(selectedUnit, selectedYear, kmType),
         ]);
         if (histRes.status === "fulfilled")
           setHistory(histRes.value as unknown[]);
@@ -179,11 +174,18 @@ export function InputRealisasiPage() {
     loadData();
   }, [selectedUnit, selectedPeriodId, isStaff, user?.bidang]);
 
-  const handleSubmit = async () => {
+  // Submit membuka picker reviewer; pengiriman sebenarnya di handleConfirmSubmit.
+  const handleSubmit = () => {
+    if (!user) return;
+    setPickerOpen(true);
+  };
+
+  const handleConfirmSubmit = async (checkerIds: string[], approverId: string) => {
     if (!user) return;
     setSubmitting(true);
     try {
-      // Realisasi dipecah per bidang: kelompokkan baris KPI per bidang, kirim satu submit per bidang.
+      // Realisasi dipecah per bidang: kelompokkan baris KPI per bidang, kirim satu submit per bidang
+      // dengan alur reviewer yang sama.
       const byBidang = new Map<string, Record<string, unknown>>();
       kpiList.forEach((kpi, i) => {
         const b = kpi.bidang ?? "";
@@ -192,13 +194,9 @@ export function InputRealisasiPage() {
         bucket[`kpi_${i}`] = { ...kpi, realisasi: values[String(i)] ?? "" };
       });
       for (const [bidang, payload] of byBidang) {
-        await inputRealisasi.submit(
-          selectedUnit,
-          bidang,
-          payload,
-          selectedPeriodId,
-        );
+        await inputRealisasi.submit(selectedUnit, bidang, payload, checkerIds, approverId, selectedPeriodId);
       }
+      setPickerOpen(false);
       setSubmitted(true);
       setValues({});
       const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
@@ -247,13 +245,13 @@ export function InputRealisasiPage() {
   if (error && kpiList.length === 0)
     return <ErrorState title="Gagal memuat data" message={error} />;
 
-  const filledCount = Object.values(values).filter(
-    (v) => v.trim() !== "",
-  ).length;
-  const completionPct =
-    kpiList.length > 0 ? Math.round((filledCount / kpiList.length) * 100) : 0;
-  const selectedPeriodLabel =
-    periods.find((p) => p.id === selectedPeriodId)?.label ?? "Tahun Berjalan";
+  const filledCount = Object.values(values).filter(v => v.trim() !== '').length;
+  const completionPct = kpiList.length > 0 ? Math.round((filledCount / kpiList.length) * 100) : 0;
+  const selectedPeriod = periods.find((p) => p.id === selectedPeriodId);
+  const selectedPeriodLabel = selectedPeriod?.label ?? 'Tahun Berjalan';
+  const fillWindow = selectedPeriod?.fillWindow;
+  const windowOpen = fillWindow ? fillWindow.isOpen : true; // belum ada data window → jangan blokir UI
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 
   return (
     <div className="page input-realisasi-page">
@@ -338,11 +336,22 @@ export function InputRealisasiPage() {
                   </span>
                 </span>
               )}
-              <span>
-                · {kpiList.length} indikator KM
-                {isStaff && user?.bidang ? ` · Bidang: ${user.bidang}` : ""} ·
-                Deadline: Tanggal 3 setiap bulan
-              </span>
+              <span>· {kpiList.length} indikator KM{isStaff && user?.bidang ? ` · Bidang: ${user.bidang}` : ''}</span>
+              {fillWindow && (
+                windowOpen ? (
+                  <span className="status-pill at-risk" style={{ fontSize: 10 }}>
+                    {fillWindow.overrideActive
+                      ? 'Window dibuka manual oleh Admin/GM'
+                      : `Window terbuka · tutup ${fmtDate(fillWindow.end)} (${fillWindow.daysUntilClose} hari lagi)`}
+                  </span>
+                ) : (
+                  <span className="status-pill delayed" style={{ fontSize: 10 }}>
+                    {fillWindow.daysUntilOpen > 0
+                      ? `Window belum dibuka · mulai ${fmtDate(fillWindow.start)}`
+                      : `Window pengisian telah ditutup ${fmtDate(fillWindow.end)}`}
+                  </span>
+                )
+              )}
             </div>
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -392,6 +401,17 @@ export function InputRealisasiPage() {
         </div>
       </div>
 
+      {fillWindow && !windowOpen && (
+        <div className="status-banner danger" style={{ marginBottom: 'var(--space-4)' }}>
+          <Clock size={18} />
+          <strong>
+            {fillWindow.daysUntilOpen > 0
+              ? `Pengisian realisasi ${selectedPeriodLabel} belum dibuka. Window: ${fmtDate(fillWindow.start)} s.d. ${fmtDate(fillWindow.end)}.`
+              : `Window pengisian realisasi ${selectedPeriodLabel} telah berakhir (${fmtDate(fillWindow.end)}). Kirim tidak dapat dilakukan.`}
+          </strong>
+        </div>
+      )}
+
       {submitted && (
         <div
           className="status-banner success"
@@ -404,14 +424,9 @@ export function InputRealisasiPage() {
       {/* KPI Input Table */}
       <div className="card p-0" style={{ marginBottom: "var(--space-6)" }}>
         <div className="card-header compact">
-          <div className="card-title">
-            <ClipboardEdit size={14} />
-            KPI Realisasi —{" "}
-            {UNIT_OPTIONS.find((u) => u.code === selectedUnit)?.name ??
-              selectedUnit}
-          </div>
+          <div className="card-title"><ClipboardEdit size={14} />KPI Realisasi — {UNIT_OPTIONS.find((u) => u.code === selectedUnit)?.name ?? selectedUnit}</div>
           <span className="card-meta">
-            Isi nilai realisasi {selectedPeriodLabel}
+            Isi nilai realisasi {selectedPeriodLabel} · Acuan: <b>{selectedPeriod?.kmReference === 'final' ? 'KM Final' : 'KM Draft'}</b>
           </span>
         </div>
         <div className="table-wrap">
@@ -515,26 +530,15 @@ export function InputRealisasiPage() {
           )}
         </div>
         {kpiList.length > 0 && (
-          <div
-            className="card-footer"
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: "var(--space-3)",
-              alignItems: "center",
-            }}>
-            <span
-              style={{
-                fontSize: "var(--text-sm)",
-                color: "var(--color-text-muted)",
-              }}>
-              {filledCount} dari {kpiList.length} indikator terisi
-            </span>
+          <div className="card-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)', alignItems: 'center' }}>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{filledCount} dari {kpiList.length} indikator terisi</span>
             <button
               className="btn btn-primary"
               onClick={handleSubmit}
-              disabled={submitting || filledCount === 0}>
-              {submitting ? "Mengirim…" : "Kirim Realisasi"}
+              disabled={submitting || filledCount === 0 || !windowOpen}
+              title={!windowOpen ? 'Window pengisian periode ini sedang tertutup' : undefined}
+            >
+              {submitting ? 'Mengirim…' : 'Kirim Realisasi'}
             </button>
           </div>
         )}
@@ -792,6 +796,15 @@ export function InputRealisasiPage() {
           </div>
         </div>
       )}
+
+      <ReviewerPickerModal
+        open={pickerOpen}
+        title="Alur Reviewer Realisasi"
+        busy={submitting}
+        fetchCandidates={inputRealisasi.reviewerCandidates}
+        onConfirm={handleConfirmSubmit}
+        onCancel={() => setPickerOpen(false)}
+      />
     </div>
   );
 }

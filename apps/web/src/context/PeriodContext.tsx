@@ -12,10 +12,12 @@ interface PeriodCtxValue {
   mode: PeriodMode;
   setMode: (m: PeriodMode) => void;
   label: string;
+  refreshPeriods: () => Promise<void>;
 }
 
 const PeriodCtx = createContext<PeriodCtxValue>({
   periods: [], periodId: '', setPeriodId: () => {}, mode: 'Bulan', setMode: () => {}, label: '',
+  refreshPeriods: async () => {},
 });
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -50,8 +52,16 @@ export function PeriodProvider({ children }: { children: ReactNode }) {
 
   const label = periods.find((p) => p.id === periodId)?.label ?? '';
 
+  // Muat ulang daftar periode dari server (mis. setelah GM mengubah window pengisian).
+  const refreshPeriods = async () => {
+    try {
+      const list = ((await meta.periods()) as Period[]) ?? [];
+      setPeriods(list);
+    } catch { /* abaikan */ }
+  };
+
   return (
-    <PeriodCtx.Provider value={{ periods, periodId, setPeriodId, mode, setMode, label }}>
+    <PeriodCtx.Provider value={{ periods, periodId, setPeriodId, mode, setMode, label, refreshPeriods }}>
       {children}
     </PeriodCtx.Provider>
   );

@@ -46,6 +46,7 @@ model User {
   role         Role
   unit         String
   bidang       String?  // Bidang asal user (null = lintas-bidang, mis. GM)
+  phone        String?  // Nomor WhatsApp untuk notifikasi (simulasi — belum terhubung provider nyata)
   passwordHash String
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -109,6 +110,16 @@ model Period {
   label     String
   isActive  Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  // Override manual GM/Admin: buka paksa window pengisian realisasi di luar jadwal tgl 25-5.
+  windowOverride Boolean   @default(false)
+  overrideBy     String?
+  overrideAt     DateTime?
+
+  // Acuan aktif KM untuk pengisian realisasi periode ini: 'draft' atau 'final'.
+  // Default cerdas saat seed (Jan-Jun='draft', Jul-Des='final'), dapat diubah GM/Admin
+  // kapan pun (mis. KM Final belum disahkan Direksi meski sudah masuk semester II).
+  kmReference String @default("draft") // 'draft' | 'final'
 
   @@map("periods")
 }
@@ -235,6 +246,10 @@ model InputRealisasi {
   submitter    String
   submitterId  String?
   values       Json
+  // Snapshot nilai self-assessment persis seperti diinput UPMK saat submit — DIKUNCI,
+  // tidak pernah diubah oleh reviewer. `values` di atas tetap jadi salinan kerja yang
+  // dapat dikoreksi reviewer sepanjang alur (hasil evaluasi RPC/KI).
+  selfAssessment Json?
   status       String    @default("draft") // draft | submitted | ready | approved | rejected
   currentStage Int       @default(1) // legacy; kini = currentStepIndex
   steps        Json      @default("[]") // template langkah alur (urut) — mesin alur multi-segmen
@@ -281,6 +296,24 @@ model Notification {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("notifications")
+}
+
+// Log simulasi pengingat WhatsApp ke Checker selama window pengisian realisasi.
+// Belum terhubung provider nyata (Fonnte/WA Business API) — hanya mencatat pesan
+// yang AKAN dikirim, untuk demo & validasi konten sebelum integrasi produksi.
+model WhatsAppLog {
+  id            String   @id @default(cuid())
+  periodId      String
+  recipientId   String
+  recipientName String
+  phone         String?
+  templateType  String   // 'reminder_checker'
+  message       String
+  pendingCount  Int      @default(0)
+  forced        Boolean  @default(false) // true bila dipicu manual (bukan jadwal otomatis 3-harian)
+  createdAt     DateTime @default(now())
+
+  @@map("whatsapp_logs")
 }
 
 model AuditLog {
@@ -352,6 +385,10 @@ model KontrakManajemen {
   holder      String
   kpiItems    Json
   status      String    @default("draft") // draft | submitted | ready | approved | rejected
+  // kmType: dokumen KM DRAFT (acuan Jan-Jun, sebelum disahkan Direksi) vs KM FINAL
+  // (disahkan Direksi di luar sistem, biasanya acuan Jul-Des). Dua dokumen independen,
+  // masing-masing punya alur submit/review/bundle sendiri — bukan revisi dari yang lain.
+  kmType      String    @default("draft") // 'draft' | 'final'
   currentStage Int      @default(1) // legacy; kini = currentStepIndex
   steps        Json     @default("[]") // mesin alur multi-segmen (sama seperti realisasi)
   currentStepIndex Int  @default(0)
@@ -365,14 +402,16 @@ model KontrakManajemen {
   updatedAt   DateTime  @updatedAt
 
   @@index([periodId, unitCode])
+  @@index([kmType])
   @@map("kontrak_manajemen")
 }
 
-// Konsolidasi KM per TAHUN per SCOPE — GM menyetujui KP dan UPMK secara terpisah.
+// Konsolidasi KM per TAHUN per SCOPE per TIPE (Draft/Final) — GM menyetujui masing-masing terpisah.
 model KMBundle {
   id         String    @id @default(cuid())
   year       String
   scope      String    @default("KP") // 'KP' | 'UPMK'
+  kmType     String    @default("draft") // 'draft' | 'final'
   status     String    @default("open") // open | approved | rejected
   reviewer   String?
   reviewNote String?
@@ -380,6 +419,94 @@ model KMBundle {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  @@unique([year, scope])
+  @@unique([year, scope, kmType])
   @@map("km_bundles")
+}
+
+// KPI sebagai entitas PARENT (Fase A). Satu definisi KPI dapat di-assign ke banyak
+// unit/bidang (KpiAssignment). Saat di-assign, definisi disebar (fan-out) menjadi item
+// pada kpiItems dokumen KontrakManajemen per-(unit,bidang) — bertanda masterKpiId —
+// sehingga realisasi/snapshot/print tetap membaca bentuk kpiItems yang sama.
+model KpiMaster {
+  id           String   @id @default(cuid())
+  year         String
+  kmType       String   @default("draft") // 'draft' | 'final'
+  indikator    String
+  formula      String   @default("")
+  satuan       String   @default("")
+  targetParent String   @default("") // target gabungan (bisa non-numerik, mis. "Tanggal 5")
+  createdBy    String
+  createdById  String?
+  status       String   @default("active") // active | superseded (Fase D — diganti versi lebih baru)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Default alur reviewer (Fase C) — diwariskan ke picker saat submit dokumen KM hasil
+  // fan-out dari KPI ini; submitter tetap bisa override sebelum kirim.
+  defaultCheckerIds String[] @default([])
+  defaultApproverId String?
+
+  // Versioning (Fase D): edit atas definisi yang SEDANG BERLAKU tidak mengubah periode
+  // berjalan — membuat versi baru berlaku bulan berikutnya (effectiveMonth). Versi lama
+  // ditandai 'superseded' tanpa disentuh datanya. Master dgn effectiveMonth > periode aktif
+  // ("pending", belum berlaku) masih boleh diedit langsung di tempat.
+  effectiveMonth    String   // yearMonth mulai berlaku, mis. "2026-08"
+  version           Int      @default(1)
+  previousVersionId String?
+
+  // Metode agregasi (Fase E) — dipilih per-KPI: 'weighted' = rata-rata tertimbang pakai
+  // persenAgregasi (Σ=100%, cocok utk KPI positif); 'sum' = jumlah polos tiap kontribusi
+  // (cocok utk KPI penalti/pengurang, tanpa syarat Σ=100%).
+  aggregationMethod String @default("weighted") // 'weighted' | 'sum'
+
+  assignments  KpiAssignment[]
+
+  @@index([year, kmType])
+  @@map("kpi_masters")
+}
+
+// Assignment satu KPI parent ke satu (unit, bidang). bobotKm = bobot skor KM (poin,
+// existing); target per-assignment. Alur reviewer default menyusul (Fase C).
+model KpiAssignment {
+  id             String   @id @default(cuid())
+  kpiMasterId    String
+  unitCode       String
+  bidang         String
+  holder         String   @default("")
+  bobotKm        String   @default("") // bobot skor KM (poin) — beda dari persen agregasi
+  target         String   @default("") // Target Semester I per assignment
+  target2        String   @default("") // Target tahunan per assignment
+  // persenAgregasi: bobot rollup (0-100) ke nilai parent — diinput RPC Perencanaan,
+  // total seluruh assignment dalam satu master harus = 100. Dipakai untuk hitung
+  // nilai_parent = Σ(realisasi_child × persenAgregasi/100) setelah realisasi disetujui.
+  persenAgregasi Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  master      KpiMaster @relation(fields: [kpiMasterId], references: [id], onDelete: Cascade)
+
+  @@unique([kpiMasterId, unitCode, bidang])
+  @@index([unitCode, bidang])
+  @@map("kpi_assignments")
+}
+
+// Persetujuan konsolidasi agregat KPI lintas-bidang (Fase H2). Setelah semua bidang
+// kontributor menyetujui realisasinya (InputRealisasi approved), RPC Perencanaan meninjau
+// & menyetujui nilai PARENT (agregat) sebelum dianggap final. Satu review per (KPI,periode).
+model KpiRollupReview {
+  id          String    @id @default(cuid())
+  kpiMasterId String
+  periodId    String
+  status      String    @default("pending") // pending | approved | rejected
+  reviewer    String?
+  reviewerId  String?
+  reviewNote  String?
+  nilaiParent Float?    // snapshot nilai agregat yang dikunci saat disetujui
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([kpiMasterId, periodId])
+  @@index([periodId])
+  @@map("kpi_rollup_reviews")
 }
