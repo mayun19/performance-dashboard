@@ -796,6 +796,9 @@ a {
   background: var(--color-surface-hover);
   color: var(--color-text);
 }
+.btn-tab{
+  font-weight: 600;
+}
 
 /* Role badge in topbar */
 .role-badge {
