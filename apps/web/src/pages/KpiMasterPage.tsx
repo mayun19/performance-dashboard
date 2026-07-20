@@ -1022,6 +1022,7 @@ function DefinisiKpiTab() {
                 <label className="form-label">Tipe KM</label>
                 <select
                   className="form-input"
+                  style={{ fontWeight: 600 }}
                   value={kmType}
                   onChange={(e) =>
                     setKmType(e.target.value as "draft" | "final")
@@ -2100,12 +2101,12 @@ function DokumenKmTab() {
           flexWrap: "wrap",
         }}>
         <button
-          className={`btn ${kmTypeFilter === "draft" ? "btn-primary" : "btn-ghost"}`}
+          className={`btn btn-tab  ${kmTypeFilter === "draft" ? "btn-primary" : "btn-ghost"}`}
           onClick={() => setKmTypeFilter("draft")}>
           KM Draft
         </button>
         <button
-          className={`btn ${kmTypeFilter === "final" ? "btn-primary" : "btn-ghost"}`}
+          className={`btn btn-tab ${kmTypeFilter === "final" ? "btn-primary" : "btn-ghost"}`}
           onClick={() => setKmTypeFilter("final")}>
           KM Final
         </button>
@@ -2145,7 +2146,7 @@ function DokumenKmTab() {
 
       <div
         style={{
-          fontSize: "var(--text-xs)",
+          fontSize: "var(--text-sm)",
           color: "var(--color-text-muted)",
           marginBottom: "var(--space-3)",
         }}>
@@ -2201,7 +2202,7 @@ function DokumenKmTab() {
       {canCreateKm && (
         <div
           style={{
-            fontSize: "var(--text-2xs)",
+            fontSize: "var(--text-xs)",
             color: "var(--color-text-muted)",
             marginBottom: "var(--space-3)",
             display: "flex",
