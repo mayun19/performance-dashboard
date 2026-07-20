@@ -5,21 +5,57 @@ import { useTheme } from "../context/ThemeContext";
 import { useNotif } from "../context/NotifContext";
 import { usePeriod } from "../context/PeriodContext";
 import {
-  LayoutDashboard, TrendingUp, Settings, Activity, Target,
-  Users, CheckSquare, AlertTriangle, FileText, ClipboardEdit,
-  Bell, Moon, Sun, LogOut, ChevronDown, Menu, ChevronsLeft,
-  Tv2, Search, Download, User, HelpCircle, FilePlus, LineChart,
-  FileSpreadsheet, Image, Printer, ExternalLink,
-  Workflow, Network, Leaf, MapPin, ShieldAlert, Layers,
+  LayoutDashboard,
+  TrendingUp,
+  Settings,
+  Activity,
+  Target,
+  Users,
+  CheckSquare,
+  AlertTriangle,
+  FileText,
+  ClipboardEdit,
+  Bell,
+  Moon,
+  Sun,
+  LogOut,
+  ChevronDown,
+  Menu,
+  ChevronsLeft,
+  Tv2,
+  Search,
+  Download,
+  User,
+  HelpCircle,
+  FilePlus,
+  LineChart,
+  FileSpreadsheet,
+  Image,
+  Printer,
+  ExternalLink,
+  Workflow,
+  Network,
+  Leaf,
+  MapPin,
+  ShieldAlert,
+  Layers,
   type LucideIcon,
-} from 'lucide-react';
+} from "lucide-react";
 
 type NavItem = {
-  to: string; label: string; icon: LucideIcon;
-  end?: boolean; hideForUpmk?: boolean; devOnly?: boolean;
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+  hideForUpmk?: boolean;
+  devOnly?: boolean;
 };
 
-const NAV_ITEMS: Array<{ section: string; items: NavItem[], icon: LucideIcon }> = [
+const NAV_ITEMS: Array<{
+  section: string;
+  items: NavItem[];
+  icon: LucideIcon;
+}> = [
   {
     section: "Dashboard Kinerja",
     icon: LayoutDashboard,
@@ -35,6 +71,56 @@ const NAV_ITEMS: Array<{ section: string; items: NavItem[], icon: LucideIcon }> 
         to: "/input-realisasi",
         label: "Input Realisasi Bulanan",
         icon: ClipboardEdit,
+      },
+      { to: "/", label: "Executive Summary", icon: LayoutDashboard, end: true },
+      {
+        to: "/financial",
+        label: "Cost & Capex",
+        icon: TrendingUp,
+        devOnly: true,
+      },
+      {
+        to: "/operational",
+        label: "Operational KPIs",
+        icon: Activity,
+        devOnly: true,
+      },
+      {
+        to: "/proses-bisnis",
+        label: "Proses Bisnis L2",
+        icon: Workflow,
+        devOnly: true,
+      },
+      {
+        to: "/struktur-organisasi",
+        label: "Struktur Organisasi",
+        icon: Network,
+        devOnly: true,
+      },
+      { to: "/gcg-esg", label: "GCG & ESG", icon: Leaf, devOnly: true },
+      {
+        to: "/strategic",
+        label: "Strategic Targets",
+        icon: Target,
+        devOnly: true,
+      },
+      {
+        to: "/human-capital",
+        label: "Human Capital",
+        icon: Users,
+        devOnly: true,
+      },
+      {
+        to: "/risk",
+        label: "Manajemen Risiko",
+        icon: AlertTriangle,
+        devOnly: true,
+      },
+      {
+        to: "/peta",
+        label: "Peta Geografis UPMK",
+        icon: MapPin,
+        devOnly: true,
       },
     ],
   },
@@ -59,24 +145,24 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROUTE_NAMES: Record<string, string> = {
-  '/': 'Executive Summary',
-  '/financial': 'Cost & Capex',
-  '/operational': 'Operational KPIs',
-  '/proses-bisnis': 'Proses Bisnis L2',
-  '/struktur-organisasi': 'Struktur Organisasi',
-  '/gcg-esg': 'GCG & ESG',
-  '/strategic': 'Strategic Targets',
-  '/human-capital': 'Human Capital',
-  '/risk': 'Manajemen Risiko',
-  '/peta': 'Peta Geografis UPMK',
-  '/approvals': 'Persetujuan',
-  '/input-realisasi': 'Input Realisasi',
-  '/input-kontrak': 'Manajemen KPI',
-  '/kpi-master': 'Manajemen KPI',
-  '/workflow-km/usulan': 'Proses Usulan KM',
-  '/workflow-km/realisasi': 'Proses Realisasi KM',
-  '/settings': 'Settings',
-  '/admin': 'Admin Tools',
+  "/": "Executive Summary",
+  "/financial": "Cost & Capex",
+  "/operational": "Operational KPIs",
+  "/proses-bisnis": "Proses Bisnis L2",
+  "/struktur-organisasi": "Struktur Organisasi",
+  "/gcg-esg": "GCG & ESG",
+  "/strategic": "Strategic Targets",
+  "/human-capital": "Human Capital",
+  "/risk": "Manajemen Risiko",
+  "/peta": "Peta Geografis UPMK",
+  "/approvals": "Persetujuan",
+  "/input-realisasi": "Input Realisasi",
+  "/input-kontrak": "Manajemen KPI",
+  "/kpi-master": "Manajemen KPI",
+  "/workflow-km/usulan": "Proses Usulan KM",
+  "/workflow-km/realisasi": "Proses Realisasi KM",
+  "/settings": "Settings",
+  "/admin": "Admin Tools",
 };
 
 export function AppShell() {
@@ -185,7 +271,8 @@ export function AppShell() {
             // hideForUpmk: sembunyikan dari user unit UPMK (non-KP)
             const isUpmkUser = user?.unit && user.unit !== "KP";
             // devOnly: hanya tampil untuk SUPERADMIN dan DEVELOPER
-            const isPrivileged = user?.role === 'SUPERADMIN' || user?.role === 'DEVELOPER';
+            const isPrivileged =
+              user?.role === "SUPERADMIN" || user?.role === "DEVELOPER";
             const visibleItems = section.items.filter((it) => {
               if (isUpmkUser && it.hideForUpmk) return false;
               if (it.devOnly && !isPrivileged) return false;
