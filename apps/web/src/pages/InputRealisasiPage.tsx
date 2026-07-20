@@ -339,13 +339,13 @@ export function InputRealisasiPage() {
               <span>· {kpiList.length} indikator KM{isStaff && user?.bidang ? ` · Bidang: ${user.bidang}` : ''}</span>
               {fillWindow && (
                 windowOpen ? (
-                  <span className="status-pill at-risk" style={{ fontSize: 10 }}>
+                  <span className="status-pill at-risk" style={{ fontSize: 12 }}>
                     {fillWindow.overrideActive
                       ? 'Window dibuka manual oleh Admin/GM'
                       : `Window terbuka · tutup ${fmtDate(fillWindow.end)} (${fillWindow.daysUntilClose} hari lagi)`}
                   </span>
                 ) : (
-                  <span className="status-pill delayed" style={{ fontSize: 10 }}>
+                  <span className="status-pill delayed" style={{ fontSize: 12 }}>
                     {fillWindow.daysUntilOpen > 0
                       ? `Window belum dibuka · mulai ${fmtDate(fillWindow.start)}`
                       : `Window pengisian telah ditutup ${fmtDate(fillWindow.end)}`}
