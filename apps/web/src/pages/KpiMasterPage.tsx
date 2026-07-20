@@ -429,7 +429,7 @@ function ReviewerSlotsPanel({
             }}>
             <select
               className="form-input form-input-sm"
-              style={{ width: 130 }}
+              style={{ width: 140 }}
               value={slots.approver.role}
               onChange={(e) =>
                 onSetApprover({
@@ -1604,288 +1604,292 @@ function DefinisiKpiTab() {
             message="Klik 'KPI Master Baru' untuk mendefinisikan KPI dan meng-assign-nya ke banyak unit/bidang."
           />
         ) : (
-          <div className="table-wrap">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Indikator</th>
-                  <th>Tipe</th>
-                  <th>Versi</th>
-                  <th>Satuan</th>
-                  <th className="num">Assignment</th>
-                  <th>Dibuat oleh</th>
-                  <th style={{ width: 90 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {masters.map((m) => (
-                  <Fragment key={m.id}>
-                    <tr>
-                      <td style={{ fontWeight: 600 }}>
-                        {m.indikator}
-                        {m.aggregationMethod === "sum" && (
-                          <span
-                            style={{
-                              marginLeft: 6,
-                              fontSize: 9,
-                              fontWeight: 700,
-                              color: "var(--color-text-muted)",
-                              border: "1px solid var(--color-border)",
-                              borderRadius: 4,
-                              padding: "1px 4px",
-                            }}
-                            title="Metode agregasi: SUM (jumlah polos)">
-                            Σ SUM
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${m.kmType === "final" ? "completed" : "at-risk"}`}
-                          style={{ fontSize: 10 }}>
-                          {m.kmType === "final" ? "Final" : "Draft"}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${m.isPending ? "in-review" : "completed"}`}
-                          style={{ fontSize: 10 }}
-                          title={`Berlaku mulai ${m.effectiveMonth}`}>
-                          v{m.version} ·{" "}
-                          {m.isPending
-                            ? `mulai ${m.effectiveMonth}`
-                            : "berlaku"}
-                        </span>
-                      </td>
-                      <td style={{ color: "var(--color-text-muted)" }}>
-                        {m.satuan || "—"}
-                      </td>
-                      <td className="num">
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            const willOpen = expanded !== m.id;
-                            setExpanded(willOpen ? m.id : null);
-                            if (willOpen && !rollups[m.id]) fetchRollup(m.id);
-                          }}>
-                          {m.assignments.length} unit{" "}
-                          <ChevronDown
-                            size={12}
-                            style={{
-                              transform:
-                                expanded === m.id ? "rotate(180deg)" : "none",
-                              transition: "transform .2s",
-                            }}
-                          />
-                        </button>
-                      </td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          fontSize: 11,
-                        }}>
-                        {m.createdBy}
-                      </td>
-                      <td>
-                        {canAuthor && (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => handleEdit(m)}
-                              title="Edit">
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => handleDelete(m.id)}
-                              title="Hapus"
-                              style={{ color: "var(--color-danger)" }}>
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                    {expanded === m.id && (
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Indikator</th>
+                    <th>Tipe</th>
+                    <th>Versi</th>
+                    <th>Satuan</th>
+                    <th className="num">Assignment</th>
+                    <th>Dibuat oleh</th>
+                    <th style={{ width: 90 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {masters.map((m) => (
+                    <Fragment key={m.id}>
                       <tr>
-                        <td
-                          colSpan={7}
-                          style={{
-                            background: "var(--color-surface-2)",
-                            padding: 0,
-                          }}>
-                          <table
-                            className="data-table compact"
-                            style={{ margin: 0 }}>
-                            <thead>
-                              <tr>
-                                <th>Unit</th>
-                                <th>Bidang</th>
-                                <th>PJ</th>
-                                <th className="num">Bobot KM</th>
-                                <th>Target Sem I</th>
-                                <th>Target {CURRENT_YEAR}</th>
-                                <th className="num">
-                                  {m.aggregationMethod === "sum"
-                                    ? "Metode"
-                                    : "Bobot Agregasi"}
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {m.assignments.map((a) => (
-                                <tr key={a.id}>
-                                  <td style={{ fontWeight: 600 }}>
-                                    {UNIT_NAMES[a.unitCode] ?? a.unitCode}
-                                  </td>
-                                  <td style={{ fontSize: 11 }}>{a.bidang}</td>
-                                  <td
-                                    style={{
-                                      color: "var(--color-text-muted)",
-                                    }}>
-                                    {a.holder || "—"}
-                                  </td>
-                                  <td className="num">{a.bobotKm || "—"}</td>
-                                  <td>{a.target || "—"}</td>
-                                  <td>{a.target2 || "—"}</td>
-                                  <td className="num">
-                                    {m.aggregationMethod === "sum"
-                                      ? "SUM"
-                                      : a.persenAgregasi
-                                        ? `${a.persenAgregasi}%`
-                                        : "—"}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-
-                          {/* Rollup: nilai parent hasil agregasi realisasi children */}
-                          <div
-                            style={{
-                              padding: "var(--space-3)",
-                              borderTop: "1px solid var(--color-border)",
-                            }}>
-                            <div
+                        <td style={{ fontWeight: 600 }}>
+                          {m.indikator}
+                          {m.aggregationMethod === "sum" && (
+                            <span
                               style={{
-                                fontSize: "var(--text-xs)",
+                                marginLeft: 6,
+                                fontSize: 9,
                                 fontWeight: 700,
-                                marginBottom: 6,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 6,
-                              }}>
-                              <PieChart size={13} /> Rollup Nilai Parent
+                                color: "var(--color-text-muted)",
+                                border: "1px solid var(--color-border)",
+                                borderRadius: 4,
+                                padding: "1px 4px",
+                              }}
+                              title="Metode agregasi: SUM (jumlah polos)">
+                              Σ SUM
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${m.kmType === "final" ? "completed" : "at-risk"}`}>
+                            {m.kmType === "final" ? "Final" : "Draft"}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${m.isPending ? "in-review" : "completed"}`}
+                            title={`Berlaku mulai ${m.effectiveMonth}`}>
+                            v{m.version} ·{" "}
+                            {m.isPending
+                              ? `mulai ${m.effectiveMonth}`
+                              : "berlaku"}
+                          </span>
+                        </td>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {m.satuan || "—"}
+                        </td>
+                        <td className="num">
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => {
+                              const willOpen = expanded !== m.id;
+                              setExpanded(willOpen ? m.id : null);
+                              if (willOpen && !rollups[m.id]) fetchRollup(m.id);
+                            }}>
+                            {m.assignments.length} unit{" "}
+                            <ChevronDown
+                              size={12}
+                              style={{
+                                transform:
+                                  expanded === m.id ? "rotate(180deg)" : "none",
+                                transition: "transform .2s",
+                              }}
+                            />
+                          </button>
+                        </td>
+                        <td
+                          style={{
+                            color: "var(--color-text-muted)",
+                          }}>
+                          {m.createdBy}
+                        </td>
+                        <td>
+                          {canAuthor && (
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => handleEdit(m)}
+                                title="Edit">
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => handleDelete(m.id)}
+                                title="Hapus"
+                                style={{ color: "var(--color-danger)" }}>
+                                <Trash2 size={13} />
+                              </button>
                             </div>
-                            {rollupLoading === m.id ? (
-                              <div
-                                style={{
-                                  fontSize: "var(--text-xs)",
-                                  color: "var(--color-text-muted)",
-                                }}>
-                                Menghitung…
-                              </div>
-                            ) : rollups[m.id] ? (
-                              <>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    gap: "var(--space-4)",
-                                    alignItems: "baseline",
-                                    marginBottom: 8,
-                                  }}>
-                                  <span
-                                    style={{
-                                      fontSize: "var(--text-xl)",
-                                      fontWeight: 800,
-                                      color: "var(--color-accent)",
-                                    }}>
-                                    {rollups[m.id].nilaiParent}
-                                  </span>
-                                  <span
-                                    style={{
-                                      fontSize: "var(--text-2xs)",
-                                      color: "var(--color-text-muted)",
-                                    }}>
-                                    Target parent:{" "}
-                                    {rollups[m.id].targetParent || "—"} ·
-                                    Periode: {rollups[m.id].periodLabel} · Total
-                                    bobot: {rollups[m.id].totalPersen}%
-                                    {!rollups[m.id].isFullyConfigured && (
-                                      <span
-                                        style={{
-                                          color: "var(--color-warning)",
-                                        }}>
-                                        {" "}
-                                        (belum 100%)
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                                <table
-                                  className="data-table compact"
-                                  style={{ margin: 0 }}>
-                                  <thead>
-                                    <tr>
-                                      <th>Unit</th>
-                                      <th>Bidang</th>
-                                      <th className="num">Bobot</th>
-                                      <th className="num">Realisasi</th>
-                                      <th className="num">Kontribusi</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {rollups[m.id].breakdown.map((b, i) => (
-                                      <tr key={i}>
-                                        <td style={{ fontWeight: 600 }}>
-                                          {UNIT_NAMES[b.unitCode] ?? b.unitCode}
-                                        </td>
-                                        <td style={{ fontSize: 11 }}>
-                                          {b.bidang}
-                                        </td>
-                                        <td className="num">
-                                          {b.persenAgregasi}%
-                                        </td>
-                                        <td className="num">
-                                          {b.hasData ? (
-                                            b.realisasi
-                                          ) : (
-                                            <span
-                                              style={{
-                                                color:
-                                                  "var(--color-text-subtle)",
-                                              }}>
-                                              belum ada
-                                            </span>
-                                          )}
-                                        </td>
-                                        <td
-                                          className="num"
-                                          style={{ fontWeight: 700 }}>
-                                          {b.kontribusi}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </>
-                            ) : (
-                              <div
-                                style={{
-                                  fontSize: "var(--text-xs)",
-                                  color: "var(--color-text-muted)",
-                                }}>
-                                Rollup tidak tersedia.
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+                      {expanded === m.id && (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            style={{
+                              background: "var(--color-surface-2)",
+                              padding: 0,
+                            }}>
+                            <table
+                              className="data-table table-expanded"
+                              style={{ margin: 0 }}>
+                              <thead>
+                                <tr>
+                                  <th>Unit</th>
+                                  <th>Bidang</th>
+                                  <th>PJ</th>
+                                  <th className="num">Bobot KM</th>
+                                  <th>Target Sem I</th>
+                                  <th>Target {CURRENT_YEAR}</th>
+                                  <th className="num">
+                                    {m.aggregationMethod === "sum"
+                                      ? "Metode"
+                                      : "Bobot Agregasi"}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {m.assignments.map((a) => (
+                                  <tr key={a.id}>
+                                    <td style={{ fontWeight: 600 }}>
+                                      {UNIT_NAMES[a.unitCode] ?? a.unitCode}
+                                    </td>
+                                    <td style={{ fontSize: 11 }}>{a.bidang}</td>
+                                    <td
+                                      style={{
+                                        color: "var(--color-text-muted)",
+                                      }}>
+                                      {a.holder || "—"}
+                                    </td>
+                                    <td className="num">{a.bobotKm || "—"}</td>
+                                    <td>{a.target || "—"}</td>
+                                    <td>{a.target2 || "—"}</td>
+                                    <td className="num">
+                                      {m.aggregationMethod === "sum"
+                                        ? "SUM"
+                                        : a.persenAgregasi
+                                          ? `${a.persenAgregasi}%`
+                                          : "—"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+
+                            {/* Rollup: nilai parent hasil agregasi realisasi children */}
+                            <div
+                              style={{
+                                padding: "var(--space-3)",
+                                borderTop: "1px solid var(--color-border)",
+                              }}>
+                              <div
+                                style={{
+                                  fontSize: "var(--text-sm)",
+                                  fontWeight: 700,
+                                  marginBottom: 6,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}>
+                                <PieChart size={13} /> Rollup Nilai Parent
+                              </div>
+                              {rollupLoading === m.id ? (
+                                <div
+                                  style={{
+                                    fontSize: "var(--text-sm)",
+                                    color: "var(--color-text-muted)",
+                                  }}>
+                                  Menghitung…
+                                </div>
+                              ) : rollups[m.id] ? (
+                                <>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: "var(--space-4)",
+                                      alignItems: "baseline",
+                                      marginBottom: 8,
+                                    }}>
+                                    <span
+                                      style={{
+                                        fontSize: "var(--text-xl)",
+                                        fontWeight: 800,
+                                        color: "var(--color-accent)",
+                                      }}>
+                                      {rollups[m.id].nilaiParent}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: "var(--text-xs)",
+                                        color: "var(--color-text-muted)",
+                                      }}>
+                                      Target parent:{" "}
+                                      {rollups[m.id].targetParent || "—"} ·
+                                      Periode: {rollups[m.id].periodLabel} ·
+                                      Total bobot: {rollups[m.id].totalPersen}%
+                                      {!rollups[m.id].isFullyConfigured && (
+                                        <span
+                                          style={{
+                                            color: "var(--color-warning)",
+                                          }}>
+                                          {" "}
+                                          (belum 100%)
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="table-scroll">
+                                    <table
+                                      className="data-table table-expanded"
+                                      style={{ margin: 0 }}>
+                                      <thead>
+                                        <tr>
+                                          <th>Unit</th>
+                                          <th>Bidang</th>
+                                          <th className="num">Bobot</th>
+                                          <th className="num">Realisasi</th>
+                                          <th className="num">Kontribusi</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {rollups[m.id].breakdown.map((b, i) => (
+                                          <tr key={i}>
+                                            <td style={{ fontWeight: 600 }}>
+                                              {UNIT_NAMES[b.unitCode] ??
+                                                b.unitCode}
+                                            </td>
+                                            <td style={{ fontSize: 11 }}>
+                                              {b.bidang}
+                                            </td>
+                                            <td className="num">
+                                              {b.persenAgregasi}%
+                                            </td>
+                                            <td className="num">
+                                              {b.hasData ? (
+                                                b.realisasi
+                                              ) : (
+                                                <span
+                                                  style={{
+                                                    color:
+                                                      "var(--color-text-subtle)",
+                                                  }}>
+                                                  belum ada
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td
+                                              className="num"
+                                              style={{ fontWeight: 700 }}>
+                                              {b.kontribusi}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </>
+                              ) : (
+                                <div
+                                  style={{
+                                    fontSize: "var(--text-xs)",
+                                    color: "var(--color-text-muted)",
+                                  }}>
+                                  Rollup tidak tersedia.
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -2230,133 +2234,137 @@ function DokumenKmTab() {
             </div>
             <span className="card-meta">{visibleKontrak.length} dokumen</span>
           </div>
-          <div className="table-wrap">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Unit</th>
-                  <th>Bidang</th>
-                  <th>Penanggung Jawab</th>
-                  <th>Jumlah KPI</th>
-                  <th>Status</th>
-                  <th>Tanggal</th>
-                  <th style={{ width: 140 }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleKontrak.map((k) => (
-                  <tr key={k.id}>
-                    <td style={{ fontWeight: 600 }}>
-                      {UNIT_NAMES[k.unitCode] ?? k.unitCode}
-                    </td>
-                    <td>{k.bidang}</td>
-                    <td>{k.holder}</td>
-                    <td className="num">{k.kpiItems.length} indikator</td>
-                    <td>
-                      <span
-                        className={`status-pill ${STATUS_PILL[k.status] ?? "in-review"}`}>
-                        {STATUS_LABEL[k.status] ?? k.status}
-                      </span>
-                      {k.status === "submitted" &&
-                        (() => {
-                          const kk = k as KontrakManajemen & {
-                            steps?: { label: string }[];
-                            currentStepIndex?: number;
-                          };
-                          const lbl =
-                            (kk.steps ?? [])[kk.currentStepIndex ?? 0]?.label ??
-                            "tahap review";
-                          return (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "var(--color-text-muted)",
-                                marginTop: 2,
-                              }}>
-                              di {lbl}
-                            </div>
-                          );
-                        })()}
-                      {k.status === "ready" && (
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: "var(--color-warning)",
-                            marginTop: 2,
-                          }}>
-                          lolos rantai → menunggu bundle GM
-                        </div>
-                      )}
-                      {k.status === "rejected" && k.reviewNote && (
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: "var(--color-danger)",
-                            marginTop: 2,
-                            maxWidth: 220,
-                          }}>
-                          {k.reviewNote}
-                        </div>
-                      )}
-                    </td>
-                    <td
-                      style={{
-                        color: "var(--color-text-muted)",
-                        whiteSpace: "nowrap",
-                      }}>
-                      {new Date(k.submittedAt).toLocaleDateString("id-ID", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: "var(--space-2)" }}>
-                        {k.status === "draft" || k.status === "rejected" ? (
-                          canActOnRow(k) ? (
-                            <button
-                              className="btn btn-primary btn-sm"
-                              onClick={() => handleSubmit(k.id)}
-                              disabled={submitting}
-                              title={
-                                isDocReady(k.id)
-                                  ? "Alur reviewer default siap"
-                                  : "Belum ada default reviewer — pilih manual"
-                              }>
-                              <Send size={14} /> Kirim
-                            </button>
-                          ) : (
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th>Bidang</th>
+                    <th>Penanggung Jawab</th>
+                    <th className="num">Jumlah KPI</th>
+                    <th>Status</th>
+                    <th>Tanggal</th>
+                    <th style={{ width: 140 }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleKontrak.map((k) => (
+                    <tr key={k.id}>
+                      <td style={{ fontWeight: 600 }}>
+                        {UNIT_NAMES[k.unitCode] ?? k.unitCode}
+                      </td>
+                      <td>{k.bidang}</td>
+                      <td>{k.holder}</td>
+                      <td className="num" style={{ fontSize: 14 }}>{k.kpiItems.length} indikator</td>
+                      <td>
+                        <span
+                          className={`status-pill ${STATUS_PILL[k.status] ?? "in-review"}`}>
+                          {STATUS_LABEL[k.status] ?? k.status}
+                        </span>
+                        {k.status === "submitted" &&
+                          (() => {
+                            const kk = k as KontrakManajemen & {
+                              steps?: { label: string }[];
+                              currentStepIndex?: number;
+                            };
+                            const lbl =
+                              (kk.steps ?? [])[kk.currentStepIndex ?? 0]
+                                ?.label ?? "tahap review";
+                            return (
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--color-text-muted)",
+                                  marginTop: 4,
+                                }}>
+                                di {lbl}
+                              </div>
+                            );
+                          })()}
+                        {k.status === "ready" && (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-warning)",
+                              marginTop: 4,
+                            }}>
+                            lolos rantai → menunggu bundle GM
+                          </div>
+                        )}
+                        {k.status === "rejected" && k.reviewNote && (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-danger)",
+                              marginTop: 4,
+                              maxWidth: 220,
+                            }}>
+                            {k.reviewNote}
+                          </div>
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          color: "var(--color-text-muted)",
+                          whiteSpace: "nowrap",
+                        }}>
+                        {new Date(k.submittedAt).toLocaleDateString("id-ID", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                          {k.status === "draft" || k.status === "rejected" ? (
+                            canActOnRow(k) ? (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => handleSubmit(k.id)}
+                                disabled={submitting}
+                                title={
+                                  isDocReady(k.id)
+                                    ? "Alur reviewer default siap"
+                                    : "Belum ada default reviewer — pilih manual"
+                                }>
+                                <Send size={14} /> Kirim
+                              </button>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: "var(--text-xs)",
+                                  color: "var(--color-text-subtle)",
+                                }}>
+                                Bidang lain — lihat saja
+                              </span>
+                            )
+                          ) : k.status === "submitted" ? (
                             <span
                               style={{
-                                fontSize: "var(--text-xs)",
-                                color: "var(--color-text-subtle)",
+                                fontSize: "var(--text-sm)",
+                                color: "var(--color-text-muted)",
                               }}>
-                              Bidang lain — lihat saja
+                              Menunggu review
                             </span>
-                          )
-                        ) : k.status === "submitted" ? (
-                          <span
-                            style={{
-                              fontSize: "var(--text-xs)",
-                              color: "var(--color-text-muted)",
-                            }}>
-                            Menunggu review
-                          </span>
-                        ) : k.status === "approved" ? (
-                          <span
-                            style={{
-                              fontSize: "var(--text-xs)",
-                              color: "var(--color-success)",
-                            }}>
-                            ✓ Disetujui {k.reviewer ? `· ${k.reviewer}` : ""}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          ) : k.status === "approved" ? (
+                            <span
+                              style={{
+                                fontSize: "var(--text-sm)",
+                                color: "var(--color-success)",
+                              }}>
+                              ✓ Disetujui {k.reviewer ? `· ${k.reviewer}` : ""}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -2380,116 +2388,121 @@ function DokumenKmTab() {
             />
           </div>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Unit</th>
-                  <th>Bidang</th>
-                  <th>Penanggung Jawab</th>
-                  <th>KPI</th>
-                  <th>Disahkan oleh</th>
-                  <th>Tanggal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleApproved.map((k) => (
-                  <Fragment key={k.id}>
-                    <tr>
-                      <td style={{ fontWeight: 600 }}>
-                        {UNIT_NAMES[k.unitCode] ?? k.unitCode}
-                      </td>
-                      <td>{k.bidang}</td>
-                      <td style={{ color: "var(--color-text-muted)" }}>
-                        {k.holder}
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() =>
-                            setApprovedExpanded(
-                              approvedExpanded === k.id ? null : k.id,
-                            )
-                          }>
-                          {k.kpiItems.length} indikator{" "}
-                          <ChevronDown
-                            size={12}
-                            style={{
-                              transform:
-                                approvedExpanded === k.id
-                                  ? "rotate(180deg)"
-                                  : "none",
-                              transition: "transform .2s",
-                            }}
-                          />
-                        </button>
-                      </td>
-                      <td>
-                        <span
-                          className="status-pill completed"
-                          style={{ fontSize: 10 }}>
-                          {k.reviewer ?? "GM"}
-                        </span>
-                      </td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          whiteSpace: "nowrap",
-                        }}>
-                        {k.reviewedAt
-                          ? new Date(k.reviewedAt).toLocaleDateString("id-ID", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                    </tr>
-                    {approvedExpanded === k.id && (
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th>Bidang</th>
+                    <th>Penanggung Jawab</th>
+                    <th>KPI</th>
+                    <th>Disahkan oleh</th>
+                    <th>Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleApproved.map((k) => (
+                    <Fragment key={k.id}>
                       <tr>
+                        <td style={{ fontWeight: 600 }}>
+                          {UNIT_NAMES[k.unitCode] ?? k.unitCode}
+                        </td>
+                        <td>{k.bidang}</td>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {k.holder}
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() =>
+                              setApprovedExpanded(
+                                approvedExpanded === k.id ? null : k.id,
+                              )
+                            }>
+                            {k.kpiItems.length} indikator{" "}
+                            <ChevronDown
+                              size={12}
+                              style={{
+                                transform:
+                                  approvedExpanded === k.id
+                                    ? "rotate(180deg)"
+                                    : "none",
+                                transition: "transform .2s",
+                              }}
+                            />
+                          </button>
+                        </td>
+                        <td>
+                          <span className="status-pill completed">
+                            {k.reviewer ?? "GM"}
+                          </span>
+                        </td>
                         <td
-                          colSpan={6}
                           style={{
-                            background: "var(--color-surface-2)",
-                            padding: 0,
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
                           }}>
-                          <table
-                            className="data-table compact"
-                            style={{ margin: 0 }}>
-                            <thead>
-                              <tr>
-                                <th>No</th>
-                                <th>Indikator Kinerja</th>
-                                <th>Formula</th>
-                                <th>Satuan</th>
-                                <th className="num">Bobot</th>
-                                <th>Target Sem I</th>
-                                <th>Target Tahun {CURRENT_YEAR}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(k.kpiItems as Record<string, string>[]).map(
-                                (it, idx) => (
-                                  <tr key={idx}>
-                                    <td>{idx + 1}</td>
-                                    <td>{it.indikator}</td>
-                                    <td>{it.formula}</td>
-                                    <td>{it.satuan}</td>
-                                    <td className="num">{it.bobot}</td>
-                                    <td>{it.target}</td>
-                                    <td>{it.target2}</td>
-                                  </tr>
-                                ),
-                              )}
-                            </tbody>
-                          </table>
+                          {k.reviewedAt
+                            ? new Date(k.reviewedAt).toLocaleDateString(
+                                "id-ID",
+                                {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                },
+                              )
+                            : "—"}
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+                      {approvedExpanded === k.id && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            style={{
+                              background: "var(--color-surface-2)",
+                              padding: 0,
+                            }}>
+                            <table
+                              className="data-table table-expanded"
+                              style={{ margin: 0 }}>
+                              <thead>
+                                <tr>
+                                  <th>No</th>
+                                  <th>Indikator Kinerja</th>
+                                  <th>Formula</th>
+                                  <th>Satuan</th>
+                                  <th className="num">Bobot</th>
+                                  <th>Target Sem I</th>
+                                  <th>Target Tahun {CURRENT_YEAR}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(k.kpiItems as Record<string, string>[]).map(
+                                  (it, idx) => (
+                                    <tr key={idx}>
+                                      <td>{idx + 1}</td>
+                                      <td>{it.indikator}</td>
+                                      <td>{it.formula}</td>
+                                      <td>{it.satuan}</td>
+                                      <td className="num">{it.bobot}</td>
+                                      <td>{it.target}</td>
+                                      <td>{it.target2}</td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -2722,13 +2735,13 @@ function ReviewPerKpiTab() {
                 )}
                 <span
                   className={`status-pill ${it.kmType === "final" ? "completed" : "at-risk"}`}
-                  style={{ fontSize: 12 }}>
+                  style={{ fontSize: 14, fontWeight: 700 }}>
                   {it.kmType === "final" ? "Final" : "Draft"}
                 </span>
                 {it.isPending && (
                   <span
                     className="status-pill in-review"
-                    style={{ fontSize: 12 }}
+                    style={{ fontSize: 14, fontWeight: 700 }}
                     title={`Berlaku mulai ${it.effectiveMonth}`}>
                     v{it.version} · mulai {it.effectiveMonth}
                   </span>
@@ -2736,7 +2749,7 @@ function ReviewPerKpiTab() {
                 {cs?.status === "approved" && (
                   <span
                     className="status-pill completed"
-                    style={{ fontSize: 12 }}
+                    style={{ fontSize: 14, fontWeight: 700 }}
                     title={`Disetujui ${cs.reviewer ?? ""}`}>
                     ✓ Konsolidasi Final
                   </span>
@@ -2744,14 +2757,14 @@ function ReviewPerKpiTab() {
                 {cs?.status === "rejected" && (
                   <span
                     className="status-pill delayed"
-                    style={{ fontSize: 12 }}>
+                    style={{ fontSize: 14, fontWeight: 700 }}>
                     Konsolidasi Ditolak
                   </span>
                 )}
                 {!cs && it.readyForConsolidation && (
                   <span
                     className="status-pill at-risk"
-                    style={{ fontSize: 12 }}>
+                    style={{ fontSize: 14, fontWeight: 700 }}>
                     Siap Konsolidasi
                   </span>
                 )}
@@ -2765,12 +2778,12 @@ function ReviewPerKpiTab() {
                 }}>
                 <span
                   className={`status-pill ${it.allApproved ? "completed" : "at-risk"}`}
-                  style={{ fontSize: 10 }}>
+                  style={{ fontSize: 14 }}>
                   {it.approvedCount}/{it.totalAssignments} bidang disetujui
                 </span>
                 <span
                   style={{
-                    fontSize: "var(--text-2xs)",
+                    fontSize: "var(--text-xs)",
                     color: "var(--color-text-muted)",
                   }}>
                   {cs?.status === "approved"
@@ -2835,78 +2848,81 @@ function ReviewPerKpiTab() {
                 {cs.reviewNote}
               </div>
             )}
-            <div className="table-wrap">
-              <table className="data-table compact" style={{ margin: 0 }}>
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>PJ</th>
-                    {it.aggregationMethod === "weighted" && (
-                      <th className="num">Bobot</th>
-                    )}
-                    <th className="num">Realisasi</th>
-                    <th>Status</th>
-                    <th>Reviewer</th>
-                    <th className="num">Kontribusi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {it.slices.map((s, i) => (
-                    <tr key={i} style={{ opacity: s.isApproved ? 1 : 0.72 }}>
-                      <td style={{ fontWeight: 600 }}>
-                        {UNIT_NAMES[s.unitCode] ?? s.unitCode}
-                      </td>
-                      <td style={{ fontSize: 11 }}>{s.bidang}</td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          fontSize: 11,
-                        }}>
-                        {s.holder || "—"}
-                      </td>
+            <div
+              className="table-wrap"
+              style={{ paddingBottom: "var(--space-7)" }}>
+              <div className="table-scroll">
+                <table className="data-table compact" style={{ margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Unit</th>
+                      <th>Bidang</th>
+                      <th>PJ</th>
                       {it.aggregationMethod === "weighted" && (
-                        <td className="num">
-                          {s.persenAgregasi ? `${s.persenAgregasi}%` : "—"}
-                        </td>
+                        <th className="num">Bobot</th>
                       )}
-                      <td className="num">
-                        {s.hasData ? (
-                          s.realisasi
-                        ) : (
-                          <span style={{ color: "var(--color-text-subtle)" }}>
-                            belum ada
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${REAL_STATUS_PILL[s.status] ?? "in-review"}`}
-                          style={{ fontSize: 10 }}>
-                          {REAL_STATUS_LABEL[s.status] ?? s.status}
-                        </span>
-                      </td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          fontSize: 11,
-                        }}>
-                        {s.reviewer || "—"}
-                      </td>
-                      <td
-                        className="num"
-                        style={{
-                          fontWeight: 700,
-                          color: s.isApproved
-                            ? "var(--color-text)"
-                            : "var(--color-text-subtle)",
-                        }}>
-                        {s.isApproved ? s.kontribusi : "—"}
-                      </td>
+                      <th className="num">Realisasi</th>
+                      <th>Status</th>
+                      <th>Reviewer</th>
+                      <th className="num">Kontribusi</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {it.slices.map((s, i) => (
+                      <tr key={i} style={{ opacity: s.isApproved ? 1 : 0.72 }}>
+                        <td style={{ fontWeight: 600 }}>
+                          {UNIT_NAMES[s.unitCode] ?? s.unitCode}
+                        </td>
+                        <td>{s.bidang}</td>
+                        <td
+                          style={{
+                            color: "var(--color-text)",
+                            fontWeight: 600,
+                          }}>
+                          {s.holder || "—"}
+                        </td>
+                        {it.aggregationMethod === "weighted" && (
+                          <td className="num">
+                            {s.persenAgregasi ? `${s.persenAgregasi}%` : "—"}
+                          </td>
+                        )}
+                        <td className="num">
+                          {s.hasData ? (
+                            s.realisasi
+                          ) : (
+                            <span style={{ color: "var(--color-text-subtle)" }}>
+                              belum ada
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${REAL_STATUS_PILL[s.status] ?? "in-review"}`}>
+                            {REAL_STATUS_LABEL[s.status] ?? s.status}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            color: "var(--color-text-muted)",
+                            fontSize: 11,
+                          }}>
+                          {s.reviewer || "—"}
+                        </td>
+                        <td
+                          className="num"
+                          style={{
+                            fontWeight: 700,
+                            color: s.isApproved
+                              ? "var(--color-text)"
+                              : "var(--color-text-subtle)",
+                          }}>
+                          {s.isApproved ? s.kontribusi : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         );
