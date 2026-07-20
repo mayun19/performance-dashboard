@@ -2384,14 +2384,14 @@ export function ApprovalsPage() {
               />
               <div style={{ display: "flex", gap: "var(--space-2)" }}>
                 <button
-                  className="btn btn-md"
+                  className="btn btn-sm"
                   style={{ background: "var(--color-success)", color: "#fff" }}
                   disabled={kmBundleKPBusy || !kmBundleKP.canApprove}
                   onClick={() => handleKmBundleKPReview("approve")}>
                   <CheckCircle size={12} /> Sahkan KM Kantor Induk (Final)
                 </button>
                 <button
-                  className="btn btn-md"
+                  className="btn btn-sm"
                   style={{ background: "var(--color-danger)", color: "#fff" }}
                   disabled={kmBundleKPBusy || kmBundleKP.total === 0}
                   onClick={() => handleKmBundleKPReview("reject")}>
@@ -2687,7 +2687,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM UPMK (wajib)"
                 value={kmBundleUPMKNote}
                 onChange={(e) => setKmBundleUPMKNote(e.target.value)}
@@ -3160,6 +3160,7 @@ export function ApprovalsPage() {
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-3)",
+              padding: "0 var(--space-7) var(--space-7)",
             }}>
             <p
               style={{
@@ -3248,6 +3249,7 @@ export function ApprovalsPage() {
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-3)",
+              padding: "0 var(--space-7) var(--space-7)",
             }}>
             <p
               style={{
@@ -3424,9 +3426,7 @@ export function ApprovalsPage() {
                               {items.length} bidang
                             </td>
                             <td>
-                              <span
-                                className={`status-pill ${aggrCls}`}
-                                >
+                              <span className={`status-pill ${aggrCls}`}>
                                 {aggrLabel}
                               </span>
                             </td>
@@ -3507,7 +3507,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
                 placeholder="Catatan persetujuan/penolakan bundle (wajib)"
                 value={bundleNote}
                 onChange={(e) => setBundleNote(e.target.value)}
