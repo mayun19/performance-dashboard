@@ -2608,7 +2608,7 @@ export function ApprovalsPage() {
                                         </strong>
                                       </div>
                                       <table
-                                        className="data-table compact"
+                                        className="data-table table-expanded"
                                         style={{ margin: 0 }}>
                                         <thead>
                                           <tr>
