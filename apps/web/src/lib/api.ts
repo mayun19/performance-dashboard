@@ -56,8 +56,9 @@ export const meta = {
 };
 
 export const executive = {
-  summary: (periodId?: string) =>
-    api.get('/executive/summary', { params: { periodId } }).then((r) => r.data),
+  // phase (living-target): 'sementara' | 'final'; kosong = auto (final bila ada, else sementara).
+  summary: (periodId?: string, phase?: 'sementara' | 'final') =>
+    api.get('/executive/summary', { params: { periodId, phase } }).then((r) => r.data),
 };
 
 export const financial = {
@@ -66,8 +67,8 @@ export const financial = {
 };
 
 export const operational = {
-  get: (periodId?: string) =>
-    api.get('/operational', { params: { periodId } }).then((r) => r.data),
+  get: (periodId?: string, phase?: 'sementara' | 'final') =>
+    api.get('/operational', { params: { periodId, phase } }).then((r) => r.data),
 };
 
 export const strategic = {
@@ -121,6 +122,13 @@ export const workflowKm = {
     api.post(`/workflow-km/${docId}/review`, { action, note }).then((r) => r.data),
 };
 
+// Fase 5 (audit simetris): baris jejak revisi level-NILAI (bukan level-langkah — itu di history).
+export type RevisionLogEntry = {
+  id: string; entity: 'period_target' | 'input_realisasi'; targetId: string; periodId: string;
+  actor: string; actorId: string | null; field: string | null;
+  oldValue: unknown; newValue: unknown; note: string | null; createdAt: string;
+};
+
 export const inputRealisasi = {
   history: (unitCode?: string, periodId?: string) =>
     api.get('/input-realisasi/history', { params: { unitCode, periodId } }).then((r) => r.data),
@@ -130,10 +138,18 @@ export const inputRealisasi = {
     api.get('/input-realisasi/review/list').then((r) => r.data),
   reviewerCandidates: () =>
     api.get('/input-realisasi/reviewer-candidates').then((r) => r.data),
-  review: (id: string, action: 'approve' | 'reject', note?: string, returnTo?: 'konseptor' | 'previous') =>
+  // returnTo 'target' (living-target): routing masalah target ke PIC REN → status target_fix.
+  review: (id: string, action: 'approve' | 'reject', note?: string, returnTo?: 'konseptor' | 'previous' | 'target') =>
     api.post(`/input-realisasi/${id}/review`, { action, note, returnTo }).then((r) => r.data),
-  updateValues: (id: string, values: Record<string, unknown>) =>
-    api.patch(`/input-realisasi/${id}/values`, { values }).then((r) => r.data),
+  // PIC REN mengoreksi KM Sementara untuk package berstatus target_fix, lalu package balik ke PIC.
+  resolveTargetFix: (id: string, updates: Array<{ kpiAssignmentId: string; target: string }>, note: string) =>
+    api.post(`/input-realisasi/${id}/resolve-target-fix`, { updates, note }).then((r) => r.data),
+  updateValues: (id: string, values: Record<string, unknown>, note?: string) =>
+    api.patch(`/input-realisasi/${id}/values`, { values, note }).then((r) => r.data),
+  // Fase 5 (audit simetris): timeline revisi gabungan — koreksi nilai realisasi (KI) +
+  // koreksi target KM Sementara (PIC REN) untuk package ini, terurut terbaru dulu.
+  revisions: (id: string) =>
+    api.get(`/input-realisasi/${id}/revisions`).then((r) => r.data as RevisionLogEntry[]),
   delete: (id: string) =>
     api.delete(`/input-realisasi/${id}`).then((r) => r.data),
   bundle: (periodId?: string) =>
@@ -248,6 +264,30 @@ export const admin = {
   whatsappRun: () => api.post('/admin/whatsapp-sim/run').then((r) => r.data),
   backfillKpiMasterPreview: () => api.get('/admin/backfill-kpi-master/preview').then((r) => r.data),
   backfillKpiMasterRun: () => api.post('/admin/backfill-kpi-master/run').then((r) => r.data),
+  // Deadline konvergensi bulanan lewat → force-freeze KM Sementara (target-of-record PIC REN menang).
+  forceFreeze: (periodId: string) => api.post(`/admin/periods/${periodId}/force-freeze`).then((r) => r.data),
+  // Fase 6: backfill KM Sementara (materialisasi PeriodTarget) utk periode tertentu — perlu
+  // dijalankan sebelum restatement KM Final agar periode lama ikut direstate (bukan dilewati).
+  backfillPeriodTargetPreview: (periodId: string) =>
+    api.get('/admin/backfill-period-target/preview', { params: { periodId } }).then((r) => r.data),
+  backfillPeriodTargetRun: (periodId: string) =>
+    api.post('/admin/backfill-period-target/run', undefined, { params: { periodId } }).then((r) => r.data),
+};
+
+// Living-target: KM Sementara (target hidup) per (periode, assignment).
+export type PeriodTarget = {
+  id: string; periodId: string; kpiAssignmentId: string;
+  target: string; source: 'fresh' | 'carried'; frozen: boolean;
+  frozenTarget: string | null; frozenAt: string | null;
+  // getForPeriod menyertakan relasi assignment (mapping ke masterKpiId/unit/bidang di UI).
+  assignment?: { id: string; kpiMasterId: string; unitCode: string; bidang: string; target: string };
+};
+export const periodTarget = {
+  list: (periodId: string) =>
+    api.get('/period-target', { params: { periodId } }).then((r) => r.data as PeriodTarget[]),
+  // Koreksi KM Sementara in-cycle oleh PIC REN (bidang Perencanaan/RPC).
+  update: (kpiAssignmentId: string, periodId: string, target: string, note?: string) =>
+    api.patch(`/period-target/${kpiAssignmentId}`, { target, note }, { params: { periodId } }).then((r) => r.data),
 };
 
 export default api;

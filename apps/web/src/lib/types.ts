@@ -115,6 +115,8 @@ export interface ExecutiveData {
   csat: { value: number; max: number; responses: number; label: string; isInverse: boolean };
   safety: { value: number; target: number; isInverse: boolean; label: string; unit: string };
   selfAssessmentAccuracy?: { avgGap: number; unitsWithData: number; status: string };
+  // Living-target dua-track: UPMK Version (self-reported) di samping KI Adjusted (unitRanking/healthScore).
+  upmkTrack?: { overall: number; unitScores: Array<{ code: string; score: number }> };
 }
 
 export interface Report {
@@ -199,8 +201,8 @@ export interface RealisasiKinerja {
   unitCode: string;
   submitter: string;
   submitterId?: string | null;
-  values: Record<string, { indikator?: string; target?: string | number; realisasi?: string | number; satuan?: string; bobot?: string | number }>;
-  status: 'draft' | 'submitted' | 'ready' | 'approved' | 'rejected';
+  values: Record<string, { indikator?: string; target?: string | number; realisasi?: string | number; satuan?: string; bobot?: string | number; masterKpiId?: string }>;
+  status: 'draft' | 'submitted' | 'target_fix' | 'ready' | 'approved' | 'rejected';
   currentStage: number;
   reviewer?: string | null;
   reviewNote?: string | null;

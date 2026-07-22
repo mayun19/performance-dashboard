@@ -9,6 +9,8 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { getFillWindowStatus } from '../common/period-window';
 import { WhatsappSimService } from '../whatsapp/whatsapp.service';
 import { KpiMasterService } from '../kpi-master/kpi-master.service';
+import { PeriodTargetService } from '../period-target/period-target.service';
+import { RestatementService } from '../period-target/restatement.service';
 
 class WindowOverrideDto {
   @IsBoolean() enabled: boolean;
@@ -22,7 +24,13 @@ class KmReferenceDto {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.SUPERADMIN, Role.DEVELOPER)
 export class AdminController {
-  constructor(private prisma: PrismaService, private whatsapp: WhatsappSimService, private kpiMaster: KpiMasterService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsapp: WhatsappSimService,
+    private kpiMaster: KpiMasterService,
+    private periodTarget: PeriodTargetService,
+    private restatement: RestatementService,
+  ) {}
 
   @Delete('reset-test-data')
   async resetTestData(@CurrentUser() user: User) {
@@ -81,7 +89,24 @@ export class AdminController {
         note: `Periode ${period.label}: acuan KM diubah ke "${dto.kmReference}"`,
       },
     });
-    return updated;
+
+    // KM Final tiba dari holding (draft → final) → living-target workflow: restatement
+    // otomatis merecompute seluruh bulan tahun berjalan terhadap target final yang beku.
+    let restatement: { periodsRestated: string[] } | null = null;
+    if (period.kmReference === 'draft' && dto.kmReference === 'final') {
+      restatement = await this.restatement.restatePeriod(id, user);
+    }
+    return { ...updated, restatement };
+  }
+
+  // Deadline konvergensi bulanan lewat & belum ada kesepakatan → force-freeze: target-of-record
+  // PIC REN yang berlaku saat ini MENANG (lihat docs/living-target-workflow.md §4 circuit-breaker).
+  @Post('periods/:id/force-freeze')
+  @Roles(Role.GM, Role.SUPERADMIN, Role.DEVELOPER)
+  async forceFreezeDeadline(@CurrentUser() user: User, @Param('id') id: string) {
+    const period = await this.prisma.period.findUnique({ where: { id } });
+    if (!period) throw new NotFoundException('Periode tidak ditemukan');
+    return this.periodTarget.forceFreezeAtDeadline(id, user);
   }
 
   // ===== Simulasi Notifikasi WhatsApp (belum terhubung provider nyata) =====
@@ -123,5 +148,19 @@ export class AdminController {
   @Post('backfill-kpi-master/run')
   async runBackfillKpiMaster(@CurrentUser() user: User) {
     return this.kpiMaster.runBackfill(user);
+  }
+
+  // ===== Fase 6: Backfill KM Sementara (materialisasi PeriodTarget per periode) =====
+
+  @Get('backfill-period-target/preview')
+  previewBackfillPeriodTarget(@Query('periodId') periodId: string) {
+    if (!periodId) throw new BadRequestException('periodId diperlukan');
+    return this.periodTarget.previewBackfill(periodId);
+  }
+
+  @Post('backfill-period-target/run')
+  async runBackfillPeriodTarget(@CurrentUser() user: User, @Query('periodId') periodId: string) {
+    if (!periodId) throw new BadRequestException('periodId diperlukan');
+    return this.periodTarget.runBackfill(periodId, user);
   }
 }

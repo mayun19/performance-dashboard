@@ -10,8 +10,8 @@ export class OperationalController {
   constructor(private svc: OperationalService) {}
 
   @Get()
-  getData(@Query('periodId') periodId?: string) {
-    return this.svc.getData(periodId);
+  getData(@Query('periodId') periodId?: string, @Query('phase') phase?: 'sementara' | 'final') {
+    return this.svc.getData(periodId, phase === 'sementara' || phase === 'final' ? phase : undefined);
   }
 
   @Post('refresh')

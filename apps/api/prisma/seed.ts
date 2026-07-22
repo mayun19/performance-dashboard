@@ -160,9 +160,9 @@ async function main() {
   const meta = { periodId: period.id };
 
   await prisma.executiveSnapshot.upsert({
-    where: { periodId: period.id },
+    where: { periodId_phase: { periodId: period.id, phase: 'sementara' } },
     update: { data: DATA.executive as object },
-    create: { ...meta, data: DATA.executive as object },
+    create: { ...meta, phase: 'sementara', data: DATA.executive as object },
   });
 
   await prisma.financialSnapshot.upsert({
@@ -172,9 +172,9 @@ async function main() {
   });
 
   await prisma.operationalSnapshot.upsert({
-    where: { periodId: period.id },
+    where: { periodId_phase: { periodId: period.id, phase: 'sementara' } },
     update: { data: DATA.operational as object },
-    create: { ...meta, data: DATA.operational as object },
+    create: { ...meta, phase: 'sementara', data: DATA.operational as object },
   });
 
   await prisma.strategicSnapshot.upsert({

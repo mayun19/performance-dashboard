@@ -3,6 +3,7 @@ import { operational, kinerja } from '../lib/api';
 import { usePeriod } from '../context/PeriodContext';
 import { Target, ShieldAlert, ClipboardCheck, GitCompare } from 'lucide-react';
 import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
+import { PhaseControls, type SnapshotPhase } from '../components/PhaseControls';
 
 interface RekapKpi {
   indikator: string;
@@ -103,28 +104,26 @@ function statusPill(s: string) {
 }
 
 export function OperationalPage() {
-  const [data, setData] = useState<{ data: Record<string, unknown> } | null>(
-    null,
-  );
+  const [data, setData] = useState<{ data: Record<string, unknown>; phase?: SnapshotPhase } | null>(null);
   const [rekap, setRekap] = useState<Rekap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [phaseReq, setPhaseReq] = useState<SnapshotPhase | undefined>(undefined);
 
   const { periodId, mode } = usePeriod();
 
   useEffect(() => {
     setLoading(true);
-    Promise.allSettled([
-      operational.get(periodId || undefined),
-      kinerja.rekap(periodId || undefined, mode),
-    ])
+    Promise.allSettled([operational.get(periodId || undefined, phaseReq), kinerja.rekap(periodId || undefined, mode)])
       .then(([op, rk]) => {
         if (op.status === "fulfilled") setData(op.value);
         else setError((op.reason as Error)?.message ?? "Gagal memuat data");
         if (rk.status === "fulfilled") setRekap(rk.value as Rekap);
       })
       .finally(() => setLoading(false));
-  }, [periodId, mode]);
+  }, [periodId, mode, phaseReq]);
+
+  const phaseControls = <PhaseControls requested={phaseReq} shown={data?.phase} onChange={setPhaseReq} />;
 
   if (loading) {
     return (
@@ -169,7 +168,20 @@ export function OperationalPage() {
   const selfAssessmentGap = (d.selfAssessmentGap ?? []) as SelfAssessmentGap[];
 
   if (!data?.data || (kpis.length === 0 && pis.length === 0)) {
-    return <EmptyState title="Data Operational KPI tidak tersedia" />;
+    return (
+      <div className="page operational-page">
+        <div className="page-header">
+          <h1 className="page-title">Operational KPIs</h1>
+          <div className="page-meta">{phaseControls}</div>
+        </div>
+        <EmptyState
+          title="Snapshot belum tersedia"
+          message={phaseReq === 'final'
+            ? 'Snapshot Final belum ada untuk periode ini (KM Final belum tiba / belum direstate). Beralih ke Sementara.'
+            : 'Data Operational KPI tidak tersedia untuk periode & fase ini.'}
+        />
+      </div>
+    );
   }
 
   const kpiRows = kpis.filter((k) => !k.id?.startsWith("pi"));
@@ -272,6 +284,10 @@ export function OperationalPage() {
 
   return (
     <div className="page operational-page">
+      <div className="page-header">
+        <h1 className="page-title">Operational KPIs</h1>
+        <div className="page-meta">{phaseControls}</div>
+      </div>
       {/* Capaian LIVE dari Realisasi Kinerja yang sudah disetujui final (Integrasi C) */}
       {rekap?.hasData && (
         <div

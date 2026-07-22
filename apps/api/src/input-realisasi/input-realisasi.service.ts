@@ -5,9 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Role, User } from '@prisma/client';
 import { ExecutiveService } from '../executive/executive.service';
 import { OperationalService } from '../operational/operational.service';
+import { PeriodTargetService } from '../period-target/period-target.service';
 import {
   Step, stepMatches, stepRecipientWhere, slaRemainingDays, uname,
   buildReviewerSteps, validateReviewerSelection, CHECKER_ROLES, APPROVER_ROLES,
+  RPC_BIDANG,
   type ReviewerParticipant,
 } from '../common/workflow-steps';
 import { getFillWindowStatus } from '../common/period-window';
@@ -30,6 +32,7 @@ export class InputRealisasiService {
     @Inject(CACHE_MANAGER) private cache: Cache,
     private executiveSvc: ExecutiveService,
     private operationalSvc: OperationalService,
+    private periodTargetSvc: PeriodTargetService,
   ) {}
 
   private async invalidateKinerja(periodId: string, unitCode: string) {
@@ -115,17 +118,27 @@ export class InputRealisasiService {
     // TIDAK PERNAH diubah lagi oleh reviewer (mereka hanya mengoreksi `values`/working copy).
     // Diperbarui hanya saat submit BARU/re-submit (mis. setelah ditolak ke konseptor).
     const selfAssessment = values;
+
+    // Living-target: catat target-of-record (masterKpiId -> nilai target Sementara berlaku
+    // SAAT INI) di setiap (re-)submit. Karena target hidup sampai KM Final tiba, ini adalah
+    // titik yang benar untuk mengunci "target yang dipakai" — re-submit setelah PIC REN
+    // mengoreksi target akan menangkap nilai baru secara otomatis.
+    const items = Object.values(values as Record<string, Record<string, unknown>>);
+    const { targetByMaster } = await this.periodTargetSvc.resolveForPackage(period.id, unitCode, bidang, items);
+
     const result = await this.prisma.inputRealisasi.upsert({
       where: { periodId_unitCode_bidang: { periodId: period.id, unitCode, bidang } },
       update: {
         values: values as object, selfAssessment: selfAssessment as object, submitter: user.name, submitterId: user.id,
         status: 'submitted', steps: steps as object, currentStepIndex: 1, currentStage: 1,
+        targetOfRecord: targetByMaster as object, packagePhase: 'sementara',
         history, reviewer: null, reviewNote: null, reviewedAt: null, submittedAt: new Date(),
       },
       create: {
         periodId: period.id, unitCode, bidang, submitter: user.name, submitterId: user.id,
         values: values as object, selfAssessment: selfAssessment as object,
         status: 'submitted', steps: steps as object, currentStepIndex: 1, currentStage: 1, history,
+        targetOfRecord: targetByMaster as object,
       },
     });
 
@@ -189,7 +202,7 @@ export class InputRealisasiService {
   }
 
   // Reviewer pada langkahnya dapat mengedit nilai realisasi (revisi minor) sebelum menyetujui.
-  async updateValues(user: User, id: string, values: Record<string, unknown>) {
+  async updateValues(user: User, id: string, values: Record<string, unknown>, note?: string) {
     const r = await this.prisma.inputRealisasi.findUnique({ where: { id } });
     if (!r) throw new NotFoundException('Realisasi tidak ditemukan');
     if (r.status !== 'submitted') throw new ForbiddenException('Hanya realisasi yang sedang direview yang dapat diedit');
@@ -203,8 +216,44 @@ export class InputRealisasiService {
     await this.prisma.auditLog.create({
       data: { actor: user.name, userId: user.id, action: 'realisasi.edit', entity: 'InputRealisasi', targetId: id },
     });
+    // Audit simetris (Fase 5): koreksi nilai realisasi (KI review) dicatat berdampingan
+    // dengan koreksi target (period_target) — RevisionLog jadi satu sumber kebenaran
+    // level-NILAI utk timeline package, terpisah dari InputRealisasi.history (level-LANGKAH).
+    const oldValues = (r.values ?? {}) as Record<string, unknown>;
+    if (JSON.stringify(oldValues) !== JSON.stringify(values)) {
+      await this.prisma.revisionLog.create({
+        data: {
+          entity: 'input_realisasi', targetId: id, periodId: r.periodId,
+          actor: user.name, actorId: user.id, field: 'values',
+          oldValue: oldValues as object, newValue: values as object,
+          note,
+        },
+      });
+    }
     await this.invalidateKinerja(r.periodId, r.unitCode);
     return result;
+  }
+
+  // ===== Fase 5: Audit simetris — timeline revisi gabungan (target + nilai realisasi) =====
+  // InputRealisasi.history tetap mencatat level LANGKAH (approve/reject/edit per step);
+  // RevisionLog di sini mencatat level NILAI (diff lama->baru), digabung dari dua entity:
+  //   'input_realisasi' — koreksi values oleh reviewer (KI) via updateValues.
+  //   'period_target'   — koreksi target KM Sementara oleh PIC REN (langsung atau via resolveTargetFix).
+  async getRevisionHistory(id: string) {
+    const r = await this.prisma.inputRealisasi.findUnique({ where: { id } });
+    if (!r) throw new NotFoundException('Realisasi tidak ditemukan');
+
+    const items = Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>);
+    const periodTargetIds = await this.periodTargetSvc.findPeriodTargetIdsForPackage(r.periodId, r.unitCode, r.bidang, items);
+
+    const [ownRevisions, targetRevisions] = await Promise.all([
+      this.prisma.revisionLog.findMany({ where: { entity: 'input_realisasi', targetId: id }, orderBy: { createdAt: 'desc' } }),
+      periodTargetIds.length > 0
+        ? this.prisma.revisionLog.findMany({ where: { entity: 'period_target', targetId: { in: periodTargetIds } }, orderBy: { createdAt: 'desc' } })
+        : Promise.resolve([]),
+    ]);
+
+    return [...ownRevisions, ...targetRevisions].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   // ===== EVIDENCE (lampiran realisasi) =====
@@ -265,13 +314,16 @@ export class InputRealisasiService {
 
   // Review berjenjang mengikuti `steps`:
   //  approve → maju 1 langkah; bila lewat langkah terakhir → status 'ready' (menunggu bundle GM)
-  //  reject  → 'konseptor' (kembali ke penyusun) atau 'previous' (mundur 1 langkah)
+  //  reject  → 'konseptor' (kembali ke penyusun), 'previous' (mundur 1 langkah), atau
+  //            'target' (masalah pada KM Sementara, bukan realisasi → routing ke PIC REN,
+  //            lihat resolveTargetFix). Seluruh package (KM Sementara + Realisasi) mengikuti
+  //            aturan whole-package bounce — tak ada unlock sebagian.
   async review(
     user: User,
     id: string,
     action: 'approve' | 'reject',
     note?: string,
-    returnTo: 'konseptor' | 'previous' = 'konseptor',
+    returnTo: 'konseptor' | 'previous' | 'target' = 'konseptor',
   ) {
     if (action !== 'approve' && action !== 'reject') throw new BadRequestException('Aksi tidak valid');
     const r = await this.prisma.inputRealisasi.findUnique({ where: { id } });
@@ -285,6 +337,29 @@ export class InputRealisasiService {
       throw new ForbiddenException(`Realisasi ini menunggu langkah "${steps[curIdx]?.label ?? 'lain'}", bukan langkah Anda`);
     }
     const baseHistory = Array.isArray(r.history) ? (r.history as object[]) : [];
+
+    if (action === 'reject' && returnTo === 'target') {
+      const history = [...baseHistory, { stepIndex: curIdx, actor: user.name, role: user.role, action: 'flagged_target', label: steps[curIdx]?.label, note, ts: new Date().toISOString() }];
+      const result = await this.prisma.inputRealisasi.update({
+        where: { id },
+        data: { status: 'target_fix', history, reviewer: user.name, reviewNote: note, reviewedAt: new Date() },
+      });
+      const picRen = await this.prisma.user.findMany({
+        where: { isActive: true, role: Role.STAFF, bidang: RPC_BIDANG, unit: 'KP' },
+      });
+      if (picRen.length) {
+        await this.prisma.notification.createMany({
+          data: picRen.map((u) => ({
+            userId: u.id, type: 'alert', title: 'KM Sementara Perlu Dikoreksi',
+            msg: `${user.name} (${steps[curIdx]?.label}) menandai target KM Sementara ${uname(r.unitCode)} — ${r.bidang} perlu koreksi: ${note}`,
+            route: '/period-target', targetId: id, unread: true,
+          })),
+        });
+      }
+      await this.prisma.auditLog.create({ data: { actor: user.name, userId: user.id, action: 'realisasi.flag_target', entity: 'InputRealisasi', targetId: id, note } });
+      await this.invalidateKinerja(r.periodId, r.unitCode);
+      return result;
+    }
 
     if (action === 'reject') {
       const toPrev = returnTo === 'previous' && curIdx - 1 >= 1;
@@ -347,6 +422,48 @@ export class InputRealisasiService {
     return result;
   }
 
+  // PIC REN mengoreksi KM Sementara untuk package yang di-flag (status 'target_fix').
+  // Setelah dikoreksi, package kembali ke PIC (status 'rejected' — pola yang sama dgn
+  // "kembali ke konseptor") untuk RE-VALIDASI realisasi terhadap target baru sebelum
+  // resubmit — target baru mengubah capaian, jadi PIC harus mengonfirmasi ulang, bukan
+  // langsung lanjut ke review.
+  async resolveTargetFix(
+    user: User,
+    id: string,
+    updates: { kpiAssignmentId: string; target: string }[],
+    note: string,
+  ) {
+    const r = await this.prisma.inputRealisasi.findUnique({ where: { id } });
+    if (!r) throw new NotFoundException('Realisasi tidak ditemukan');
+    if (r.status !== 'target_fix') throw new ForbiddenException('Realisasi ini tidak sedang menunggu koreksi target');
+    if (!this.periodTargetSvc.isPicRen(user)) throw new ForbiddenException('Hanya PIC REN yang dapat menyelesaikan koreksi target');
+    if (!Array.isArray(updates) || updates.length === 0) throw new BadRequestException('Minimal satu koreksi target diperlukan');
+    if (!note?.trim()) throw new BadRequestException('Catatan koreksi wajib diisi');
+
+    for (const u of updates) {
+      await this.periodTargetSvc.updateTarget(user, r.periodId, u.kpiAssignmentId, u.target, note);
+    }
+
+    const baseHistory = Array.isArray(r.history) ? (r.history as object[]) : [];
+    const history = [...baseHistory, { stepIndex: 0, actor: user.name, role: user.role, action: 'target_fixed', note, ts: new Date().toISOString() }];
+    const result = await this.prisma.inputRealisasi.update({
+      where: { id },
+      data: { status: 'rejected', currentStepIndex: 0, currentStage: 0, history, reviewer: user.name, reviewNote: note, reviewedAt: new Date() },
+    });
+    if (r.submitterId) {
+      await this.prisma.notification.create({
+        data: {
+          userId: r.submitterId, type: 'alert', title: 'Target KM Sementara Dikoreksi — Perlu Resubmit',
+          msg: `${user.name} (PIC REN) mengoreksi target KM Sementara ${uname(r.unitCode)} — ${r.bidang}: ${note}. Mohon periksa ulang realisasi & kirim ulang.`,
+          route: '/input-realisasi', targetId: id, unread: true,
+        },
+      });
+    }
+    await this.prisma.auditLog.create({ data: { actor: user.name, userId: user.id, action: 'realisasi.target_fixed', entity: 'InputRealisasi', targetId: id, note } });
+    await this.invalidateKinerja(r.periodId, r.unitCode);
+    return result;
+  }
+
   // ===== BUNDLE periode (persetujuan akhir oleh GM, sekali untuk seluruh komponen) =====
 
   async getBundle(periodId?: string) {
@@ -356,16 +473,18 @@ export class InputRealisasiService {
     if (!period) return { period: null, status: 'open', components: [], total: 0, readyCount: 0, canApprove: false };
 
     const components = await this.prisma.inputRealisasi.findMany({
-      where: { periodId: period.id, status: { in: ['submitted', 'ready', 'approved'] } },
+      where: { periodId: period.id, status: { in: ['submitted', 'target_fix', 'ready', 'approved'] } },
       orderBy: [{ unitCode: 'asc' }, { bidang: 'asc' }],
     });
     const bundle = await this.prisma.realisasiBundle.findUnique({ where: { periodId: period.id } });
     const readyCount = components.filter((c) => c.status === 'ready').length;
     const approvedCount = components.filter((c) => c.status === 'approved').length;
-    const submittedCount = components.filter((c) => c.status === 'submitted').length;
+    // All-or-nothing: package yang masih 'submitted' (dalam review) ATAU 'target_fix'
+    // (menunggu koreksi PIC REN) sama-sama memblokir freeze bundle periode ini.
+    const inProgressCount = components.filter((c) => c.status === 'submitted' || c.status === 'target_fix').length;
     const inflight = components.length;
-    // GM dapat menyetujui bila ada komponen 'ready' & tak ada lagi yang masih dalam proses review.
-    const canApprove = readyCount > 0 && submittedCount === 0;
+    // GM dapat menyetujui bila ada komponen 'ready' & tak ada lagi yang masih dalam proses.
+    const canApprove = readyCount > 0 && inProgressCount === 0;
     return {
       period,
       status: bundle?.status ?? 'open',
@@ -392,18 +511,22 @@ export class InputRealisasiService {
     if (!period) throw new BadRequestException('Periode tidak ditemukan');
 
     const components = await this.prisma.inputRealisasi.findMany({
-      where: { periodId: period.id, status: { in: ['submitted', 'ready'] } },
+      where: { periodId: period.id, status: { in: ['submitted', 'target_fix', 'ready'] } },
     });
     if (components.length === 0) throw new BadRequestException('Tidak ada realisasi yang siap dikonsolidasi pada periode ini');
 
     if (action === 'approve') {
       if (!components.every((c) => c.status === 'ready')) {
-        throw new ForbiddenException('Masih ada komponen yang belum lolos sampai SM Perencanaan & PC');
+        throw new ForbiddenException('Masih ada komponen yang belum lolos sampai SM Perencanaan & PC (termasuk yang menunggu koreksi target)');
       }
       await this.prisma.inputRealisasi.updateMany({
         where: { periodId: period.id, status: 'ready' },
         data: { status: 'approved', reviewer: user.name, reviewedAt: new Date() },
       });
+      // All-or-nothing freeze: living target (KM Sementara) periode ini dibekukan bersamaan
+      // dengan persetujuan bundle — nilai target-of-record tak lagi bisa dikoreksi PIC REN
+      // sampai KM Final tiba & memicu restatement.
+      await this.periodTargetSvc.freezePeriod(period.id);
     } else {
       // tolak seluruh bundle → kembalikan komponen 'ready' ke konseptor
       await this.prisma.inputRealisasi.updateMany({

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
-import { inputRealisasi, inputKontrak, meta } from '../lib/api';
+import { inputRealisasi, inputKontrak, meta, periodTarget, type PeriodTarget, type RevisionLogEntry } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { ClipboardEdit, CheckCircle, Clock, Trash2, Paperclip, Upload, X } from 'lucide-react';
+import { ClipboardEdit, CheckCircle, Clock, Trash2, Paperclip, Upload, X, History } from 'lucide-react';
 import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
 import ReviewerPickerModal from '../components/ReviewerPickerModal';
 import type { KontrakManajemen, Period } from '../lib/types';
@@ -18,16 +18,29 @@ const BIDANG_SORT: Record<string, number> = {
 };
 
 type KpiItem = {
-  no?: number;
-  indikator?: string;
-  formula?: string;
-  satuan?: string;
-  bobot?: number | string;
-  target?: number | string;
-  target2?: number | string;
-  bidang?: string;
-  realisasi?: number | string;
+  no?: number; indikator?: string; formula?: string; satuan?: string;
+  bobot?: number | string; target?: number | string; target2?: number | string;
+  bidang?: string; realisasi?: number | string;
+  masterKpiId?: string; // tautan ke KpiAssignment untuk resolusi living target (KM Sementara)
 };
+
+// Fase 5: RevisionLog field='values' menyimpan seluruh blob values lama/baru — tampilkan
+// hanya baris realisasi yang benar-benar berubah (bukan seluruh objek mentah).
+function RealisasiDiff({ oldValue, newValue }: { oldValue: unknown; newValue: unknown }) {
+  const oldItems = (oldValue ?? {}) as Record<string, { indikator?: string; realisasi?: unknown }>;
+  const newItems = (newValue ?? {}) as Record<string, { indikator?: string; realisasi?: unknown }>;
+  const changed = Object.keys(newItems).filter((k) => String(oldItems[k]?.realisasi ?? '') !== String(newItems[k]?.realisasi ?? ''));
+  if (changed.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>Nilai realisasi diperbarui.</span>;
+  return (
+    <div>
+      {changed.map((k) => (
+        <div key={k}>
+          {newItems[k]?.indikator ?? k}: <b>{String(oldItems[k]?.realisasi ?? '—')}</b> → <b>{String(newItems[k]?.realisasi ?? '—')}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft",
@@ -65,6 +78,7 @@ export function InputRealisasiPage() {
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [history, setHistory] = useState<unknown[]>([]);
   const [kpiList, setKpiList] = useState<KpiItem[]>([]);
+  const [periodTargets, setPeriodTargets] = useState<PeriodTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -75,6 +89,10 @@ export function InputRealisasiPage() {
   const [evidOpen, setEvidOpen] = useState<string | null>(null);
   const [evidBusy, setEvidBusy] = useState(false);
   const evidInputRef = useRef<HTMLInputElement>(null);
+  // Fase 5: timeline riwayat revisi (target + nilai realisasi) per package
+  const [revOpen, setRevOpen] = useState<string | null>(null);
+  const [revisions, setRevisions] = useState<RevisionLogEntry[]>([]);
+  const [revLoading, setRevLoading] = useState(false);
 
   const reloadHistory = async () => {
     const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
@@ -105,10 +123,16 @@ export function InputRealisasiPage() {
       alert((e as Error)?.message ?? "Gagal menghapus");
     }
   };
-  const fmtSize = (b: number) =>
-    b > 1048576
-      ? (b / 1048576).toFixed(1) + " MB"
-      : Math.max(1, Math.round(b / 1024)) + " KB";
+
+  // Fase 5: buka/tutup timeline riwayat revisi (target + nilai realisasi) untuk satu package.
+  const toggleRevisions = async (id: string) => {
+    if (revOpen === id) { setRevOpen(null); return; }
+    setRevOpen(id); setRevLoading(true);
+    try { setRevisions(await inputRealisasi.revisions(id)); }
+    catch { setRevisions([]); }
+    finally { setRevLoading(false); }
+  };
+  const fmtSize = (b: number) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 
   // Default unit mengikuti unit user (bila ada). Bila tidak bisa pilih bebas, unit dikunci.
   useEffect(() => {
@@ -138,13 +162,15 @@ export function InputRealisasiPage() {
         const periodObj = periods.find((p) => p.id === selectedPeriodId);
         const selectedYear = periodObj?.yearMonth?.slice(0, 4);
         const kmType = periodObj?.kmReference ?? 'draft';
-        const [histRes, approvedRes] = await Promise.allSettled([
+        const [histRes, approvedRes, ptRes] = await Promise.allSettled([
           inputRealisasi.history(selectedUnit, selectedPeriodId),
           inputKontrak.approved(selectedUnit, selectedYear, kmType),
+          periodTarget.list(selectedPeriodId),
         ]);
-        if (histRes.status === "fulfilled")
-          setHistory(histRes.value as unknown[]);
-        if (approvedRes.status === "fulfilled") {
+        if (histRes.status === 'fulfilled') setHistory(histRes.value as unknown[]);
+        // Living-target: KM Sementara per assignment periode ini (untuk package view).
+        setPeriodTargets(ptRes.status === 'fulfilled' ? ptRes.value : []);
+        if (approvedRes.status === 'fulfilled') {
           // Acuan realisasi = KPI dari Kontrak Manajemen yang sudah DISETUJUI (final GM) untuk unit terpilih.
           const kontrak = approvedRes.value as KontrakManajemen[];
           let merged: KpiItem[] = kontrak.flatMap((k) =>
@@ -252,6 +278,16 @@ export function InputRealisasiPage() {
   const fillWindow = selectedPeriod?.fillWindow;
   const windowOpen = fillWindow ? fillWindow.isOpen : true; // belum ada data window → jangan blokir UI
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  // Living-target: KM Sementara yang berlaku untuk satu KPI row (cocokkan masterKpiId + unit + bidang).
+  const livingTargetFor = (kpi: KpiItem): PeriodTarget | undefined =>
+    kpi.masterKpiId
+      ? periodTargets.find((pt) => pt.assignment
+          && pt.assignment.kpiMasterId === kpi.masterKpiId
+          && pt.assignment.unitCode === selectedUnit
+          && pt.assignment.bidang === (kpi.bidang ?? ''))
+      : undefined;
+  const anyLivingTarget = kpiList.some((k) => livingTargetFor(k));
 
   return (
     <div className="page input-realisasi-page">
@@ -436,97 +472,66 @@ export function InputRealisasiPage() {
               message="Belum ada Kontrak Manajemen yang disetujui (final GM) untuk unit Anda. Selesaikan persetujuan KM terlebih dahulu di menu Input Kontrak Manajemen → Persetujuan."
             />
           ) : (
-            <div className="table-scroll able-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>No</th>
-                    <th>Bidang</th>
-                    <th>Indikator</th>
-                    <th>Formula</th>
-                    <th>Satuan</th>
-                    <th className="num">Bobot</th>
-                    <th className="num">Target Sem I</th>
-                    <th className="num">Target {CURRENT_YEAR}</th>
-                    <th className="num">Realisasi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpiList.map((kpi, i) => {
-                    const val = values[String(i)] ?? "";
-                    const hasVal = val.trim() !== "";
-                    return (
-                      <tr
-                        key={i}
-                        style={{
-                          background: hasVal
-                            ? "rgba(34,197,94,0.03)"
-                            : "transparent",
-                        }}>
-                        <td style={{ color: "var(--color-text-muted)" }}>
-                          {kpi.no ?? i + 1}
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Bidang</th>
+                  <th>Indikator</th>
+                  <th>Formula</th>
+                  <th>Satuan</th>
+                  <th className="num">Bobot</th>
+                  <th className="num">Target Sem I</th>
+                  <th className="num">Target {CURRENT_YEAR}</th>
+                  {anyLivingTarget && <th className="num" title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">KM Sementara</th>}
+                  <th>Realisasi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpiList.map((kpi, i) => {
+                  const val = values[String(i)] ?? '';
+                  const hasVal = val.trim() !== '';
+                  const lt = livingTargetFor(kpi);
+                  return (
+                    <tr key={i} style={{ background: hasVal ? 'rgba(34,197,94,0.03)' : 'transparent' }}>
+                      <td style={{ color: 'var(--color-text-muted)' }}>{kpi.no ?? i + 1}</td>
+                      <td style={{ fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{kpi.bidang ?? '—'}</td>
+                      <td style={{ maxWidth: 220, fontWeight: 500 }}>{kpi.indikator ?? '—'}</td>
+                      <td style={{ fontSize: 10, color: 'var(--color-text-muted)', maxWidth: 200 }}>{kpi.formula ?? '—'}</td>
+                      <td style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{kpi.satuan ?? '—'}</td>
+                      <td className="num" style={{ fontWeight: 700, color: 'var(--color-accent)' }}>{kpi.bobot ?? '—'}</td>
+                      <td className="num">{kpi.target ?? '—'}</td>
+                      <td className="num">{kpi.target2 ?? '—'}</td>
+                      {anyLivingTarget && (
+                        <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                          {lt ? (
+                            <>
+                              <span style={{ fontWeight: 700 }}>{lt.frozen ? (lt.frozenTarget ?? lt.target) : lt.target}</span>
+                              <span
+                                title={lt.frozen ? 'Sudah dibekukan (bundle GM disetujui / deadline / restatement)' : lt.source === 'carried' ? 'Dibawa dari bulan lalu (belum diubah)' : 'Diinput/diubah bulan ini'}
+                                style={{ marginLeft: 4, fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 4, border: '1px solid var(--color-border)', color: lt.frozen ? 'var(--color-text-muted)' : lt.source === 'carried' ? 'var(--color-warning)' : 'var(--color-accent)' }}
+                              >
+                                {lt.frozen ? 'BEKU' : lt.source === 'carried' ? 'CARRY' : 'HIDUP'}
+                              </span>
+                            </>
+                          ) : <span style={{ color: 'var(--color-text-subtle)' }}>—</span>}
                         </td>
-                        <td
-                          style={{
-                            color: "var(--color-text-muted)",
-                            whiteSpace: "nowrap",
-                          }}>
-                          {kpi.bidang ?? "—"}
-                        </td>
-                        <td style={{ maxWidth: 220, fontWeight: 500 }}>
-                          {kpi.indikator ?? "—"}
-                        </td>
-                        <td
-                          style={{
-                            fontSize: 14,
-                            color: "var(--color-text-muted)",
-                            maxWidth: 200,
-                          }}>
-                          {kpi.formula ?? "—"}
-                        </td>
-                        <td
-                          style={{
-                            color: "var(--color-text-muted)",
-                            whiteSpace: "nowrap",
-                          }}>
-                          {kpi.satuan ?? "—"}
-                        </td>
-                        <td
-                          className="num"
-                          style={{
-                            fontWeight: 700,
-                            color: "var(--color-accent)",
-                          }}>
-                          {kpi.bobot ?? "—"}
-                        </td>
-                        <td className="num">{kpi.target ?? "—"}</td>
-                        <td className="num">{kpi.target2 ?? "—"}</td>
-                        <td style={{ minWidth: 340 }}>
-                          <input
-                            type="text"
-                            className="form-input form-input-sm"
-                            style={{
-                              borderColor: hasVal
-                                ? "rgba(34,197,94,0.5)"
-                                : undefined,
-                              fontWeight: hasVal ? 600 : undefined,
-                            }}
-                            value={val}
-                            onChange={(e) =>
-                              setValues((v) => ({
-                                ...v,
-                                [String(i)]: e.target.value,
-                              }))
-                            }
-                            placeholder={`Target: ${kpi.target ?? "—"}`}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      )}
+                      <td style={{ minWidth: 140 }}>
+                        <input
+                          type="text"
+                          className="form-input form-input-sm"
+                          style={{ borderColor: hasVal ? 'rgba(34,197,94,0.5)' : undefined }}
+                          value={val}
+                          onChange={e => setValues(v => ({ ...v, [String(i)]: e.target.value }))}
+                          placeholder={`Target: ${kpi.target ?? '—'}`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
         {kpiList.length > 0 && (
@@ -554,245 +559,132 @@ export function InputRealisasiPage() {
             </div>
             <span className="card-meta">{history.length} entri</span>
           </div>
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
-             <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>Submitter</th>
-                    <th>Status</th>
-                    <th>Tanggal Submit</th>
-                    <th style={{ width: 90, textAlign: "center" }}>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((h, i) => {
-                    const item = h as Record<string, unknown>;
-                    const status = String(item.status ?? "");
-                    const itemSteps =
-                      (item.steps as { label?: string }[] | undefined) ?? [];
-                    const stepLabel =
-                      itemSteps[Number(item.currentStepIndex ?? 0)]?.label;
-                    const canDelete =
-                      status !== "approved" &&
-                      (item.submitterId === user?.id || user?.role === "GM");
-                    const atts =
-                      (item.attachments as
-                        | Array<{ id: string; name: string; size: number }>
-                        | undefined) ?? [];
-                    const rid = item.id as string;
-                    return (
-                      <Fragment key={i}>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>
-                            {(item.unitCode as string) ?? "—"}
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                            }}>
-                            {(item.bidang as string) ?? "—"}
-                          </td>
-                          <td>{(item.submitter as string) ?? "—"}</td>
-                          <td>
-                            <span
-                              className={`status-pill ${STATUS_PILL[status] ?? "in-review"}`}>
-                              {STATUS_LABEL[status] ?? status}
-                            </span>
-                            {status === "submitted" && stepLabel && (
-                              <div
-                                style={{
-                                  color: "var(--color-text-muted)",
-                                  marginTop: 4,
-                                  fontSize: 14,
-                                  fontWeight: 500,
-                                }}>
-                                di {stepLabel}
-                              </div>
-                            )}
-                            {status === "rejected" && item.reviewNote ? (
-                              <div
-                                style={{
-                                  color: "var(--color-danger)",
-                                  marginTop: 4,
-                                  maxWidth: 240,
-                                  fontSize: 14,
-                                  fontWeight: 500,
-                                }}>
-                                {item.reviewNote as string}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td style={{ color: "var(--color-text-muted)" }}>
-                            {item.submittedAt
-                              ? new Date(
-                                  item.submittedAt as string,
-                                ).toLocaleDateString("id-ID", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : "—"}
-                          </td>
-                          <td>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 6,
-                                alignItems: "center",
-                                width: "100%",
-                              }}>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{
-                                  fontSize: 14,
-                                  textAlign: "center",
-                                  gap: 4,
-                                  width: "100%",
-                                }}
-                                onClick={() =>
-                                  setEvidOpen(evidOpen === rid ? null : rid)
-                                }
-                                title="Lampiran evidence">
-                                <Paperclip size={14} /> {atts.length}
-                              </button>
-                              {canDelete && (
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => handleDelete(rid)}
-                                  title="Hapus realisasi"
-                                  style={{ color: "var(--color-danger)" }}>
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        {evidOpen === rid && (
-                          <tr>
-                            <td
-                              colSpan={6}
-                              style={{
-                                background: "var(--color-surface-2)",
-                                padding: "var(--space-3)",
-                              }}>
-                              <div
-                                style={{
-                                  fontSize: 14,
-                                  fontWeight: 600,
-                                  marginBottom: 6,
-                                }}>
-                                Evidence Realisasi
-                              </div>
-                              {atts.length === 0 ? (
-                                <div
-                                  style={{
-                                    fontSize: 12,
-                                    color: "var(--color-text-muted)",
-                                    marginBottom: 6,
-                                  }}>
-                                  Belum ada berkas.
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 4,
-                                    marginBottom: 8,
-                                  }}>
-                                  {atts.map((a) => (
-                                    <div
-                                      key={a.id}
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 8,
-                                        fontSize: 14,
-                                      }}>
-                                      <Paperclip
-                                        size={12}
-                                        style={{
-                                          color: "var(--color-text-muted)",
-                                        }}
-                                      />
-                                      <a
-                                        href={inputRealisasi.evidenceUrl(
-                                          rid,
-                                          a.id,
-                                        )}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        style={{
-                                        fontWeight: 600,
-                                        }}>
-                                        {a.name}
-                                      </a>
-                                      <span
-                                        style={{
-                                          color: "var(--color-text-subtle)",
-                                        }}>
-                                        ({fmtSize(a.size)})
-                                      </span>
-                                      <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() =>
-                                          handleDeleteEvid(rid, a.id)
-                                        }
-                                        title="Hapus berkas"
-                                        style={{
-                                          color: "var(--color-danger)",
-                                          padding: "0 4px",
-                                        }}>
-                                        <X size={12} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <input
-                                ref={evidInputRef}
-                                type="file"
-                                multiple
-                                accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png"
-                                style={{ display: "none" }}
-                                onChange={(e) =>
-                                  handleUploadEvid(rid, e.target.files)
-                                }
-                              />
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                  style={{
-                                    fontSize: 14,
-                                  }}
-                                disabled={evidBusy || atts.length >= 5}
-                                onClick={() => evidInputRef.current?.click()}>
-                                <Upload size={12} />{" "}
-                                {evidBusy ? "Mengunggah…" : "Unggah Evidence"}
-                              </button>
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  color: "var(--color-text-muted)",
-                                  marginLeft: 8,
-                                }}>
-                                Maks 5 berkas · ≤ 10 MB/berkas · PDF, Excel,
-                                Word, JPG/PNG{" "}
-                                {atts.length >= 5 ? "· (batas tercapai)" : ""}
-                              </span>
-                            </td>
-                          </tr>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Unit</th>
+                  <th>Bidang</th>
+                  <th>Submitter</th>
+                  <th>Status</th>
+                  <th>Tanggal Submit</th>
+                  <th style={{ width: 90 }}>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h, i) => {
+                  const item = h as Record<string, unknown>;
+                  const status = String(item.status ?? '');
+                  const itemSteps = (item.steps as { label?: string }[] | undefined) ?? [];
+                  const stepLabel = itemSteps[Number(item.currentStepIndex ?? 0)]?.label;
+                  const canDelete = status !== 'approved'
+                    && (item.submitterId === user?.id || user?.role === 'GM');
+                  const atts = (item.attachments as Array<{ id: string; name: string; size: number }> | undefined) ?? [];
+                  const rid = item.id as string;
+                  return (
+                    <Fragment key={i}>
+                    <tr>
+                      <td style={{ fontWeight: 600 }}>{item.unitCode as string ?? '—'}</td>
+                      <td style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{item.bidang as string ?? '—'}</td>
+                      <td>{item.submitter as string ?? '—'}</td>
+                      <td>
+                        <span className={`status-pill ${STATUS_PILL[status] ?? 'in-review'}`} style={{ fontSize: 10 }}>
+                          {STATUS_LABEL[status] ?? status}
+                        </span>
+                        {status === 'submitted' && stepLabel && (
+                          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>di {stepLabel}</div>
                         )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-             </div>
+                        {status === 'rejected' && item.reviewNote ? (
+                          <div style={{ fontSize: 10, color: 'var(--color-danger)', marginTop: 2, maxWidth: 240 }}>{item.reviewNote as string}</div>
+                        ) : null}
+                      </td>
+                      <td style={{ color: 'var(--color-text-muted)' }}>
+                        {item.submittedAt ? new Date(item.submittedAt as string).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setEvidOpen(evidOpen === rid ? null : rid)} title="Lampiran evidence">
+                            <Paperclip size={14} /> {atts.length}
+                          </button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => toggleRevisions(rid)} title="Riwayat revisi (target & nilai realisasi)">
+                            <History size={14} />
+                          </button>
+                          {canDelete && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(rid)} title="Hapus realisasi" style={{ color: 'var(--color-danger)' }}>
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {evidOpen === rid && (
+                      <tr>
+                        <td colSpan={6} style={{ background: 'var(--color-surface-2)', padding: 'var(--space-3)' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6 }}>Evidence Realisasi</div>
+                          {atts.length === 0 ? (
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6 }}>Belum ada berkas.</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+                              {atts.map((a) => (
+                                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                                  <Paperclip size={12} style={{ color: 'var(--color-text-muted)' }} />
+                                  <a href={inputRealisasi.evidenceUrl(rid, a.id)} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{a.name}</a>
+                                  <span style={{ color: 'var(--color-text-subtle)' }}>({fmtSize(a.size)})</span>
+                                  <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteEvid(rid, a.id)} title="Hapus berkas" style={{ color: 'var(--color-danger)', padding: '0 4px' }}><X size={12} /></button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <input ref={evidInputRef} type="file" multiple accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={(e) => handleUploadEvid(rid, e.target.files)} />
+                          <button className="btn btn-secondary btn-sm" disabled={evidBusy || atts.length >= 5} onClick={() => evidInputRef.current?.click()}>
+                            <Upload size={12} /> {evidBusy ? 'Mengunggah…' : 'Unggah Evidence'}
+                          </button>
+                          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 8 }}>
+                            Maks 5 berkas · ≤ 10 MB/berkas · PDF, Excel, Word, JPG/PNG {atts.length >= 5 ? '· (batas tercapai)' : ''}
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    {revOpen === rid && (
+                      <tr>
+                        <td colSpan={6} style={{ background: 'var(--color-surface-2)', padding: 'var(--space-3)' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6 }}>Riwayat Revisi (Target & Nilai Realisasi)</div>
+                          {revLoading ? (
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Memuat…</div>
+                          ) : revisions.length === 0 ? (
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Belum ada revisi tercatat untuk package ini.</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {revisions.map((rv) => (
+                                <div key={rv.id} style={{ display: 'flex', gap: 8, fontSize: 11, alignItems: 'flex-start', borderLeft: `2px solid ${rv.entity === 'period_target' ? 'var(--color-accent)' : 'var(--color-warning)'}`, paddingLeft: 8 }}>
+                                  <span
+                                    style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, whiteSpace: 'nowrap', background: rv.entity === 'period_target' ? 'var(--color-accent-tint)' : 'var(--color-warning-tint)', color: rv.entity === 'period_target' ? 'var(--color-accent)' : 'var(--color-warning)' }}
+                                  >
+                                    {rv.entity === 'period_target' ? 'TARGET (PIC REN)' : 'REALISASI (KI)'}
+                                  </span>
+                                  <div style={{ flex: 1 }}>
+                                    {rv.field === 'target' ? (
+                                      <span>Target: <b>{String(rv.oldValue ?? '—')}</b> → <b>{String(rv.newValue ?? '—')}</b></span>
+                                    ) : (
+                                      <RealisasiDiff oldValue={rv.oldValue} newValue={rv.newValue} />
+                                    )}
+                                    <div style={{ color: 'var(--color-text-muted)', fontSize: 10, marginTop: 2 }}>
+                                      {rv.actor} · {new Date(rv.createdAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      {rv.note && ` · "${rv.note}"`}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { ShieldAlert, Trash2, CheckCircle, AlertCircle, Database, MessageCircle, PlayCircle, Eye, GitMerge } from 'lucide-react';
+import { ShieldAlert, Trash2, CheckCircle, AlertCircle, Database, MessageCircle, PlayCircle, Eye, GitMerge, Sprout } from 'lucide-react';
 import { admin } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { usePeriod } from '../context/PeriodContext';
@@ -18,6 +18,8 @@ type BackfillPreview = {
   details: Array<{ kmType: string; indikator: string; assignmentCount: number; docCount: number }>;
 };
 type BackfillResult = { mastersCreated: number; assignmentsCreated: number; docsTagged: number };
+type PtBackfillPreview = { periodId: string; periodLabel: string; totalAssignments: number; alreadySeeded: number; toSeed: number };
+type PtBackfillResult = { created: number; carried: number; fresh: number };
 
 export function AdminPage() {
   const { user } = useAuth();
@@ -35,6 +37,12 @@ export function AdminPage() {
   const [bfBusy, setBfBusy] = useState(false);
   const [bfResult, setBfResult] = useState<BackfillResult | null>(null);
   const [bfError, setBfError] = useState<string | null>(null);
+
+  // Fase 6: backfill KM Sementara (PeriodTarget) untuk periode terpilih di topbar.
+  const [ptPreview, setPtPreview] = useState<PtBackfillPreview | null>(null);
+  const [ptBusy, setPtBusy] = useState(false);
+  const [ptResult, setPtResult] = useState<PtBackfillResult | null>(null);
+  const [ptError, setPtError] = useState<string | null>(null);
 
   const loadWaLogs = () => admin.whatsappLogs().then((d) => setWaLogs(d as WhatsappLog[])).catch(() => {});
   const loadWaPreview = () => {
@@ -84,6 +92,41 @@ export function AdminPage() {
       setBfError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Backfill gagal');
     } finally {
       setBfBusy(false);
+    }
+  };
+
+  const loadPtBackfillPreview = () => {
+    if (!periodId) return;
+    setPtError(null);
+    admin.backfillPeriodTargetPreview(periodId)
+      .then((d) => setPtPreview(d as PtBackfillPreview))
+      .catch((e) => setPtError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal memuat preview backfill'));
+  };
+
+  useEffect(() => {
+    if (user?.role !== 'SUPERADMIN' && user?.role !== 'DEVELOPER') return;
+    setPtResult(null);
+    loadPtBackfillPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodId, user?.role]);
+
+  const handleRunPtBackfill = async () => {
+    if (!ptPreview || !periodId || ptPreview.toSeed === 0) return;
+    const confirmed = window.confirm(
+      `Backfill akan membuat ${ptPreview.toSeed} baris KM Sementara (PeriodTarget) untuk periode ${ptPreview.periodLabel} — carry-forward dari bulan sebelumnya bila sudah dibekukan, atau fresh dari target KPI Master. Diperlukan agar restatement KM Final nanti tidak melewati periode ini. Lanjutkan?`
+    );
+    if (!confirmed) return;
+    setPtBusy(true);
+    setPtResult(null);
+    setPtError(null);
+    try {
+      const res = await admin.backfillPeriodTargetRun(periodId);
+      setPtResult(res as PtBackfillResult);
+      loadPtBackfillPreview();
+    } catch (e) {
+      setPtError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Backfill gagal');
+    } finally {
+      setPtBusy(false);
     }
   };
 
@@ -368,6 +411,60 @@ export function AdminPage() {
               >
                 <GitMerge size={15} /> {bfBusy ? 'Menjalankan backfill…' : `Backfill ${bfPreview.mastersToCreate} KPI Master`}
               </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ borderLeft: '4px solid var(--color-accent)', maxWidth: 720, marginTop: 'var(--space-4)' }}>
+        <div className="card-header compact">
+          <div className="card-title"><Sprout size={14} /> Backfill KM Sementara (Fase 6 — Living Target)</div>
+        </div>
+        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
+            Materialisasi baris <b>KM Sementara</b> (PeriodTarget) untuk periode yang sedang dipilih
+            di topbar — carry-forward dari bulan sebelumnya bila sudah dibekukan, atau fresh dari
+            target KPI Master. Periode tanpa baris PeriodTarget sama sekali akan <b>dilewati</b> saat
+            restatement KM Final tiba — jalankan backfill ini dulu untuk bulan-bulan lama sebelum
+            mengubah acuan KM ke Final.
+          </p>
+
+          {ptError && (
+            <div className="status-banner danger" style={{ fontSize: 'var(--text-xs)' }}>
+              <AlertCircle size={14} /> {ptError}
+            </div>
+          )}
+          {ptResult && (
+            <div className="status-banner success" style={{ fontSize: 'var(--text-xs)' }}>
+              <CheckCircle size={14} />
+              Selesai: {ptResult.created} baris dibuat ({ptResult.carried} carry-forward, {ptResult.fresh} fresh).
+            </div>
+          )}
+
+          {!periodId ? (
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Pilih periode di topbar terlebih dahulu.</div>
+          ) : !ptPreview ? (
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Memuat preview…</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 'var(--text-xs)' }}>
+                Periode <b>{ptPreview.periodLabel}</b>: {ptPreview.alreadySeeded} dari {ptPreview.totalAssignments} assignment sudah punya KM Sementara.{' '}
+                {ptPreview.toSeed === 0 ? (
+                  <span style={{ color: 'var(--color-success)' }}>Sudah lengkap — tidak perlu backfill.</span>
+                ) : (
+                  <span style={{ fontWeight: 700 }}>{ptPreview.toSeed} assignment akan dibuatkan baris baru.</span>
+                )}
+              </div>
+              {ptPreview.toSeed > 0 && (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleRunPtBackfill}
+                  disabled={ptBusy}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  <Sprout size={15} /> {ptBusy ? 'Menjalankan backfill…' : `Backfill ${ptPreview.toSeed} KM Sementara`}
+                </button>
+              )}
             </>
           )}
         </div>

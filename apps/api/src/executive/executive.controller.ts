@@ -10,8 +10,8 @@ export class ExecutiveController {
   constructor(private svc: ExecutiveService) {}
 
   @Get('summary')
-  summary(@Query('periodId') periodId?: string) {
-    return this.svc.getSummary(periodId);
+  summary(@Query('periodId') periodId?: string, @Query('phase') phase?: 'sementara' | 'final') {
+    return this.svc.getSummary(periodId, phase === 'sementara' || phase === 'final' ? phase : undefined);
   }
 
   @Post('refresh')

@@ -1,35 +1,12 @@
-import { useEffect, useState, Fragment, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
-import {
-  approvals as approvalsApi,
-  inputKontrak,
-  inputRealisasi,
-  meta as metaApi,
-  admin,
-} from "../lib/api";
-import { useAuth } from "../context/AuthContext";
-import { usePeriod } from "../context/PeriodContext";
-import { useNotif } from "../context/NotifContext";
-import type { Report, KontrakManajemen, RealisasiKinerja } from "../lib/types";
-import {
-  CheckCircle,
-  XCircle,
-  Clock,
-  CalendarClock,
-  FileText,
-  UsersRound,
-  FileSignature,
-  ChevronDown,
-  ClipboardCheck,
-  Timer,
-  MessageSquare,
-  Pencil,
-  Layers,
-  Printer,
-  Unlock,
-  Lock,
-} from "lucide-react";
-import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
+import { useEffect, useState, Fragment, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { approvals as approvalsApi, inputKontrak, inputRealisasi, meta as metaApi, admin, periodTarget, type PeriodTarget } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { usePeriod } from '../context/PeriodContext';
+import { useNotif } from '../context/NotifContext';
+import type { Report, KontrakManajemen, RealisasiKinerja } from '../lib/types';
+import { CheckCircle, XCircle, Clock, CalendarClock, FileText, UsersRound, FileSignature, ChevronDown, ClipboardCheck, Timer, MessageSquare, Pencil, Layers, Printer, Unlock, Lock } from 'lucide-react';
+import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
 
 // Badge SLA approval (Task 6): hari tersisa hingga deadline tahap berjalan.
 function SlaBadge({ days }: { days?: number | null }) {
@@ -548,9 +525,9 @@ export function ApprovalsPage() {
   // Review usulan Kontrak Manajemen (untuk Asman ke atas)
   // Reviewer = bukan Staff penyusun. PENGECUALIAN: Staff Kinerja Perencanaan (RPC) adalah
   // konsolidator pada workflow (langkah Staff RPC), sehingga butuh fungsi review/teruskan.
-  const canReview =
-    !!user &&
-    (user.role !== "STAFF" || user.bidang === "Perencanaan & Project Control");
+  const canReview = !!user && (user.role !== 'STAFF' || user.bidang === 'Perencanaan & Project Control');
+  // PIC REN = Staff Perencanaan (RPC) di Kantor Induk — warden target KM Sementara (living-target).
+  const isPicRen = !!user && ((user.role === 'STAFF' && user.bidang === 'Perencanaan & Project Control' && user.unit === 'KP') || user.role === 'SUPERADMIN' || user.role === 'DEVELOPER');
   const [kmList, setKmList] = useState<KontrakManajemen[]>([]);
   const [kmNote, setKmNote] = useState("");
   const [kmTarget, setKmTarget] = useState<string | null>(null);
@@ -568,6 +545,13 @@ export function ApprovalsPage() {
   // B2-5: edit nilai realisasi saat review (per layer)
   const [realEditId, setRealEditId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
+
+  // Living-target: koreksi KM Sementara oleh PIC REN untuk package berstatus 'target_fix'.
+  const [picRenTargets, setPicRenTargets] = useState<PeriodTarget[]>([]);
+  const [tfxExpanded, setTfxExpanded] = useState<string | null>(null);
+  const [tfxValues, setTfxValues] = useState<Record<string, string>>({}); // masterKpiId -> target baru
+  const [tfxNote, setTfxNote] = useState('');
+  const [tfxBusy, setTfxBusy] = useState(false);
 
   // Semua dokumen yang diinput manual (KM + Realisasi) — untuk kartu ringkasan & registri
   const [allKm, setAllKm] = useState<KontrakManajemen[]>([]);
@@ -745,11 +729,53 @@ export function ApprovalsPage() {
     loadKmBundle();
   }, [periodId, kmBundleType]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleKmBundleKPReview = async (action: "approve" | "reject") => {
-    if (!kmBundleKPNote.trim()) {
-      alert("Catatan/komentar wajib diisi");
-      return;
+  // Living-target: muat KM Sementara periode ini untuk pemetaan koreksi target (PIC REN).
+  const loadPicRenTargets = () => {
+    if (!isPicRen || !periodId) { setPicRenTargets([]); return; }
+    periodTarget.list(periodId).then((d) => setPicRenTargets(d)).catch(() => setPicRenTargets([]));
+  };
+  useEffect(() => { loadPicRenTargets(); }, [periodId, isPicRen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Package berstatus 'target_fix' (menunggu koreksi target PIC REN) untuk periode terpilih.
+  const targetFixList = (allReal as RealisasiKinerja[]).filter(
+    (r) => r.status === 'target_fix' && (!periodId || r.periodId === periodId),
+  );
+  // Peta masterKpiId -> { assignmentId, livingTarget, frozen } untuk (unit,bidang) tertentu.
+  const assignmentForItem = (unitCode: string, bidang: string, masterKpiId?: string): PeriodTarget | undefined =>
+    masterKpiId
+      ? picRenTargets.find((pt) => pt.assignment
+          && pt.assignment.kpiMasterId === masterKpiId
+          && pt.assignment.unitCode === unitCode
+          && pt.assignment.bidang === bidang)
+      : undefined;
+
+  const handleResolveTargetFix = async (rl: RealisasiKinerja) => {
+    if (!tfxNote.trim()) { alert('Catatan koreksi target wajib diisi'); return; }
+    const bidang = (rl as RealisasiKinerja & { bidang?: string }).bidang ?? '';
+    const updates: Array<{ kpiAssignmentId: string; target: string }> = [];
+    for (const it of Object.values(rl.values ?? {}) as Record<string, unknown>[]) {
+      const masterKpiId = it['masterKpiId'] as string | undefined;
+      const pt = assignmentForItem(rl.unitCode, bidang, masterKpiId);
+      const newVal = tfxValues[masterKpiId ?? ''];
+      if (pt?.assignment && newVal != null && newVal.trim() !== '' && newVal.trim() !== pt.target) {
+        updates.push({ kpiAssignmentId: pt.assignment.id, target: newVal.trim() });
+      }
     }
+    if (updates.length === 0) { alert('Ubah minimal satu target KM Sementara sebelum menyimpan koreksi.'); return; }
+    setTfxBusy(true);
+    try {
+      await inputRealisasi.resolveTargetFix(rl.id, updates, tfxNote.trim());
+      setTfxExpanded(null); setTfxValues({}); setTfxNote('');
+      loadDocs(); loadPicRenTargets(); refreshNotif();
+    } catch (e) {
+      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan koreksi target');
+    } finally {
+      setTfxBusy(false);
+    }
+  };
+
+  const handleKmBundleKPReview = async (action: 'approve' | 'reject') => {
+    if (!kmBundleKPNote.trim()) { alert('Catatan/komentar wajib diisi'); return; }
     setKmBundleKPBusy(true);
     try {
       await inputKontrak.reviewBundle(
@@ -1469,11 +1495,7 @@ export function ApprovalsPage() {
     return () => clearTimeout(t);
   }, [loading, focusType, focusId, realList, kmList]);
 
-  const handleRealReview = async (
-    id: string,
-    action: "approve" | "reject",
-    returnTo?: "konseptor" | "previous",
-  ) => {
+  const handleRealReview = async (id: string, action: 'approve' | 'reject', returnTo?: 'konseptor' | 'previous' | 'target') => {
     // Task 3: komentar wajib untuk setiap keputusan (setujui maupun kembalikan).
     if (!realNote.trim()) {
       alert(
@@ -3130,6 +3152,85 @@ export function ApprovalsPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+        </FoldCard>
+      )}
+
+      {/* Living-target: Koreksi Target KM Sementara — hanya PIC REN (warden target) */}
+      {isPicRen && (
+        <FoldCard
+          id="card-target-fix"
+          accent="var(--color-accent)"
+          icon={<Pencil size={14} />}
+          title="Koreksi Target KM Sementara (PIC REN)"
+          right={<span className="status-pill" style={{ background: 'var(--color-accent-tint)', color: 'var(--color-accent)', fontWeight: 'bold' }}>{targetFixList.length} package</span>}
+        >
+          {targetFixList.length === 0 ? (
+            <div className="card-body"><EmptyState title="Tidak ada koreksi target tertunda" message="Package akan muncul di sini saat reviewer mengembalikannya dengan alasan 'Masalah Target'." /></div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {targetFixList.map((rl) => {
+                const bidang = (rl as RealisasiKinerja & { bidang?: string }).bidang ?? '';
+                const items = Object.values(rl.values ?? {}) as Record<string, unknown>[];
+                const open = tfxExpanded === rl.id;
+                return (
+                  <div key={rl.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-2) var(--space-4)' }}>
+                      <div style={{ fontSize: 'var(--text-sm)' }}>
+                        <b>{UNIT_NAMES[rl.unitCode] ?? rl.unitCode}</b> — {bidang} <span style={{ color: 'var(--color-text-muted)' }}>· {rl.submitter}</span>
+                        {rl.reviewNote && <div style={{ fontSize: 10, color: 'var(--color-danger)', marginTop: 2 }}>Alasan reviewer: {rl.reviewNote}</div>}
+                      </div>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setTfxExpanded(open ? null : rl.id); setTfxValues({}); setTfxNote(''); }}>
+                        {open ? 'Tutup' : 'Koreksi Target'} <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+                      </button>
+                    </div>
+                    {open && (
+                      <div style={{ padding: '0 var(--space-4) var(--space-3)' }}>
+                        <table className="data-table compact" style={{ margin: 0 }}>
+                          <thead>
+                            <tr><th>Indikator</th><th className="num">KM Sementara Skrg</th><th className="num">Realisasi</th><th className="num">Target Baru</th></tr>
+                          </thead>
+                          <tbody>
+                            {items.map((it, idx) => {
+                              const masterKpiId = it['masterKpiId'] as string | undefined;
+                              const pt = assignmentForItem(rl.unitCode, bidang, masterKpiId);
+                              const editable = !!pt?.assignment && !pt.frozen;
+                              return (
+                                <tr key={idx}>
+                                  <td style={{ maxWidth: 240 }}>{String(it['indikator'] ?? '—')}</td>
+                                  <td className="num">{pt ? pt.target : <span style={{ color: 'var(--color-text-subtle)' }} title="KPI tanpa assignment KM Sementara (legacy)">—</span>}{pt?.frozen && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--color-text-muted)' }}>(beku)</span>}</td>
+                                  <td className="num">{String(it['realisasi'] ?? '—')}</td>
+                                  <td className="num">
+                                    {editable ? (
+                                      <input
+                                        className="form-input form-input-sm" style={{ width: 90, textAlign: 'right' }}
+                                        value={tfxValues[masterKpiId!] ?? pt!.target}
+                                        onChange={(e) => setTfxValues((v) => ({ ...v, [masterKpiId!]: e.target.value }))}
+                                      />
+                                    ) : <span style={{ color: 'var(--color-text-subtle)' }}>—</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <textarea
+                          className="form-textarea" style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-xs)', minHeight: 44, width: '100%' }}
+                          placeholder="Catatan koreksi target (wajib) — akan dikirim ke penyusun untuk resubmit"
+                          value={tfxNote} onChange={(e) => setTfxNote(e.target.value)}
+                        />
+                        <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                          <button className="btn btn-sm btn-primary" disabled={tfxBusy} onClick={() => handleResolveTargetFix(rl)}>
+                            <CheckCircle size={12} /> Simpan Koreksi & Kembalikan ke PIC
+                          </button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setTfxExpanded(null); setTfxValues({}); setTfxNote(''); }}>Batal</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </FoldCard>

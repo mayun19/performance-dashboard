@@ -3,6 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { num, r2, scoreItems, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class ExecutiveService {
@@ -11,8 +12,8 @@ export class ExecutiveService {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
-  async getSummary(periodId?: string) {
-    const cacheKey = `executive:${periodId || 'active'}`;
+  async getSummary(periodId?: string, phase?: 'sementara' | 'final') {
+    const cacheKey = `executive:${periodId || 'active'}:${phase ?? 'auto'}`;
     const cached = await this.cache.get(cacheKey);
     if (cached) return cached;
 
@@ -22,29 +23,31 @@ export class ExecutiveService {
 
     if (!period) return null;
 
-    let snap = await this.prisma.executiveSnapshot.findUnique({
-      where: { periodId: period.id },
-    });
+    // Living-target: bila phase eksplisit diminta (toggle dashboard), ambil phase itu saja;
+    // else default ke 'final' (KM Final, sudah direstate) bila ada, jatuh ke 'sementara'
+    // (provisional, masih hidup) selama masa tunggu KM Final.
+    const pick = async (pid: string) => {
+      if (phase) return this.prisma.executiveSnapshot.findUnique({ where: { periodId_phase: { periodId: pid, phase } } });
+      return (await this.prisma.executiveSnapshot.findUnique({ where: { periodId_phase: { periodId: pid, phase: 'final' } } }))
+        ?? this.prisma.executiveSnapshot.findUnique({ where: { periodId_phase: { periodId: pid, phase: 'sementara' } } });
+    };
+    let snap = await pick(period.id);
     // Fallback: bila periode terpilih belum punya snapshot naratif, pakai snapshot periode aktif
     // sebagai baseline. Angka kinerja LIVE tetap mengikuti realisasi periode terpilih (via /kinerja/rekap).
     if (!snap) {
       const active = await this.prisma.period.findFirst({ where: { isActive: true } });
-      if (active && active.id !== period.id) {
-        snap = await this.prisma.executiveSnapshot.findUnique({ where: { periodId: active.id } });
-      }
+      if (active && active.id !== period.id) snap = await pick(active.id);
     }
-    const result = { period, data: snap?.data ?? null };
+    const result = { period, data: snap?.data ?? null, phase: snap?.phase ?? (phase ?? 'sementara') };
     await this.cache.set(cacheKey, result);
     return result;
   }
 
-  async refreshFromRealisasi(periodId: string): Promise<void> {
-    const num = (v: unknown): number => {
-      if (v == null) return 0;
-      const n = parseFloat(String(v).replace(',', '.').replace(/[^0-9.-]/g, ''));
-      return Number.isFinite(n) ? n : 0;
-    };
-    const r2 = (n: number) => Math.round(n * 100) / 100;
+  // phase='sementara' (default): refresh provisional, dipicu tiap bundle GM disetujui selama
+  // masa tunggu KM Final — target-of-record diambil dari InputRealisasi.targetOfRecord (living
+  // target saat submit terakhir). phase='final': dipanggil SEKALI oleh RestatementService saat
+  // KM Final tiba, dengan targetOverrides = target KM Final beku (menimpa target-of-record lama).
+  async refreshFromRealisasi(periodId: string, phase: 'sementara' | 'final' = 'sementara', targetOverrides?: TargetOverrideMap): Promise<void> {
     const UNIT_NAMES: Record<string, string> = {
       KP: 'Kantor Induk', UPMK1: 'UPMK I', UPMK2: 'UPMK II',
       UPMK3: 'UPMK III', UPMK4: 'UPMK IV', UPMK5: 'UPMK V',
@@ -55,25 +58,28 @@ export class ExecutiveService {
     });
     if (allRecords.length === 0) return;
 
-    // Per-unit score computation
+    // Target-of-record efektif: override eksplisit (restatement KM Final) menang; selain itu
+    // gabungkan targetOfRecord tiap record (living target saat submit terakhir).
+    const targetOfRecord: TargetOverrideMap = { ...targetOverrides };
+    if (!targetOverrides) {
+      for (const r of allRecords) {
+        Object.assign(targetOfRecord, (r.targetOfRecord ?? {}) as TargetOverrideMap);
+      }
+    }
+
+    // Per-unit score computation (KI-adjusted track — `values` adalah salinan kerja hasil
+    // koreksi berjenjang, yang rolls up ke agregat parent).
     const byUnit: Record<string, typeof allRecords> = {};
     for (const r of allRecords) (byUnit[r.unitCode] ??= []).push(r);
     const unitScores = Object.entries(byUnit).map(([code, records]) => {
-      let totalNilai = 0;
-      for (const r of records) {
-        for (const it of Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>)) {
-          const bobot = num(it['bobot']);
-          const target = num(it['target2'] ?? it['target']);
-          const actual = num(it['realisasi']);
-          const satuan = String(it['satuan'] ?? '').toLowerCase();
-          if (bobot > 0 && target > 0 && actual > 0) {
-            const inv = satuan === 'hari kerja';
-            const capaian = inv ? Math.min((target / actual) * 100, 110) : Math.min((actual / target) * 100, 110);
-            totalNilai += (capaian / 100) * bobot;
-          }
-        }
-      }
-      return { code, name: UNIT_NAMES[code] ?? code, score: r2(totalNilai) };
+      const items = records.flatMap((r) => Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>));
+      return { code, name: UNIT_NAMES[code] ?? code, score: scoreItems(items, targetOfRecord) };
+    });
+    // UPMK track (self-reported) — dihitung terpisah, tak pernah menimpa track KI.
+    const upmkUnitScores = Object.entries(byUnit).map(([code, records]) => {
+      const items = records.filter((r) => r.selfAssessment != null)
+        .flatMap((r) => Object.values((r.selfAssessment ?? {}) as Record<string, Record<string, unknown>>));
+      return { code, score: scoreItems(items, targetOfRecord) };
     });
     const overall = unitScores.length > 0
       ? r2(unitScores.reduce((s, u) => s + u.score, 0) / unitScores.length)
@@ -93,15 +99,15 @@ export class ExecutiveService {
     const giItem     = findKp(s => s.includes('gardu induk'));
     const capexItem  = findKp(s => s.includes('pengendalian') && (s.includes('anggaran investasi') || s.includes('penggunaan anggaran')));
 
-    // Get existing snapshot as base (or active period fallback)
-    const existing = await this.prisma.executiveSnapshot.findUnique({ where: { periodId } });
+    // Get existing snapshot (SAME phase) as base, or active period fallback
+    const existing = await this.prisma.executiveSnapshot.findUnique({ where: { periodId_phase: { periodId, phase } } });
     let base: Record<string, unknown>;
     if (existing?.data) {
       base = existing.data as Record<string, unknown>;
     } else {
       const active = await this.prisma.period.findFirst({ where: { isActive: true } });
       const fallback = active && active.id !== periodId
-        ? await this.prisma.executiveSnapshot.findUnique({ where: { periodId: active.id } })
+        ? await this.prisma.executiveSnapshot.findUnique({ where: { periodId_phase: { periodId: active.id, phase } } })
         : null;
       base = (fallback?.data ?? {}) as Record<string, unknown>;
     }
@@ -169,39 +175,22 @@ export class ExecutiveService {
 
     // Akurasi Self-Assessment UPMK: headline ringkas dari selisih skor self-assessment
     // (dikunci saat submit) vs skor hasil evaluasi berjenjang (values setelah dikoreksi RPC/KI).
-    const scoreFromSource = (records: typeof allRecords, pick: (r: typeof records[0]) => unknown): number => {
-      let total = 0;
-      for (const r of records) {
-        const src = (pick(r) ?? {}) as Record<string, Record<string, unknown>>;
-        for (const it of Object.values(src)) {
-          const bobot = num(it['bobot']);
-          const target = num(it['target2'] ?? it['target']);
-          const actual = num(it['realisasi']);
-          const satuan = String(it['satuan'] ?? '').toLowerCase();
-          if (bobot > 0 && target > 0 && actual > 0) {
-            const inv = satuan === 'hari kerja';
-            const capaian = inv ? Math.min((target / actual) * 100, 110) : Math.min((actual / target) * 100, 110);
-            total += (capaian / 100) * bobot;
-          }
-        }
-      }
-      return r2(total);
-    };
-    const byUnitUpmk: Record<string, typeof allRecords> = {};
-    for (const r of allRecords) {
-      if (r.unitCode === 'KP' || r.selfAssessment == null) continue;
-      (byUnitUpmk[r.unitCode] ??= []).push(r);
-    }
-    const unitGaps = Object.values(byUnitUpmk).map((records) => {
-      const selfScore = scoreFromSource(records, (r) => r.selfAssessment);
-      const evaluatedScore = scoreFromSource(records, (r) => r.values);
-      return Math.abs(r2(evaluatedScore - selfScore));
-    });
+    // Dua-duanya dihitung dgn target-of-record yg SAMA (targetOfRecord) — divergensi murni
+    // mencerminkan koreksi REN PIC, bukan perbedaan target.
+    const upmkByUnit = new Map(upmkUnitScores.map((u) => [u.code, u.score]));
+    const unitGaps = unitScores
+      .filter((u) => u.code !== 'KP' && upmkByUnit.has(u.code))
+      .map((u) => Math.abs(r2(u.score - (upmkByUnit.get(u.code) ?? 0))));
     const avgGap = unitGaps.length ? r2(unitGaps.reduce((s, g) => s + g, 0) / unitGaps.length) : 0;
     const selfAssessmentAccuracy = {
       avgGap, unitsWithData: unitGaps.length,
       status: unitGaps.length === 0 ? 'no-data' : avgGap <= 2 ? 'akurat' : avgGap <= 5 ? 'perlu-perhatian' : 'signifikan',
     };
+
+    // Dua track eksplisit (§5 desain): UPMK Version vs KI Adjusted Version, sisi-bersisi.
+    const overallUpmk = upmkUnitScores.length > 0
+      ? r2(upmkUnitScores.reduce((s, u) => s + u.score, 0) / upmkUnitScores.length)
+      : 0;
 
     const newData: Record<string, unknown> = {
       ...base,
@@ -211,6 +200,9 @@ export class ExecutiveService {
         status: overall >= 100 ? 'Baik' : overall >= 90 ? 'Hati-hati' : 'Tertinggal',
       },
       unitRanking, unitTrend,
+      // Dua track: unitRanking/healthScore = KI Adjusted (authoritative utk rollup);
+      // upmkTrack = UPMK self-reported, disandingkan di dashboard.
+      upmkTrack: { overall: overallUpmk, unitScores: upmkUnitScores },
       efficiency: mergeField('efficiency', pctItem),
       csat:       mergeField('csat', iqcItem),
       safety:     mergeField('safety', kepatuhanItem),
@@ -218,12 +210,14 @@ export class ExecutiveService {
     };
 
     await this.prisma.executiveSnapshot.upsert({
-      where:  { periodId },
-      update: { data: newData as unknown as Prisma.InputJsonValue },
-      create: { periodId, data: newData as unknown as Prisma.InputJsonValue },
+      where:  { periodId_phase: { periodId, phase } },
+      update: { data: newData as unknown as Prisma.InputJsonValue, targetOfRecord: targetOfRecord as unknown as Prisma.InputJsonValue },
+      create: { periodId, phase, data: newData as unknown as Prisma.InputJsonValue, targetOfRecord: targetOfRecord as unknown as Prisma.InputJsonValue },
     });
-    await this.cache.del(`executive:${periodId}`);
-    await this.cache.del('executive:active');
+    // Bersihkan semua varian phase cache (auto/sementara/final) untuk periode ini & 'active'.
+    for (const base of [`executive:${periodId}`, 'executive:active']) {
+      for (const p of ['auto', 'sementara', 'final']) await this.cache.del(`${base}:${p}`);
+    }
   }
 
   private formatMonthLabel(label: string): string {

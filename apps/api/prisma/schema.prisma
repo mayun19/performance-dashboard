@@ -45,8 +45,8 @@ model User {
   name         String
   role         Role
   unit         String
-  bidang       String?  // Bidang asal user (null = lintas-bidang, mis. GM)
-  phone        String?  // Nomor WhatsApp untuk notifikasi (simulasi — belum terhubung provider nyata)
+  bidang       String? // Bidang asal user (null = lintas-bidang, mis. GM)
+  phone        String? // Nomor WhatsApp untuk notifikasi (simulasi — belum terhubung provider nyata)
   passwordHash String
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -91,13 +91,13 @@ model RefreshToken {
 }
 
 model UserPrefs {
-  id                String  @id @default(cuid())
-  userId            String  @unique
-  theme             String  @default("light")
-  notifyEmail       Boolean @default(true)
-  notifyInApp       Boolean @default(true)
-  notifyWhatsapp    Boolean @default(false)
-  digestFrequency   String  @default("daily")
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  theme           String  @default("light")
+  notifyEmail     Boolean @default(true)
+  notifyInApp     Boolean @default(true)
+  notifyWhatsapp  Boolean @default(false)
+  digestFrequency String  @default("daily")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -121,19 +121,30 @@ model Period {
   // kapan pun (mis. KM Final belum disahkan Direksi meski sudah masuk semester II).
   kmReference String @default("draft") // 'draft' | 'final'
 
+  // Living-target workflow: deadline konvergensi bulanan (circuit-breaker) — saat lewat,
+  // target-of-record PIC REN yang berlaku dibekukan paksa (lihat PeriodTargetService.forceFreeze).
+  deadline   DateTime?
+  // Diisi saat KM Final tiba dari holding & restatement dijalankan (lihat RestatementService).
+  restatedAt DateTime?
+
   @@map("periods")
 }
 
 // Executive + domain KPI snapshots stored as typed JSON blobs per period.
 // This mirrors the prototype's DATA structure exactly so the seed is a simple JSON.parse.
+// Living-target workflow (fase Sementara→Final): dua snapshot berbeda per periode.
+//   phase='sementara' → mutable, ditimpa tiap refresh selama masa tunggu KM Final.
+//   phase='final'     → immutable, ditulis SEKALI saat restatement (KM Final tiba).
 model ExecutiveSnapshot {
-  id        String   @id @default(cuid())
-  periodId  String
-  data      Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  periodId       String
+  phase          String   @default("sementara") // 'sementara' | 'final'
+  targetOfRecord Json? // target per-KPI yang dipakai menghitung snapshot ini
+  data           Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  @@unique([periodId])
+  @@unique([periodId, phase])
   @@map("executive_snapshots")
 }
 
@@ -149,13 +160,15 @@ model FinancialSnapshot {
 }
 
 model OperationalSnapshot {
-  id        String   @id @default(cuid())
-  periodId  String
-  data      Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  periodId       String
+  phase          String   @default("sementara") // 'sementara' | 'final' — lihat catatan di ExecutiveSnapshot
+  targetOfRecord Json?
+  data           Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  @@unique([periodId])
+  @@unique([periodId, phase])
   @@map("operational_snapshots")
 }
 
@@ -226,12 +239,12 @@ model KMDocument {
 }
 
 model KMReview {
-  id         String   @id @default(cuid())
-  docId      String
-  actor      String
-  action     String
-  note       String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  docId     String
+  actor     String
+  action    String
+  note      String?
+  createdAt DateTime @default(now())
 
   document KMDocument @relation(fields: [docId], references: [docId], onDelete: Cascade)
 
@@ -239,28 +252,35 @@ model KMReview {
 }
 
 model InputRealisasi {
-  id           String    @id @default(cuid())
-  periodId     String
-  unitCode     String
-  bidang       String    @default("") // Realisasi dipecah per bidang
-  submitter    String
-  submitterId  String?
-  values       Json
+  id               String    @id @default(cuid())
+  periodId         String
+  unitCode         String
+  bidang           String    @default("") // Realisasi dipecah per bidang
+  submitter        String
+  submitterId      String?
+  values           Json
   // Snapshot nilai self-assessment persis seperti diinput UPMK saat submit — DIKUNCI,
   // tidak pernah diubah oleh reviewer. `values` di atas tetap jadi salinan kerja yang
   // dapat dikoreksi reviewer sepanjang alur (hasil evaluasi RPC/KI).
-  selfAssessment Json?
-  status       String    @default("draft") // draft | submitted | ready | approved | rejected
-  currentStage Int       @default(1) // legacy; kini = currentStepIndex
-  steps        Json      @default("[]") // template langkah alur (urut) — mesin alur multi-segmen
-  currentStepIndex Int   @default(0)    // pointer ke langkah berjalan dalam `steps`
-  attachments  Json      @default("[]") // evidence: [{id,name,size,type,uploadedAt}]
-  history      Json      @default("[]")
-  reviewer     String?
-  reviewNote   String?
-  reviewedAt   DateTime?
-  submittedAt  DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  selfAssessment   Json?
+  status           String    @default("draft") // draft | submitted | target_fix | ready | approved | rejected
+  // Living-target workflow: snapshot target per-KPI (masterKpiId -> nilai target) yang berlaku
+  // saat submit/resubmit terakhir — dipakai executive/operational service sbg "target-of-record"
+  // alih-alih membaca target dari item KM statis. Diperbarui tiap re-submit (target selalu hidup
+  // sampai KM Final tiba).
+  targetOfRecord   Json?
+  // 'sementara' selama masa tunggu KM Final; diset 'final' oleh restatement service.
+  packagePhase     String    @default("sementara")
+  currentStage     Int       @default(1) // legacy; kini = currentStepIndex
+  steps            Json      @default("[]") // template langkah alur (urut) — mesin alur multi-segmen
+  currentStepIndex Int       @default(0) // pointer ke langkah berjalan dalam `steps`
+  attachments      Json      @default("[]") // evidence: [{id,name,size,type,uploadedAt}]
+  history          Json      @default("[]")
+  reviewer         String?
+  reviewNote       String?
+  reviewedAt       DateTime?
+  submittedAt      DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([periodId, unitCode, bidang])
   @@map("input_realisasi")
@@ -307,7 +327,7 @@ model WhatsAppLog {
   recipientId   String
   recipientName String
   phone         String?
-  templateType  String   // 'reminder_checker'
+  templateType  String // 'reminder_checker'
   message       String
   pendingCount  Int      @default(0)
   forced        Boolean  @default(false) // true bila dipicu manual (bukan jadwal otomatis 3-harian)
@@ -378,28 +398,28 @@ model PetaSnapshot {
 }
 
 model KontrakManajemen {
-  id          String    @id @default(cuid())
-  periodId    String
-  unitCode    String
-  bidang      String
-  holder      String
-  kpiItems    Json
-  status      String    @default("draft") // draft | submitted | ready | approved | rejected
+  id               String    @id @default(cuid())
+  periodId         String
+  unitCode         String
+  bidang           String
+  holder           String
+  kpiItems         Json
+  status           String    @default("draft") // draft | submitted | ready | approved | rejected
   // kmType: dokumen KM DRAFT (acuan Jan-Jun, sebelum disahkan Direksi) vs KM FINAL
   // (disahkan Direksi di luar sistem, biasanya acuan Jul-Des). Dua dokumen independen,
   // masing-masing punya alur submit/review/bundle sendiri — bukan revisi dari yang lain.
-  kmType      String    @default("draft") // 'draft' | 'final'
-  currentStage Int      @default(1) // legacy; kini = currentStepIndex
-  steps        Json     @default("[]") // mesin alur multi-segmen (sama seperti realisasi)
-  currentStepIndex Int  @default(0)
-  history     Json      @default("[]")
-  submitter   String
-  submitterId String?
-  reviewer    String?
-  reviewNote  String?
-  reviewedAt  DateTime?
-  submittedAt DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  kmType           String    @default("draft") // 'draft' | 'final'
+  currentStage     Int       @default(1) // legacy; kini = currentStepIndex
+  steps            Json      @default("[]") // mesin alur multi-segmen (sama seperti realisasi)
+  currentStepIndex Int       @default(0)
+  history          Json      @default("[]")
+  submitter        String
+  submitterId      String?
+  reviewer         String?
+  reviewNote       String?
+  reviewedAt       DateTime?
+  submittedAt      DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([periodId, unitCode])
   @@index([kmType])
@@ -450,8 +470,8 @@ model KpiMaster {
   // berjalan — membuat versi baru berlaku bulan berikutnya (effectiveMonth). Versi lama
   // ditandai 'superseded' tanpa disentuh datanya. Master dgn effectiveMonth > periode aktif
   // ("pending", belum berlaku) masih boleh diedit langsung di tempat.
-  effectiveMonth    String   // yearMonth mulai berlaku, mis. "2026-08"
-  version           Int      @default(1)
+  effectiveMonth    String // yearMonth mulai berlaku, mis. "2026-08"
+  version           Int     @default(1)
   previousVersionId String?
 
   // Metode agregasi (Fase E) — dipilih per-KPI: 'weighted' = rata-rata tertimbang pakai
@@ -459,7 +479,7 @@ model KpiMaster {
   // (cocok utk KPI penalti/pengurang, tanpa syarat Σ=100%).
   aggregationMethod String @default("weighted") // 'weighted' | 'sum'
 
-  assignments  KpiAssignment[]
+  assignments KpiAssignment[]
 
   @@index([year, kmType])
   @@map("kpi_masters")
@@ -489,7 +509,8 @@ model KpiAssignment {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  master      KpiMaster @relation(fields: [kpiMasterId], references: [id], onDelete: Cascade)
+  master        KpiMaster      @relation(fields: [kpiMasterId], references: [id], onDelete: Cascade)
+  periodTargets PeriodTarget[]
 
   @@unique([kpiMasterId, unitCode, bidang])
   @@index([unitCode, bidang])
@@ -507,7 +528,7 @@ model KpiRollupReview {
   reviewer    String?
   reviewerId  String?
   reviewNote  String?
-  nilaiParent Float?    // snapshot nilai agregat yang dikunci saat disetujui
+  nilaiParent Float? // snapshot nilai agregat yang dikunci saat disetujui
   reviewedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -515,4 +536,47 @@ model KpiRollupReview {
   @@unique([kpiMasterId, periodId])
   @@index([periodId])
   @@map("kpi_rollup_reviews")
+}
+
+// Living-target workflow: instance target "KM Sementara" per (periode, assignment) — hidup
+// & bisa dikoreksi PIC REN sepanjang masa tunggu KM Final. `target` = KpiAssignment.target
+// tetap jadi definisi default/struktural; baris ini adalah nilai OPERASIONAL bulan berjalan.
+model PeriodTarget {
+  id              String    @id @default(cuid())
+  periodId        String
+  kpiAssignmentId String
+  target          String    @default("") // target hidup bulan ini (living)
+  source          String    @default("fresh") // 'fresh' (input baru) | 'carried' (dari bulan lalu)
+  frozen          Boolean   @default(false) // true setelah bundle GM disetujui / deadline lewat / restatement
+  frozenTarget    String? // target-of-record yang dikunci saat freeze
+  frozenAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  assignment KpiAssignment @relation(fields: [kpiAssignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([periodId, kpiAssignmentId])
+  @@index([periodId])
+  @@map("period_targets")
+}
+
+// Jejak audit append-only simetris untuk koreksi target (PeriodTarget) maupun realisasi
+// (InputRealisasi.values) — pelengkap `InputRealisasi.history` yang mencatat level LANGKAH,
+// baris ini mencatat level NILAI (diff lama→baru per field).
+model RevisionLog {
+  id        String   @id @default(cuid())
+  entity    String // 'period_target' | 'input_realisasi'
+  targetId  String // id baris yang direvisi
+  periodId  String
+  actor     String
+  actorId   String?
+  field     String? // mis. 'target' | 'values'
+  oldValue  Json?
+  newValue  Json?
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, targetId])
+  @@index([periodId])
+  @@map("revision_logs")
 }

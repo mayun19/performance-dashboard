@@ -5,7 +5,8 @@ import { InputRealisasiService } from './input-realisasi.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
-import { IsObject, IsString, IsOptional, IsIn, IsArray } from 'class-validator';
+import { IsObject, IsString, IsOptional, IsIn, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 class SubmitDto {
   @IsString() unitCode: string;
@@ -19,11 +20,22 @@ class SubmitDto {
 class ReviewDto {
   @IsIn(['approve', 'reject']) action: 'approve' | 'reject';
   @IsOptional() @IsString() note?: string;
-  @IsOptional() @IsIn(['konseptor', 'previous']) returnTo?: 'konseptor' | 'previous';
+  @IsOptional() @IsIn(['konseptor', 'previous', 'target']) returnTo?: 'konseptor' | 'previous' | 'target';
+}
+
+class TargetFixItemDto {
+  @IsString() kpiAssignmentId: string;
+  @IsString() target: string;
+}
+
+class TargetFixDto {
+  @IsArray() @ValidateNested({ each: true }) @Type(() => TargetFixItemDto) updates: TargetFixItemDto[];
+  @IsString() note: string;
 }
 
 class UpdateValuesDto {
   @IsObject() values: Record<string, unknown>;
+  @IsOptional() @IsString() note?: string;
 }
 
 class BundleReviewDto {
@@ -70,12 +82,24 @@ export class InputRealisasiController {
 
   @Patch(':id/values')
   updateValues(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: UpdateValuesDto) {
-    return this.svc.updateValues(user, id, dto.values);
+    return this.svc.updateValues(user, id, dto.values, dto.note);
+  }
+
+  // Fase 5: timeline riwayat revisi gabungan (koreksi nilai realisasi + koreksi target KM Sementara).
+  @Get(':id/revisions')
+  getRevisionHistory(@Param('id') id: string) {
+    return this.svc.getRevisionHistory(id);
   }
 
   @Post(':id/review')
   review(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: ReviewDto) {
     return this.svc.review(user, id, dto.action, dto.note, dto.returnTo);
+  }
+
+  // PIC REN menyelesaikan koreksi KM Sementara untuk package berstatus 'target_fix'.
+  @Post(':id/resolve-target-fix')
+  resolveTargetFix(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: TargetFixDto) {
+    return this.svc.resolveTargetFix(user, id, dto.updates, dto.note);
   }
 
   // ===== Evidence (lampiran) =====

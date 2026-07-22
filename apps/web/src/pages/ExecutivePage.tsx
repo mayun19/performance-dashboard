@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { UnitTrendChart } from '../components/UnitTrendChart';
 import { SkeletonKpiCards, SkeletonChart, SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
+import { PhaseControls, type SnapshotPhase } from '../components/PhaseControls';
 import type { ExecutiveData } from '../lib/types';
 import { ComponentType, CSSProperties, ReactNode, useEffect, useState } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
@@ -221,10 +222,7 @@ interface Rekap {
 }
 
 export function ExecutivePage() {
-  const [data, setData] = useState<{
-    period: unknown;
-    data: ExecutiveData;
-  } | null>(null);
+  const [data, setData] = useState<{ period: unknown; data: ExecutiveData; phase?: SnapshotPhase } | null>(null);
   const [rekap, setRekap] = useState<Rekap | null>(null);
   const [opData, setOpData] = useState<{
     data: Record<string, unknown>;
@@ -233,25 +231,27 @@ export function ExecutivePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeKpi, setActiveKpi] = useState(0);
+  // Living-target: fase snapshot yang diminta (undefined = otomatis; default backend = final bila ada).
+  const [phaseReq, setPhaseReq] = useState<SnapshotPhase | undefined>(undefined);
 
   const { periodId, mode } = usePeriod();
 
   useEffect(() => {
     setLoading(true);
     Promise.allSettled([
-      executive.summary(periodId || undefined),
+      executive.summary(periodId || undefined, phaseReq),
       kinerja.rekap(periodId || undefined, mode),
-      operational.get(periodId || undefined),
-    ])
-      .then(([sum, rk, op]) => {
-        if (sum.status === "fulfilled") setData(sum.value);
-        else setError((sum.reason as Error)?.message ?? "Gagal memuat data");
-        if (rk.status === "fulfilled") setRekap(rk.value as Rekap);
-        if (op.status === "fulfilled")
-          setOpData(op.value as { data: Record<string, unknown>; period: Record<string, unknown> });
-      })
-      .finally(() => setLoading(false));
-  }, [periodId, mode]);
+      operational.get(periodId || undefined, phaseReq),
+    ]).then(([sum, rk, op]) => {
+      if (sum.status === 'fulfilled') setData(sum.value);
+      else setError((sum.reason as Error)?.message ?? 'Gagal memuat data');
+      if (rk.status === 'fulfilled') setRekap(rk.value as Rekap);
+      if (op.status === 'fulfilled') setOpData(op.value as { data: Record<string, unknown>; period: Record<string, unknown> });
+    }).finally(() => setLoading(false));
+  }, [periodId, mode, phaseReq]);
+
+  const shownPhase = (data?.phase ?? undefined) as SnapshotPhase | undefined;
+  const phaseControls = <PhaseControls requested={phaseReq} shown={shownPhase} onChange={setPhaseReq} />;
 
   if (loading) {
     return (
@@ -272,17 +272,25 @@ export function ExecutivePage() {
     );
   }
 
-  if (error)
+  if (error) return <ErrorState title="Gagal memuat Executive Summary" message={error} />;
+  if (!data?.data) {
+    // Bisa terjadi bila user toggle ke fase yang snapshotnya belum ada (mis. Final sebelum KM Final tiba).
+    // Tetap tampilkan kontrol fase agar user bisa kembali, bukan halaman kosong yang mengunci.
     return (
-      <ErrorState title="Gagal memuat Executive Summary" message={error} />
+      <div className="page">
+        <div className="page-header">
+          <div><h1 className="page-title">Executive Summary</h1><p className="page-subtitle">Dashboard Kinerja PUSMANPRO</p></div>
+          <div className="page-meta">{phaseControls}</div>
+        </div>
+        <EmptyState
+          title="Snapshot belum tersedia"
+          message={phaseReq === 'final'
+            ? 'Snapshot Final belum ada untuk periode ini (KM Final belum tiba / belum direstate). Beralih ke Sementara.'
+            : 'Tidak ada data snapshot untuk periode & fase ini.'}
+        />
+      </div>
     );
-  if (!data?.data)
-    return (
-      <EmptyState
-        title="Data tidak tersedia"
-        message="Tidak ada data untuk periode ini."
-      />
-    );
+  }
 
   const d = data.data;
   const hs = d.healthScore ?? {};
@@ -320,6 +328,11 @@ export function ExecutivePage() {
         : "var(--color-danger)";
   const currentYear = new Date().getFullYear();
   const selfAssessmentAccuracy = d.selfAssessmentAccuracy;
+
+  // Living-target dua-track: KI Adjusted (snapshot values, otoritatif) vs UPMK Version (self-report).
+  const upmkTrack = d.upmkTrack;
+  const kiOverall = Number(hs.value) || 0;
+  const divergence = upmkTrack ? Math.round((kiOverall - upmkTrack.overall) * 100) / 100 : 0;
 
   // Operational data derivations
   const od = (opData?.data ?? {}) as Record<string, unknown>;
@@ -551,13 +564,28 @@ export function ExecutivePage() {
             </div>
           </div>
 
-          <div
-            className="hero-health-stats"
-            style={{
-              marginTop: 0,
-              paddingTop: "var(--space-6)",
-              gridTemplateColumns: "repeat(4, 1fr)",
-            }}>
+          {/* Living-target dua-track: KI Adjusted vs UPMK Version, sisi-bersisi */}
+          {upmkTrack && (
+            <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'center', flexWrap: 'wrap', padding: 'var(--space-2) var(--space-3)', background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)' }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>KI Adjusted <span title="Otoritatif — hasil evaluasi berjenjang (values)">ⓘ</span></div>
+                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--color-accent)' }}>{fmt(kiOverall)}</div>
+              </div>
+              <div style={{ fontSize: 'var(--text-md)', color: 'var(--color-text-muted)' }}>vs</div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>UPMK Version <span title="Self-report unit (self-assessment)">ⓘ</span></div>
+                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 800 }}>{fmt(upmkTrack.overall)}</div>
+              </div>
+              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Selisih (adjustment REN PIC)</div>
+                <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: Math.abs(divergence) <= 2 ? 'var(--color-success)' : Math.abs(divergence) <= 5 ? 'var(--color-warning)' : 'var(--color-danger)' }}>
+                  {divergence > 0 ? '+' : ''}{fmt(divergence)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="hero-health-stats" style={{ marginTop: 0, paddingTop: 'var(--space-3)', gridTemplateColumns: 'repeat(4, 1fr)' }}>
             <div className="hero-stat">
               <div className="hero-stat-label">Target</div>
               <div className="hero-stat-value">{String(hs.target ?? 100)}</div>
