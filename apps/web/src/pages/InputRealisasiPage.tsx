@@ -568,147 +568,149 @@ export function InputRealisasiPage() {
               message="Belum ada Kontrak Manajemen yang disetujui (final GM) untuk unit Anda. Selesaikan persetujuan KM terlebih dahulu di menu Input Kontrak Manajemen → Persetujuan."
             />
           ) : (
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>No</th>
-                  <th>Bidang</th>
-                  <th>Indikator</th>
-                  <th>Formula</th>
-                  <th>Satuan</th>
-                  <th className="num">Bobot</th>
-                  <th className="num">Target Sem I</th>
-                  <th className="num">Target {CURRENT_YEAR}</th>
-                  {anyLivingTarget && (
-                    <th
-                      className="num"
-                      title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
-                      KM Sementara
-                    </th>
-                  )}
-                  <th>Realisasi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kpiList.map((kpi, i) => {
-                  const val = values[String(i)] ?? "";
-                  const hasVal = val.trim() !== "";
-                  const lt = livingTargetFor(kpi);
-                  return (
-                    <tr
-                      key={i}
-                      style={{
-                        background: hasVal
-                          ? "rgba(34,197,94,0.03)"
-                          : "transparent",
-                      }}>
-                      <td style={{ color: "var(--color-text-muted)" }}>
-                        {kpi.no ?? i + 1}
-                      </td>
-                      <td
-                        style={{
-                          fontSize: 11,
-                          color: "var(--color-text-muted)",
-                          whiteSpace: "nowrap",
-                        }}>
-                        {kpi.bidang ?? "—"}
-                      </td>
-                      <td style={{ maxWidth: 220, fontWeight: 500 }}>
-                        {kpi.indikator ?? "—"}
-                      </td>
-                      <td
-                        style={{
-                          fontSize: 10,
-                          color: "var(--color-text-muted)",
-                          maxWidth: 200,
-                        }}>
-                        {kpi.formula ?? "—"}
-                      </td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          whiteSpace: "nowrap",
-                        }}>
-                        {kpi.satuan ?? "—"}
-                      </td>
-                      <td
+            <div className="table-scroll able-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Bidang</th>
+                    <th>Indikator</th>
+                    <th>Formula</th>
+                    <th>Satuan</th>
+                    <th className="num">Bobot</th>
+                    <th className="num">Target Sem I</th>
+                    <th className="num">Target {CURRENT_YEAR}</th>
+                    {anyLivingTarget && (
+                      <th
                         className="num"
+                        title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
+                        KM Sementara
+                      </th>
+                    )}
+                    <th>Realisasi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kpiList.map((kpi, i) => {
+                    const val = values[String(i)] ?? "";
+                    const hasVal = val.trim() !== "";
+                    const lt = livingTargetFor(kpi);
+                    return (
+                      <tr
+                        key={i}
                         style={{
-                          fontWeight: 700,
-                          color: "var(--color-accent)",
+                          background: hasVal
+                            ? "rgba(34,197,94,0.03)"
+                            : "transparent",
                         }}>
-                        {kpi.bobot ?? "—"}
-                      </td>
-                      <td className="num">{kpi.target ?? "—"}</td>
-                      <td className="num">{kpi.target2 ?? "—"}</td>
-                      {anyLivingTarget && (
-                        <td className="num" style={{ whiteSpace: "nowrap" }}>
-                          {lt ? (
-                            <>
-                              <span style={{ fontWeight: 700 }}>
-                                {lt.frozen
-                                  ? (lt.frozenTarget ?? lt.target)
-                                  : lt.target}
-                              </span>
-                              <span
-                                title={
-                                  lt.frozen
-                                    ? "Sudah dibekukan (bundle GM disetujui / deadline / restatement)"
-                                    : lt.source === "carried"
-                                      ? "Dibawa dari bulan lalu (belum diubah)"
-                                      : "Diinput/diubah bulan ini"
-                                }
-                                style={{
-                                  marginLeft: 4,
-                                  fontSize: 9,
-                                  fontWeight: 700,
-                                  padding: "1px 4px",
-                                  borderRadius: 4,
-                                  border: "1px solid var(--color-border)",
-                                  color: lt.frozen
-                                    ? "var(--color-text-muted)"
-                                    : lt.source === "carried"
-                                      ? "var(--color-warning)"
-                                      : "var(--color-accent)",
-                                }}>
-                                {lt.frozen
-                                  ? "BEKU"
-                                  : lt.source === "carried"
-                                    ? "CARRY"
-                                    : "HIDUP"}
-                              </span>
-                            </>
-                          ) : (
-                            <span style={{ color: "var(--color-text-subtle)" }}>
-                              —
-                            </span>
-                          )}
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {kpi.no ?? i + 1}
                         </td>
-                      )}
-                      <td style={{ minWidth: 140 }}>
-                        <input
-                          type="text"
-                          className="form-input form-input-sm"
+                        <td
                           style={{
-                            borderColor: hasVal
-                              ? "rgba(34,197,94,0.5)"
-                              : undefined,
-                          }}
-                          value={val}
-                          onChange={(e) =>
-                            setValues((v) => ({
-                              ...v,
-                              [String(i)]: e.target.value,
-                            }))
-                          }
-                          placeholder={`Target: ${kpi.target ?? "—"}`}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}>
+                          {kpi.bidang ?? "—"}
+                        </td>
+                        <td style={{ maxWidth: 220, fontWeight: 500 }}>
+                          {kpi.indikator ?? "—"}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: 14,
+                            color: "var(--color-text-muted)",
+                            maxWidth: 200,
+                          }}>
+                          {kpi.formula ?? "—"}
+                        </td>
+                        <td
+                          style={{
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}>
+                          {kpi.satuan ?? "—"}
+                        </td>
+                        <td
+                          className="num"
+                          style={{
+                            fontWeight: 700,
+                            color: "var(--color-accent)",
+                          }}>
+                          {kpi.bobot ?? "—"}
+                        </td>
+                        <td className="num">{kpi.target ?? "—"}</td>
+                        <td className="num">{kpi.target2 ?? "—"}</td>
+                        {anyLivingTarget && (
+                          <td className="num" style={{ whiteSpace: "nowrap" }}>
+                            {lt ? (
+                              <>
+                                <span style={{ fontWeight: 700 }}>
+                                  {lt.frozen
+                                    ? (lt.frozenTarget ?? lt.target)
+                                    : lt.target}
+                                </span>
+                                <span
+                                  title={
+                                    lt.frozen
+                                      ? "Sudah dibekukan (bundle GM disetujui / deadline / restatement)"
+                                      : lt.source === "carried"
+                                        ? "Dibawa dari bulan lalu (belum diubah)"
+                                        : "Diinput/diubah bulan ini"
+                                  }
+                                  style={{
+                                    marginLeft: 4,
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    padding: "1px 4px",
+                                    borderRadius: 4,
+                                    border: "1px solid var(--color-border)",
+                                    color: lt.frozen
+                                      ? "var(--color-text-muted)"
+                                      : lt.source === "carried"
+                                        ? "var(--color-warning)"
+                                        : "var(--color-accent)",
+                                  }}>
+                                  {lt.frozen
+                                    ? "BEKU"
+                                    : lt.source === "carried"
+                                      ? "CARRY"
+                                      : "HIDUP"}
+                                </span>
+                              </>
+                            ) : (
+                              <span
+                                style={{ color: "var(--color-text-subtle)" }}>
+                                —
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        <td style={{ minWidth: 340 }}>
+                          <input
+                            type="text"
+                            className="form-input form-input-sm"
+                            style={{
+                              borderColor: hasVal
+                                ? "rgba(34,197,94,0.5)"
+                                : undefined,
+                            }}
+                            value={val}
+                            onChange={(e) =>
+                              setValues((v) => ({
+                                ...v,
+                                [String(i)]: e.target.value,
+                              }))
+                            }
+                            placeholder={`Target: ${kpi.target ?? "—"}`}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
         {kpiList.length > 0 && (
@@ -722,7 +724,7 @@ export function InputRealisasiPage() {
             }}>
             <span
               style={{
-                fontSize: "var(--text-xs)",
+                fontSize: "var(--text-sm)",
                 color: "var(--color-text-muted)",
               }}>
               {filledCount} dari {kpiList.length} indikator terisi
