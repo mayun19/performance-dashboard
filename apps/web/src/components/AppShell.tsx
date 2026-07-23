@@ -211,6 +211,8 @@ export function AppShell() {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const lightTheme = theme === "light";
+
   const currentPageName = ROUTE_NAMES[location.pathname] ?? "Dashboard";
   const effectiveRole = viewAs ?? user?.role ?? "STAFF";
   const avatarInitials =
@@ -248,7 +250,7 @@ export function AppShell() {
           {!collapsed && (
             <img
               className="logo sidebar-brand-img"
-              src="/brand/logo-pln-simpp-white-ic.svg"
+              src={`/brand/${lightTheme ? "logo-new-pln-simpp-white-ic" : "logo-new-pln-simpp-dark-ic"}.svg`}
               alt="PLN"
               style={{
                 width: 196,
@@ -570,7 +572,7 @@ export function AppShell() {
             className="icon-btn icon-solid"
             aria-label="Ubah tema"
             onClick={toggleTheme}>
-            {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+            {lightTheme ? <Moon size={18} /> : <Sun size={18} />}
           </button>
 
           {/* User menu */}
