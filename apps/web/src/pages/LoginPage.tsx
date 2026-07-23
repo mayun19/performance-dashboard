@@ -143,7 +143,7 @@ export function LoginPage() {
       <div className="login-body">
         <div className="login-brand-strip">
           <img
-            src="/brand/logo-pln-simpp.svg"
+            src="/brand/logo-new-pln-simpp.svg"
             width="185"
             height="44"
             alt="PLN"
