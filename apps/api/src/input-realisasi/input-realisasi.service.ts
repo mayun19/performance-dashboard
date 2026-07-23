@@ -70,27 +70,31 @@ export class InputRealisasiService {
     bidang: string,
     values: Record<string, unknown>,
     checkerIds: string[],
-    approverId: string,
+    approverIds: string[],
     periodId?: string,
   ) {
     if (!bidang) throw new BadRequestException('Bidang wajib diisi');
     if (!Array.isArray(checkerIds) || checkerIds.length === 0) throw new BadRequestException('Pilih minimal satu Checker');
-    if (!approverId) throw new BadRequestException('Pilih satu Approver');
+    if (!Array.isArray(approverIds) || approverIds.length === 0) throw new BadRequestException('Pilih minimal satu Approver');
 
     // Ambil kandidat & pertahankan urutan checker sesuai pilihan submitter.
     const picked = await this.prisma.user.findMany({
-      where: { id: { in: [...checkerIds, approverId] }, isActive: true },
+      where: { id: { in: [...checkerIds, ...approverIds] }, isActive: true },
       select: { id: true, name: true, role: true, unit: true, bidang: true },
     });
     const checkers = checkerIds.map((id) => picked.find((u) => u.id === id)).filter(Boolean) as ReviewerParticipant[];
-    const approver = picked.find((u) => u.id === approverId) as ReviewerParticipant | undefined;
+    const approvers = approverIds.map((id) => picked.find((u) => u.id === id)).filter(Boolean) as ReviewerParticipant[];
     if (checkers.length !== checkerIds.length) throw new BadRequestException('Sebagian Checker tidak ditemukan atau nonaktif');
+    if (approvers.length !== approverIds.length) throw new BadRequestException('Sebagian Approver tidak ditemukan atau nonaktif');
 
     const submitter: ReviewerParticipant = { id: user.id, name: user.name, role: user.role, unit: user.unit, bidang: user.bidang };
-    const invalid = validateReviewerSelection(user.id, checkers, approver);
+    const srManajer = await this.prisma.user.findFirst({
+      where: { role: Role.SRMANAJER, bidang, unit: 'KP', isActive: true },
+    });
+    const invalid = validateReviewerSelection(user.id, checkers, approvers, !!srManajer);
     if (invalid) throw new BadRequestException(invalid);
 
-    const steps = buildReviewerSteps(submitter, checkers, approver!);
+    const steps = buildReviewerSteps(submitter, checkers, approvers);
 
     const period = periodId
       ? await this.prisma.period.findUnique({ where: { id: periodId } })
@@ -199,6 +203,24 @@ export class InputRealisasiService {
         const steps = (r.steps as unknown as Step[]) ?? [];
         return { ...r, stepLabel: steps[r.currentStepIndex]?.label ?? '—', slaRemainingDays: slaRemainingDays(r) };
       });
+  }
+
+  // Setujui semua realisasi yang menunggu di langkah user sekaligus — reuse getReviewList +
+  // review() per-paket (chain advance/chainDone/notifikasi tetap ditangani di sana). Satu note
+  // dipakai untuk semua; satu paket gagal tak menggagalkan sisanya.
+  async bulkApprove(user: User, note: string) {
+    if (!note?.trim()) throw new BadRequestException('Catatan/komentar wajib diisi saat menyetujui');
+    const list = await this.getReviewList(user);
+    let approved = 0, failed = 0;
+    for (const r of list) {
+      try {
+        await this.review(user, r.id, 'approve', note);
+        approved++;
+      } catch {
+        failed++;
+      }
+    }
+    return { total: list.length, approved, failed };
   }
 
   // Reviewer pada langkahnya dapat mengedit nilai realisasi (revisi minor) sebelum menyetujui.

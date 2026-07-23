@@ -335,28 +335,17 @@ function FoldCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div
-      id={id}
-      className={`card p-0${highlight ? " notif-highlight" : ""}`}
-      style={{
-        marginBottom: "var(--space-6)",
-        ...(accent ? { borderTop: `3px solid ${accent}` } : {}),
-      }}>
-      <button
-        type="button"
+    <div id={id} className={`card p-0${highlight ? ' notif-highlight' : ''}`} style={{ marginBottom: 'var(--space-6)', ...(accent ? { borderTop: `3px solid ${accent}` } : {}) }}>
+      <div
+        role="button"
+        tabIndex={0}
         className="card-header compact fold-card-header"
         onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}>
-        <div className="card-title">
-          {icon}
-          {title}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-          }}>
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o); } }}
+        aria-expanded={open}
+      >
+        <div className="card-title">{icon}{title}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
           {right}
           <ChevronDown
             size={16}
@@ -367,7 +356,7 @@ function FoldCard({
             }}
           />
         </div>
-      </button>
+      </div>
       {open && children}
     </div>
   );
@@ -535,6 +524,7 @@ export function ApprovalsPage() {
   const [kmBusy, setKmBusy] = useState(false);
   const [kmEditId, setKmEditId] = useState<string | null>(null);
   const [kmEditItems, setKmEditItems] = useState<Record<string, unknown>[]>([]);
+  const [kmBulkBusy, setKmBulkBusy] = useState(false);
 
   // Review Realisasi Kinerja Bulanan (untuk Asman ke atas)
   const [realList, setRealList] = useState<RealisasiKinerja[]>([]);
@@ -542,6 +532,7 @@ export function ApprovalsPage() {
   const [realTarget, setRealTarget] = useState<string | null>(null);
   const [realExpanded, setRealExpanded] = useState<string | null>(null);
   const [realBusy, setRealBusy] = useState(false);
+  const [realBulkBusy, setRealBulkBusy] = useState(false);
   // B2-5: edit nilai realisasi saat review (per layer)
   const [realEditId, setRealEditId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
@@ -1608,6 +1599,42 @@ export function ApprovalsPage() {
     }
   };
 
+  // Setujui semua usulan KM yang menunggu di langkah user sekaligus (borongan lintas-dokumen).
+  const handleKmBulkApprove = async () => {
+    const note = window.prompt(`Setujui ${kmList.length} usulan KM sekaligus. Catatan (wajib)?`);
+    if (note == null) return; // batal
+    if (!note.trim()) { alert('Catatan/komentar wajib diisi saat menyetujui'); return; }
+    setKmBulkBusy(true);
+    try {
+      const r = await inputKontrak.bulkApprove(note.trim());
+      loadKm();
+      refreshNotif();
+      alert(`${r.approved} dari ${r.total} usulan KM disetujui${r.failed > 0 ? `, ${r.failed} gagal (cek status terbaru)` : ''}.`);
+    } catch (e) {
+      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal memproses borongan');
+    } finally {
+      setKmBulkBusy(false);
+    }
+  };
+
+  // Setujui semua paket realisasi yang menunggu di langkah user sekaligus.
+  const handleRealBulkApprove = async () => {
+    const note = window.prompt(`Setujui ${realList.length} paket realisasi sekaligus. Catatan (wajib)?`);
+    if (note == null) return; // batal
+    if (!note.trim()) { alert('Catatan/komentar wajib diisi saat menyetujui'); return; }
+    setRealBulkBusy(true);
+    try {
+      const r = await inputRealisasi.bulkApprove(note.trim());
+      loadReal();
+      refreshNotif();
+      alert(`${r.approved} dari ${r.total} paket realisasi disetujui${r.failed > 0 ? `, ${r.failed} gagal (cek status terbaru)` : ''}.`);
+    } catch (e) {
+      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal memproses borongan');
+    } finally {
+      setRealBulkBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="page">
@@ -1750,16 +1777,21 @@ export function ApprovalsPage() {
           icon={<FileSignature size={16} />}
           title="Usulan Kontrak Manajemen Menunggu Review"
           right={
-            <span
-              className="status-pill"
-              style={{
-                background: "var(--color-accent-tint)",
-                color: "var(--color-accent)",
-                fontWeight: "bold",
-              }}>
-              {kmList.length} Usulan
-            </span>
-          }>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span className="status-pill" style={{ background: 'var(--color-accent-tint)', color: 'var(--color-accent)', fontWeight: 'bold' }}>{kmList.length} Usulan</span>
+              {kmList.length > 1 && (
+                <button
+                  className="btn btn-sm"
+                  style={{ background: 'var(--color-success)', color: '#fff' }}
+                  disabled={kmBulkBusy}
+                  onClick={(e) => { e.stopPropagation(); handleKmBulkApprove(); }}
+                >
+                  <CheckCircle size={12} /> {kmBulkBusy ? 'Memproses…' : `Setujui Semua (${kmList.length})`}
+                </button>
+              )}
+            </div>
+          }
+        >
           {kmList.length === 0 ? (
             <div className="card-body">
               <EmptyState
@@ -2755,16 +2787,21 @@ export function ApprovalsPage() {
           icon={<ClipboardCheck size={16} />}
           title="Realisasi Kinerja Bulanan Menunggu Review"
           right={
-            <span
-              className="status-pill"
-              style={{
-                background: "var(--color-info-tint)",
-                color: "var(--color-info)",
-                fontWeight: "bold",
-              }}>
-              {realList.length} Realisasi
-            </span>
-          }>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span className="status-pill" style={{ background: 'var(--color-info-tint)', color: 'var(--color-info)', fontWeight: 'bold' }}>{realList.length} Realisasi</span>
+              {realList.length > 1 && (
+                <button
+                  className="btn btn-sm"
+                  style={{ background: 'var(--color-success)', color: '#fff' }}
+                  disabled={realBulkBusy}
+                  onClick={(e) => { e.stopPropagation(); handleRealBulkApprove(); }}
+                >
+                  <CheckCircle size={12} /> {realBulkBusy ? 'Memproses…' : `Setujui Semua (${realList.length})`}
+                </button>
+              )}
+            </div>
+          }
+        >
           {realList.length === 0 ? (
             <div className="card-body">
               <EmptyState

@@ -28,7 +28,7 @@ class UpdateKpiItemsDto {
 
 class SubmitDto {
   @IsArray() @IsString({ each: true }) checkerIds: string[];
-  @IsString() approverId: string;
+  @IsArray() @IsString({ each: true }) approverIds: string[];
 }
 
 class BundleReviewDto {
@@ -37,6 +37,10 @@ class BundleReviewDto {
   @IsString() note: string;
   @IsOptional() @IsString() year?: string;
   @IsOptional() @IsIn(['draft', 'final']) kmType?: string;
+}
+
+class BulkApproveDto {
+  @IsString() note: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -52,6 +56,11 @@ export class InputKontrakController {
   @Get('review/list')
   reviewList(@CurrentUser() user: User) {
     return this.svc.getReviewList(user);
+  }
+
+  @Post('review/bulk-approve')
+  bulkApprove(@CurrentUser() user: User, @Body() dto: BulkApproveDto) {
+    return this.svc.bulkApprove(user, dto.note);
   }
 
   @Get('reviewer-candidates')
@@ -86,7 +95,7 @@ export class InputKontrakController {
 
   @Post(':id/submit')
   submit(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: SubmitDto) {
-    return this.svc.submit(user, id, dto.checkerIds, dto.approverId);
+    return this.svc.submit(user, id, dto.checkerIds, dto.approverIds);
   }
 
   @Patch(':id/values')

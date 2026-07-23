@@ -1,6 +1,10 @@
 import { useEffect, useState, Fragment } from "react";
 import { kpiMaster, inputKontrak } from "../lib/api";
-import type { ReviewerSlot, ReviewerSlots } from "../lib/api";
+import type {
+  ReviewerSlot,
+  ReviewerSlots,
+  SubIndicatorInput,
+} from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { usePeriod } from "../context/PeriodContext";
 import {
@@ -110,7 +114,7 @@ export function KpiMasterPage() {
           marginBottom: "var(--space-4)",
         }}>
         <button
-          className={`btn btn-tab ${tab === "definisi" ? "btn-primary" : "btn-ghost"}`}
+          className={`btn btn-tab  ${tab === "definisi" ? "btn-primary" : "btn-ghost"}`}
           onClick={() => setTab("definisi")}>
           <Layers size={15} /> Definisi KPI
         </button>
@@ -172,7 +176,15 @@ type KpiMasterRow = {
   isPending: boolean;
   isCurrent: boolean;
   aggregationMethod: "weighted" | "sum";
+  subIndicators: SubIndicatorInput[] | null;
 };
+const emptySubIndicator = (): SubIndicatorInput => ({
+  nama: "",
+  satuan: "",
+  bobot: "",
+  target: "",
+  target2: "",
+});
 const ROLE_LABEL: Record<string, string> = {
   ASMAN: "ASMAN",
   MANAJER: "Manajer",
@@ -271,7 +283,7 @@ function ReviewerSlotsPanel({
             alignItems: "center",
             gap: 4,
           }}>
-          <UserCheck size={14} /> Checker ({slots.checkers.length})
+          <UserCheck size={12} /> Checker ({slots.checkers.length})
         </div>
         {slots.checkers.length === 0 && (
           <div
@@ -344,7 +356,7 @@ function ReviewerSlotsPanel({
                     `→ ${preview.name}`
                   ) : (
                     <>
-                      <AlertCircle size={12} /> tak ditemukan — jatuh ke Default
+                      <AlertCircle size={11} /> tak ditemukan — jatuh ke Default
                       Alur Reviewer
                     </>
                   )}
@@ -411,7 +423,7 @@ function ReviewerSlotsPanel({
             alignItems: "center",
             gap: 4,
           }}>
-          <ShieldCheck size={16} /> Approver
+          <ShieldCheck size={12} /> Approver
         </div>
         {!slots.approver ? (
           <button
@@ -446,7 +458,7 @@ function ReviewerSlotsPanel({
             {slots.approver.userId ? (
               <select
                 className="form-input form-input-sm"
-                style={{ width: 360 }}
+                style={{ minWidth: 180 }}
                 value={slots.approver.userId}
                 onChange={(e) =>
                   onSetApprover({ ...slots.approver!, userId: e.target.value })
@@ -565,6 +577,28 @@ function DefinisiKpiTab() {
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Sub-indikator (opt-in, generik) — KPI apa pun boleh ditandai "komposit" & diisi sub-indikator
+  // di sini; tidak dibatasi ke nama indikator tertentu. Non-kosong → bobotKm assignment jadi
+  // turunan (Σ bobot sub), realisasi diisi per-sub belakangan di Input Realisasi.
+  const [isComposite, setIsComposite] = useState(false);
+  const [subIndicators, setSubIndicators] = useState<SubIndicatorInput[]>([]);
+  const addSubIndicator = () =>
+    setSubIndicators((prev) => [...prev, emptySubIndicator()]);
+  const removeSubIndicator = (i: number) =>
+    setSubIndicators((prev) => prev.filter((_, idx) => idx !== i));
+  const updateSubIndicator = (
+    i: number,
+    field: keyof SubIndicatorInput,
+    value: string,
+  ) =>
+    setSubIndicators((prev) =>
+      prev.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)),
+    );
+  const totalSubBobot = subIndicators.reduce(
+    (s, si) => s + (Number(String(si.bobot).replace(",", ".")) || 0),
+    0,
+  );
+
   // Default alur reviewer (Fase C) — diwariskan ke picker submit dokumen hasil fan-out.
   const [reviewerCandidates, setReviewerCandidates] = useState<{
     checkers: ReviewerCandidate[];
@@ -627,6 +661,8 @@ function DefinisiKpiTab() {
     setDefaultCheckerOrder([]);
     setDefaultApproverId("");
     setOpenReviewerRow(null);
+    setIsComposite(false);
+    setSubIndicators([]);
   };
 
   const handleEdit = (m: KpiMasterRow) => {
@@ -652,6 +688,10 @@ function DefinisiKpiTab() {
       })),
     );
     setEditingIsPending(m.isPending);
+    setIsComposite(!!(m.subIndicators && m.subIndicators.length > 0));
+    setSubIndicators(
+      m.subIndicators ? m.subIndicators.map((s) => ({ ...s })) : [],
+    );
     setShowForm(true);
     setFormError(null);
   };
@@ -847,6 +887,34 @@ function DefinisiKpiTab() {
       );
       return;
     }
+    if (isComposite) {
+      if (subIndicators.length === 0) {
+        setFormError(
+          "Tambahkan minimal satu sub-indikator, atau matikan mode Komposit.",
+        );
+        return;
+      }
+      const subNames = new Set<string>();
+      for (const s of subIndicators) {
+        if (!s.nama.trim()) {
+          setFormError("Nama setiap sub-indikator wajib diisi.");
+          return;
+        }
+        if (subNames.has(s.nama.trim())) {
+          setFormError(`Sub-indikator "${s.nama}" terpilih ganda.`);
+          return;
+        }
+        subNames.add(s.nama.trim());
+        if (!s.bobot.trim() || Number(String(s.bobot).replace(",", ".")) <= 0) {
+          setFormError(`Bobot sub-indikator "${s.nama}" harus angka > 0.`);
+          return;
+        }
+        if (!s.target.trim()) {
+          setFormError(`Target sub-indikator "${s.nama}" wajib diisi.`);
+          return;
+        }
+      }
+    }
     setFormError(null);
     setBusy(true);
     try {
@@ -861,6 +929,7 @@ function DefinisiKpiTab() {
         assignments,
         defaultCheckerIds: defaultCheckerOrder,
         defaultApproverId: defaultApproverId || undefined,
+        subIndicators: isComposite ? subIndicators : undefined,
       });
       setSubmitted(true);
       resetForm();
@@ -907,7 +976,7 @@ function DefinisiKpiTab() {
         }}>
         {canAuthor && (
           <button
-            className="btn btn-tab btn-primary"
+            className="btn btn-primary"
             onClick={() => {
               resetForm();
               setShowForm(true);
@@ -1630,7 +1699,7 @@ function DefinisiKpiTab() {
                             <span
                               style={{
                                 marginLeft: 6,
-                                fontSize: 9,
+                                fontSize: 12,
                                 fontWeight: 700,
                                 color: "var(--color-text-muted)",
                                 border: "1px solid var(--color-border)",
@@ -1639,6 +1708,21 @@ function DefinisiKpiTab() {
                               }}
                               title="Metode agregasi: SUM (jumlah polos)">
                               Σ SUM
+                            </span>
+                          )}
+                          {m.subIndicators && m.subIndicators.length > 0 && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "var(--color-accent)",
+                                border: "1px solid var(--color-accent)",
+                                borderRadius: 4,
+                                padding: "1px 4px",
+                              }}
+                              title={`Komposit — ${m.subIndicators.length} sub-indikator`}>
+                              Komposit ({m.subIndicators.length})
                             </span>
                           )}
                         </td>
@@ -1804,7 +1888,7 @@ function DefinisiKpiTab() {
                                     </span>
                                     <span
                                       style={{
-                                        fontSize: "var(--text-xs)",
+                                        fontSize: "var(--text-sm)",
                                         color: "var(--color-text-muted)",
                                       }}>
                                       Target parent:{" "}
@@ -2032,12 +2116,12 @@ function DokumenKmTab() {
   };
   const handleConfirmSubmit = async (
     checkerIds: string[],
-    approverId: string,
+    approverIds: string[],
   ) => {
     if (!submitTargetId) return;
     setSubmitting(true);
     try {
-      await inputKontrak.submit(submitTargetId, checkerIds, approverId);
+      await inputKontrak.submit(submitTargetId, checkerIds, approverIds);
       setSubmitTargetId(null);
       setSubmitted(true);
       await loadData();
@@ -2073,7 +2157,7 @@ function DokumenKmTab() {
         continue;
       }
       try {
-        await inputKontrak.submit(k.id, d.checkerIds, d.approverId);
+        await inputKontrak.submit(k.id, d.checkerIds, [d.approverId]);
         ok++;
       } catch {
         fail++;
@@ -2105,7 +2189,7 @@ function DokumenKmTab() {
           flexWrap: "wrap",
         }}>
         <button
-          className={`btn btn-tab  ${kmTypeFilter === "draft" ? "btn-primary" : "btn-ghost"}`}
+          className={`btn btn-tab ${kmTypeFilter === "draft" ? "btn-primary" : "btn-ghost"}`}
           onClick={() => setKmTypeFilter("draft")}>
           KM Draft
         </button>
@@ -2244,7 +2328,7 @@ function DokumenKmTab() {
                     <th>Unit</th>
                     <th>Bidang</th>
                     <th>Penanggung Jawab</th>
-                    <th className="num">Jumlah KPI</th>
+                    <th>Jumlah KPI</th>
                     <th>Status</th>
                     <th>Tanggal</th>
                     <th style={{ width: 140 }}>Aksi</th>
@@ -2258,7 +2342,9 @@ function DokumenKmTab() {
                       </td>
                       <td>{k.bidang}</td>
                       <td>{k.holder}</td>
-                      <td className="num" style={{ fontSize: 14 }}>{k.kpiItems.length} indikator</td>
+                      <td className="num" style={{ fontSize: 14 }}>
+                        {k.kpiItems.length} indikator
+                      </td>
                       <td>
                         <span
                           className={`status-pill ${STATUS_PILL[k.status] ?? "in-review"}`}>
@@ -2335,7 +2421,7 @@ function DokumenKmTab() {
                             ) : (
                               <span
                                 style={{
-                                  fontSize: "var(--text-xs)",
+                                  fontSize: "var(--text-sm)",
                                   color: "var(--color-text-subtle)",
                                 }}>
                                 Bidang lain — lihat saja
@@ -2388,9 +2474,7 @@ function DokumenKmTab() {
             />
           </div>
         ) : (
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
+          <div className="table-wrap" style={{ paddingBottom: "var(--space-7)" }}>
             <div className="table-scroll">
               <table className="data-table compact">
                 <thead>
@@ -2398,7 +2482,7 @@ function DokumenKmTab() {
                     <th>Unit</th>
                     <th>Bidang</th>
                     <th>Penanggung Jawab</th>
-                    <th>KPI</th>
+                    <th className="num">KPI</th>
                     <th>Disahkan oleh</th>
                     <th>Tanggal</th>
                   </tr>
@@ -2515,7 +2599,12 @@ function DokumenKmTab() {
         onConfirm={handleConfirmSubmit}
         onCancel={() => setSubmitTargetId(null)}
         initialCheckerIds={defaultReviewers.checkerIds}
-        initialApproverId={defaultReviewers.approverId ?? undefined}
+        initialApproverIds={
+          defaultReviewers.approverId
+            ? [defaultReviewers.approverId]
+            : undefined
+        }
+        bidang={kontrakList.find((k) => k.id === submitTargetId)?.bidang}
       />
     </>
   );
@@ -2678,12 +2767,18 @@ function ReviewPerKpiTab() {
           marginBottom: "var(--space-3)",
           display: "flex",
           alignItems: "center",
-          gap: 6,
         }}>
-        <PieChart size={14} /> Lensa konsolidasi — periode{" "}
-        <b>{data.periodLabel}</b>. Nilai parent dihitung dari slice yang
-        realisasinya sudah <b>disetujui</b>; slice lain ditampilkan sebagai
-        progres.
+        <p style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <PieChart size={14} /> Lensa konsolidasi — periode{" "}
+        </p>
+        <span style={{ paddingLeft: 6 }}>
+          <b> {data.periodLabel}</b>
+        </span>
+        . Nilai parent dihitung dari slice yang realisasinya sudah{" "}
+        <span style={{ paddingLeft: 6 }}>
+          <b>disetujui</b>
+        </span>
+        ; slice lain ditampilkan sebagai progres.
         {data.viewerCanConsolidate && (
           <span style={{ color: "var(--color-accent)" }}>
             {" "}
@@ -2735,13 +2830,13 @@ function ReviewPerKpiTab() {
                 )}
                 <span
                   className={`status-pill ${it.kmType === "final" ? "completed" : "at-risk"}`}
-                  style={{ fontSize: 14, fontWeight: 700 }}>
+                  style={{ fontSize: 14 }}>
                   {it.kmType === "final" ? "Final" : "Draft"}
                 </span>
                 {it.isPending && (
                   <span
                     className="status-pill in-review"
-                    style={{ fontSize: 14, fontWeight: 700 }}
+                    style={{ fontSize: 14 }}
                     title={`Berlaku mulai ${it.effectiveMonth}`}>
                     v{it.version} · mulai {it.effectiveMonth}
                   </span>
@@ -2749,7 +2844,7 @@ function ReviewPerKpiTab() {
                 {cs?.status === "approved" && (
                   <span
                     className="status-pill completed"
-                    style={{ fontSize: 14, fontWeight: 700 }}
+                    style={{ fontSize: 14 }}
                     title={`Disetujui ${cs.reviewer ?? ""}`}>
                     ✓ Konsolidasi Final
                   </span>
@@ -2757,14 +2852,14 @@ function ReviewPerKpiTab() {
                 {cs?.status === "rejected" && (
                   <span
                     className="status-pill delayed"
-                    style={{ fontSize: 14, fontWeight: 700 }}>
+                    style={{ fontSize: 14 }}>
                     Konsolidasi Ditolak
                   </span>
                 )}
                 {!cs && it.readyForConsolidation && (
                   <span
                     className="status-pill at-risk"
-                    style={{ fontSize: 14, fontWeight: 700 }}>
+                    style={{ fontSize: 14 }}>
                     Siap Konsolidasi
                   </span>
                 )}
@@ -2897,14 +2992,15 @@ function ReviewPerKpiTab() {
                         </td>
                         <td>
                           <span
-                            className={`status-pill ${REAL_STATUS_PILL[s.status] ?? "in-review"}`}>
+                            className={`status-pill ${REAL_STATUS_PILL[s.status] ?? "in-review"}`}
+                          >
                             {REAL_STATUS_LABEL[s.status] ?? s.status}
                           </span>
                         </td>
                         <td
                           style={{
                             color: "var(--color-text-muted)",
-                            fontSize: 11,
+                            fontSize: 12,
                           }}>
                           {s.reviewer || "—"}
                         </td>

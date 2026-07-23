@@ -23,25 +23,28 @@ type Props = {
   title?: string;
   busy?: boolean;
   fetchCandidates: () => Promise<{ checkers: ReviewerCandidate[]; approvers: ReviewerCandidate[] }>;
-  onConfirm: (checkerIds: string[], approverId: string) => void;
+  onConfirm: (checkerIds: string[], approverIds: string[]) => void;
   onCancel: () => void;
   // Pre-fill dari default KPI Master (Fase C) — submitter tetap bisa mengubahnya.
   initialCheckerIds?: string[];
-  initialApproverId?: string;
+  initialApproverIds?: string[];
+  // Bidang dokumen yang sedang disubmit — dipakai menyembunyikan GM dari kandidat Approver
+  // saat bidang ini punya Senior Manajer aktif (GM tetap final sign-off di tahap Bundle).
+  bidang?: string;
 };
 
-export default function ReviewerPickerModal({ open, title, busy, fetchCandidates, onConfirm, onCancel, initialCheckerIds, initialApproverId }: Props) {
+export default function ReviewerPickerModal({ open, title, busy, fetchCandidates, onConfirm, onCancel, initialCheckerIds, initialApproverIds, bidang }: Props) {
   const [checkers, setCheckers] = useState<ReviewerCandidate[]>([]);
   const [approvers, setApprovers] = useState<ReviewerCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [order, setOrder] = useState<string[]>([]); // checker ids in review order
-  const [approverId, setApproverId] = useState('');
+  const [approverOrder, setApproverOrder] = useState<string[]>([]); // approver ids in approval order
   const [prefilled, setPrefilled] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setOrder([]); setApproverId(''); setLoadErr(null); setPrefilled(false);
+    setOrder([]); setApproverOrder([]); setLoadErr(null); setPrefilled(false);
     setLoading(true);
     fetchCandidates()
       .then((d) => { setCheckers(d.checkers ?? []); setApprovers(d.approvers ?? []); })
@@ -55,9 +58,10 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
     if (checkers.length === 0 && approvers.length === 0) return;
     const validCheckerIds = (initialCheckerIds ?? []).filter((id) => checkers.some((c) => c.id === id));
     if (validCheckerIds.length > 0) setOrder(validCheckerIds);
-    if (initialApproverId && approvers.some((a) => a.id === initialApproverId)) setApproverId(initialApproverId);
+    const validApproverIds = (initialApproverIds ?? []).filter((id) => approvers.some((a) => a.id === id));
+    if (validApproverIds.length > 0) setApproverOrder(validApproverIds);
     setPrefilled(true);
-  }, [open, loading, prefilled, checkers, approvers, initialCheckerIds, initialApproverId]);
+  }, [open, loading, prefilled, checkers, approvers, initialCheckerIds, initialApproverIds]);
 
   if (!open) return null;
 
@@ -73,8 +77,23 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
       return next;
     });
 
+  const toggleApprover = (id: string) =>
+    setApproverOrder((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const moveApprover = (id: string, dir: -1 | 1) =>
+    setApproverOrder((prev) => {
+      const i = prev.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
   const byId = (id: string) => checkers.find((c) => c.id === id);
-  const canConfirm = order.length > 0 && !!approverId && !busy;
+  const approverById = (id: string) => approvers.find((a) => a.id === id);
+  const srManajerAvailable = !!bidang && approvers.some((a) => a.role === 'SRMANAJER' && a.bidang === bidang);
+  const visibleApprovers = bidang ? approvers.filter((a) => a.role !== 'GM' || !srManajerAvailable) : approvers;
+  const canConfirm = order.length > 0 && approverOrder.length > 0 && !busy;
 
   return (
     <div
@@ -94,12 +113,18 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
 
         <div style={{ padding: 'var(--space-4)' }}>
           <p style={{ margin: '0 0 var(--space-3)', fontSize: 12, color: 'var(--color-text-muted)' }}>
-            Tentukan <b>Checker</b> (berurutan; ASMAN/Manajer) lalu satu <b>Approver</b> (Senior Manajer/GM).
-            Dokumen mengalir: Anda → Checker 1 → Checker 2 → … → Approver → konsolidasi GM.
+            Tentukan <b>Checker</b> (berurutan; ASMAN/Manajer) lalu satu atau lebih <b>Approver</b> (Senior
+            Manajer/GM). Dokumen mengalir: Anda → Checker 1 → Checker 2 → … → Approver 1 → … → Approver
+            terakhir — <b>semua Approver terpilih harus menyetujui</b> sebelum dokumen selesai.
           </p>
-          {prefilled && (order.length > 0 || approverId) && (
+          {prefilled && (order.length > 0 || approverOrder.length > 0) && (
             <div style={{ margin: '0 0 var(--space-3)', padding: '6px 10px', background: 'var(--color-accent-tint)', borderRadius: 6, fontSize: 11, color: 'var(--color-accent)' }}>
               Terisi otomatis dari default KPI Master — Anda tetap bisa mengubahnya.
+            </div>
+          )}
+          {srManajerAvailable && (
+            <div style={{ margin: '0 0 var(--space-3)', padding: '6px 10px', background: 'var(--color-surface-2)', borderRadius: 6, fontSize: 11, color: 'var(--color-text-muted)' }}>
+              General Manager disembunyikan dari kandidat Approver — bidang ini punya Senior Manajer.
             </div>
           )}
 
@@ -151,17 +176,47 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
                 </div>
               </div>
 
-              {/* Approver */}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <ShieldCheck size={14} /> Approver
+              {/* Urutan approver terpilih */}
+              {approverOrder.length > 0 && (
+                <div style={{ marginBottom: 'var(--space-3)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ShieldCheck size={14} /> Urutan Approver ({approverOrder.length})
+                  </div>
+                  {approverOrder.map((id, i) => {
+                    const a = approverById(id);
+                    if (!a) return null;
+                    return (
+                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-surface-2)', borderRadius: 6, marginBottom: 4 }}>
+                        <span style={{ fontWeight: 700, minWidth: 18 }}>{i + 1}.</span>
+                        <span style={{ flex: 1, fontSize: 13 }}>{a.name} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>· {desc(a)}</span></span>
+                        <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveApprover(id, -1)} aria-label="Naik"><ArrowUp size={13} /></button>
+                        <button className="btn btn-ghost btn-sm" disabled={i === approverOrder.length - 1} onClick={() => moveApprover(id, 1)} aria-label="Turun"><ArrowDown size={13} /></button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => toggleApprover(id)} aria-label="Hapus"><X size={13} /></button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <select className="form-input" value={approverId} onChange={(e) => setApproverId(e.target.value)} style={{ width: '100%' }}>
-                  <option value="">— Pilih Approver —</option>
-                  {approvers.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name} — {desc(a)}</option>
-                  ))}
-                </select>
+              )}
+
+              {/* Daftar kandidat approver */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 'var(--space-2)' }}>Kandidat Approver</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                  {visibleApprovers.map((a) => {
+                    const picked = approverOrder.includes(a.id);
+                    return (
+                      <button
+                        key={a.id}
+                        onClick={() => toggleApprover(a.id)}
+                        style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: `1px solid ${picked ? 'var(--color-accent)' : 'var(--color-border)'}`, background: picked ? 'var(--color-accent-tint)' : 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                      >
+                        <span style={{ width: 16 }}>{picked && <Check size={14} />}</span>
+                        <span style={{ fontSize: 13 }}>{a.name}<br /><span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>{desc(a)}</span></span>
+                      </button>
+                    );
+                  })}
+                  {visibleApprovers.length === 0 && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Tidak ada kandidat approver.</span>}
+                </div>
               </div>
             </>
           )}
@@ -169,7 +224,7 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', padding: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
           <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>Batal</button>
-          <button className="btn btn-primary" onClick={() => onConfirm(order, approverId)} disabled={!canConfirm}>
+          <button className="btn btn-primary" onClick={() => onConfirm(order, approverOrder)} disabled={!canConfirm}>
             {busy ? 'Mengirim…' : 'Kirim untuk Review'}
           </button>
         </div>

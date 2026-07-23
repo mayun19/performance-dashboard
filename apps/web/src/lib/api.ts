@@ -132,8 +132,8 @@ export type RevisionLogEntry = {
 export const inputRealisasi = {
   history: (unitCode?: string, periodId?: string) =>
     api.get('/input-realisasi/history', { params: { unitCode, periodId } }).then((r) => r.data),
-  submit: (unitCode: string, bidang: string, values: Record<string, unknown>, checkerIds: string[], approverId: string, periodId?: string) =>
-    api.put('/input-realisasi/submit', { unitCode, bidang, values, checkerIds, approverId, periodId }).then((r) => r.data),
+  submit: (unitCode: string, bidang: string, values: Record<string, unknown>, checkerIds: string[], approverIds: string[], periodId?: string) =>
+    api.put('/input-realisasi/submit', { unitCode, bidang, values, checkerIds, approverIds, periodId }).then((r) => r.data),
   reviewList: () =>
     api.get('/input-realisasi/review/list').then((r) => r.data),
   reviewerCandidates: () =>
@@ -141,6 +141,9 @@ export const inputRealisasi = {
   // returnTo 'target' (living-target): routing masalah target ke PIC REN → status target_fix.
   review: (id: string, action: 'approve' | 'reject', note?: string, returnTo?: 'konseptor' | 'previous' | 'target') =>
     api.post(`/input-realisasi/${id}/review`, { action, note, returnTo }).then((r) => r.data),
+  // Setujui semua paket yang menunggu di langkah user sekaligus.
+  bulkApprove: (note: string) =>
+    api.post('/input-realisasi/review/bulk-approve', { note }).then((r) => r.data as { total: number; approved: number; failed: number }),
   // PIC REN mengoreksi KM Sementara untuk package berstatus target_fix, lalu package balik ke PIC.
   resolveTargetFix: (id: string, updates: Array<{ kpiAssignmentId: string; target: string }>, note: string) =>
     api.post(`/input-realisasi/${id}/resolve-target-fix`, { updates, note }).then((r) => r.data),
@@ -180,8 +183,8 @@ export const inputKontrak = {
     kmType: 'draft' | 'final' = 'draft',
   ) =>
     api.post('/input-kontrak/save', { id, unitCode, bidang, holder, kpiItems, kmType }).then((r) => r.data),
-  submit: (id: string, checkerIds: string[], approverId: string) =>
-    api.post(`/input-kontrak/${id}/submit`, { checkerIds, approverId }).then((r) => r.data),
+  submit: (id: string, checkerIds: string[], approverIds: string[]) =>
+    api.post(`/input-kontrak/${id}/submit`, { checkerIds, approverIds }).then((r) => r.data),
   delete: (id: string) =>
     api.delete(`/input-kontrak/${id}`).then((r) => r.data),
   reviewList: () =>
@@ -192,6 +195,9 @@ export const inputKontrak = {
     api.get('/input-kontrak/approved', { params: { unitCode, year, kmType } }).then((r) => r.data),
   review: (id: string, action: 'approve' | 'reject', note?: string, returnTo?: 'konseptor' | 'previous') =>
     api.post(`/input-kontrak/${id}/review`, { action, note, returnTo }).then((r) => r.data),
+  // Setujui semua dokumen yang menunggu di langkah user sekaligus.
+  bulkApprove: (note: string) =>
+    api.post('/input-kontrak/review/bulk-approve', { note }).then((r) => r.data as { total: number; approved: number; failed: number }),
   bundle: (scope: 'KP' | 'UPMK' = 'KP', year?: string, kmType: 'draft' | 'final' = 'draft') =>
     api.get('/input-kontrak/bundle', { params: { scope, year, kmType } }).then((r) => r.data),
   reviewBundle: (scope: 'KP' | 'UPMK', action: 'approve' | 'reject', note: string, year?: string, kmType: 'draft' | 'final' = 'draft') =>
@@ -209,6 +215,9 @@ export type KpiAssignmentInput = {
   persenAgregasi?: number;
   reviewerSlots?: ReviewerSlots | null;
 };
+// Sub-indikator (opt-in, generik) — non-kosong menandai KPI ini "komposit". Lihat
+// kpi-master.service.ts SubIndicatorInput.
+export type SubIndicatorInput = { nama: string; satuan?: string; bobot: string; target: string; target2?: string };
 export const kpiMaster = {
   list: (year?: string, kmType?: 'draft' | 'final') =>
     api.get('/kpi-master', { params: { year, kmType } }).then((r) => r.data),
@@ -218,6 +227,7 @@ export const kpiMaster = {
     satuan?: string; targetParent?: string; assignments: KpiAssignmentInput[];
     defaultCheckerIds?: string[]; defaultApproverId?: string;
     aggregationMethod?: 'weighted' | 'sum';
+    subIndicators?: SubIndicatorInput[];
   }) => api.post('/kpi-master/save', dto).then((r) => r.data),
   delete: (id: string) => api.delete(`/kpi-master/${id}`).then((r) => r.data),
   rollup: (id: string, periodId?: string) =>

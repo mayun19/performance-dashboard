@@ -13,7 +13,7 @@ class SubmitDto {
   @IsString() bidang: string;
   @IsObject() values: Record<string, unknown>;
   @IsArray() @IsString({ each: true }) checkerIds: string[];
-  @IsString() approverId: string;
+  @IsArray() @IsString({ each: true }) approverIds: string[];
   @IsOptional() @IsString() periodId?: string;
 }
 
@@ -44,6 +44,10 @@ class BundleReviewDto {
   @IsOptional() @IsString() periodId?: string;
 }
 
+class BulkApproveDto {
+  @IsString() note: string;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('input-realisasi')
 export class InputRealisasiController {
@@ -57,6 +61,11 @@ export class InputRealisasiController {
   @Get('review/list')
   reviewList(@CurrentUser() user: User) {
     return this.svc.getReviewList(user);
+  }
+
+  @Post('review/bulk-approve')
+  bulkApprove(@CurrentUser() user: User, @Body() dto: BulkApproveDto) {
+    return this.svc.bulkApprove(user, dto.note);
   }
 
   @Get('reviewer-candidates')
@@ -77,7 +86,7 @@ export class InputRealisasiController {
 
   @Put('submit')
   submit(@CurrentUser() user: User, @Body() dto: SubmitDto) {
-    return this.svc.submit(user, dto.unitCode, dto.bidang, dto.values, dto.checkerIds, dto.approverId, dto.periodId);
+    return this.svc.submit(user, dto.unitCode, dto.bidang, dto.values, dto.checkerIds, dto.approverIds, dto.periodId);
   }
 
   @Patch(':id/values')

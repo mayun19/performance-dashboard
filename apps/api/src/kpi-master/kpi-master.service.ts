@@ -22,6 +22,17 @@ export interface AssignmentInput {
   persenAgregasi?: number; // bobot rollup ke parent (0-100), diinput RPC Perencanaan
   reviewerSlots?: unknown; // default alur reviewer per-assignment (A+B); divalidasi di service
 }
+
+// Sub-indikator (opt-in, generik — KPI mana pun boleh dipakai). Didefinisikan sekali di KPI
+// Master, dinilai seperti baris KPI penuh sendiri-sendiri, lalu digulung: nilai induk = Σ nilai
+// sub, bobot induk = Σ bobot sub. Sub yang sama dipakai di SEMUA assignment (unit/bidang) KPI ini.
+export interface SubIndicatorInput {
+  nama: string;
+  satuan?: string;
+  bobot: string; // poin KM (Σ seluruh sub = bobotKm assignment, turunan otomatis)
+  target: string;
+  target2?: string;
+}
 export interface SaveMasterInput {
   id?: string;
   kmType?: string; // 'draft' | 'final'
@@ -33,14 +44,19 @@ export interface SaveMasterInput {
   defaultCheckerIds?: string[]; // default alur reviewer (Fase C) — diwariskan ke picker submit
   defaultApproverId?: string;
   aggregationMethod?: string; // 'weighted' | 'sum' (Fase E) — dipilih per-KPI
+  subIndicators?: SubIndicatorInput[]; // non-kosong = KPI ini "komposit"
 }
 
 // Item yang disebar (fan-out) ke kpiItems dokumen KM. Bentuknya kompatibel dengan
 // KpiItem existing (indikator/formula/satuan/bobot/target/target2) + tautan masterKpiId.
+// `subIndicators` (opsional) menandai item ini komposit — lihat SubIndicatorInput. Ini
+// dokumen KM (definisi TARGET), belum ada realisasi — realisasi per-sub diisi belakangan
+// saat submit Input Realisasi (sama seperti item non-komposit, pola existing).
 type FannedItem = {
   masterKpiId: string;
   indikator: string; formula: string; satuan: string;
   bobot: string; target: string; target2: string;
+  subIndicators?: SubIndicatorInput[];
 };
 
 // Item KM legacy dikumpulkan utk backfill (Fase F) — belum bertag masterKpiId.
@@ -127,6 +143,28 @@ export class KpiMasterService {
   // Normalisasi reviewerSlots dari input authoring → bentuk tersimpan bersih, atau null.
   private sanitizeReviewerSlots(input: unknown): ReviewerSlots | null {
     return this.parseReviewerSlots(input ?? null);
+  }
+
+  // Validasi & normalisasi sub-indikator (opt-in, generik — lihat SubIndicatorInput). Array
+  // kosong/tak ada → null (KPI ini bukan komposit). Melempar bila ada baris tak valid.
+  private sanitizeSubIndicators(input: unknown): SubIndicatorInput[] | null {
+    if (!Array.isArray(input) || input.length === 0) return null;
+    const seen = new Set<string>();
+    const out: SubIndicatorInput[] = [];
+    for (const raw of input) {
+      const r = raw as Record<string, unknown>;
+      const nama = String(r?.nama ?? '').trim();
+      if (!nama) throw new BadRequestException('Nama sub-indikator wajib diisi');
+      if (seen.has(nama)) throw new BadRequestException(`Sub-indikator "${nama}" terpilih ganda`);
+      seen.add(nama);
+      const bobotStr = String(r?.bobot ?? '').trim();
+      const bobotNum = Number(bobotStr.replace(',', '.'));
+      if (!Number.isFinite(bobotNum) || bobotNum <= 0) throw new BadRequestException(`Bobot sub-indikator "${nama}" harus angka > 0`);
+      const target = String(r?.target ?? '').trim();
+      if (!target) throw new BadRequestException(`Target sub-indikator "${nama}" wajib diisi`);
+      out.push({ nama, satuan: String(r?.satuan ?? ''), bobot: bobotStr, target, target2: String(r?.target2 ?? '') || undefined });
+    }
+    return out;
   }
 
   // Resolusi slot peran → userId konkret, di-scope ke (unitCode,bidang) dokumen.
@@ -485,6 +523,16 @@ export class KpiMasterService {
       if (slots.approver) await check(slots.approver, APPROVER_ROLES, 'Approver');
     }
 
+    // Sub-indikator (opt-in, generik): non-kosong → KPI ini "komposit". bobotKm tiap
+    // assignment jadi TURUNAN (Σ bobot sub) — override input user, konsisten di semua bidang
+    // yang di-assign (sub-indikator sama untuk semua, didefinisikan sekali di KPI Master).
+    const subIndicators = this.sanitizeSubIndicators(dto.subIndicators);
+    if (subIndicators) {
+      const compositeBobot = subIndicators.reduce((s, si) => s + (Number(String(si.bobot).replace(',', '.')) || 0), 0);
+      for (const a of dto.assignments) a.bobotKm = String(compositeBobot);
+    }
+    const subIndicatorsJson = subIndicators ? (subIndicators as unknown as Prisma.InputJsonValue) : Prisma.JsonNull;
+
     const activePeriod = await this.prisma.period.findFirst({ where: { isActive: true } });
     if (!activePeriod) throw new BadRequestException('Tidak ada periode aktif');
     const kmType = dto.kmType === 'final' ? 'final' : 'draft';
@@ -516,6 +564,7 @@ export class KpiMasterService {
           data: {
             indikator: dto.indikator.trim(), formula: dto.formula ?? '', satuan: dto.satuan ?? '',
             targetParent: dto.targetParent ?? '', kmType, defaultCheckerIds, defaultApproverId, aggregationMethod,
+            subIndicators: subIndicatorsJson,
           },
         });
         await this.prisma.kpiAssignment.deleteMany({ where: { kpiMasterId: master.id } });
@@ -528,7 +577,7 @@ export class KpiMasterService {
           data: {
             year: nextPeriod.yearMonth.slice(0, 4), kmType, indikator: dto.indikator.trim(), formula: dto.formula ?? '',
             satuan: dto.satuan ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
-            defaultCheckerIds, defaultApproverId, aggregationMethod,
+            defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson,
             effectiveMonth: nextMonth, version: existing.version + 1, previousVersionId: existing.id,
           },
         });
@@ -540,7 +589,8 @@ export class KpiMasterService {
         data: {
           year: activePeriod.yearMonth.slice(0, 4), kmType, indikator: dto.indikator.trim(), formula: dto.formula ?? '',
           satuan: dto.satuan ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
-          defaultCheckerIds, defaultApproverId, aggregationMethod, effectiveMonth: activePeriod.yearMonth, version: 1,
+          defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson,
+          effectiveMonth: activePeriod.yearMonth, version: 1,
         },
       });
       targetPeriodId = activePeriod.id;
@@ -610,10 +660,15 @@ export class KpiMasterService {
 
   // ===== Fan-out: sinkronkan item KPI ke dokumen KM DRAFT per-(unit,bidang) =====
   private async fanOut(
-    master: { id: string; kmType: string; indikator: string; formula: string; satuan: string; createdBy: string; createdById: string | null },
+    master: { id: string; kmType: string; indikator: string; formula: string; satuan: string; createdBy: string; createdById: string | null; subIndicators?: Prisma.JsonValue | null },
     assignments: Array<{ unitCode: string; bidang: string; holder: string; bobotKm: string; target: string; target2: string }>,
     periodId: string,
   ): Promise<{ docsAffected: number }> {
+    // Sub-indikator (opt-in): template sama disebar ke SEMUA assignment (definisi target,
+    // belum ada realisasi — sama seperti item non-komposit).
+    const subIndicatorsTemplate = Array.isArray(master.subIndicators)
+      ? (master.subIndicators as unknown as SubIndicatorInput[])
+      : undefined;
     const assignedKeys = new Set(assignments.map((a) => `${a.unitCode}||${a.bidang}`));
     let docsAffected = 0;
 
@@ -638,6 +693,7 @@ export class KpiMasterService {
         masterKpiId: master.id,
         indikator: master.indikator, formula: master.formula, satuan: master.satuan,
         bobot: a.bobotKm, target: a.target, target2: a.target2,
+        ...(subIndicatorsTemplate ? { subIndicators: subIndicatorsTemplate } : {}),
       };
       const existingKm = await this.prisma.kontrakManajemen.findFirst({
         where: { periodId, unitCode: a.unitCode, bidang: a.bidang, kmType: master.kmType, status: 'draft' },

@@ -135,30 +135,34 @@ export class InputKontrakService {
   }
 
   // Submit untuk review → mulai jenjang alur reviewer terpilih submitter.
-  async submit(user: User, id: string, checkerIds: string[], approverId: string) {
+  async submit(user: User, id: string, checkerIds: string[], approverIds: string[]) {
     if (user.unit !== 'KP') throw new ForbiddenException('Kontrak Manajemen hanya dapat dikirim oleh Kantor Induk');
     const kontrak = await this.prisma.kontrakManajemen.findUnique({ where: { id } });
     if (!kontrak) throw new NotFoundException('Kontrak tidak ditemukan');
     if (!Array.isArray(checkerIds) || checkerIds.length === 0) throw new BadRequestException('Pilih minimal satu Checker');
-    if (!approverId) throw new BadRequestException('Pilih satu Approver');
+    if (!Array.isArray(approverIds) || approverIds.length === 0) throw new BadRequestException('Pilih minimal satu Approver');
     // Hanya penyusun (pembuat draft) yang dapat mengirim KM ini.
     if (kontrak.submitterId && kontrak.submitterId !== user.id) {
       throw new ForbiddenException('Hanya penyusun KM ini yang dapat mengirimnya');
     }
 
     const picked = await this.prisma.user.findMany({
-      where: { id: { in: [...checkerIds, approverId] }, isActive: true },
+      where: { id: { in: [...checkerIds, ...approverIds] }, isActive: true },
       select: { id: true, name: true, role: true, unit: true, bidang: true },
     });
     const checkers = checkerIds.map((cid) => picked.find((u) => u.id === cid)).filter(Boolean) as ReviewerParticipant[];
-    const approver = picked.find((u) => u.id === approverId) as ReviewerParticipant | undefined;
+    const approvers = approverIds.map((aid) => picked.find((u) => u.id === aid)).filter(Boolean) as ReviewerParticipant[];
     if (checkers.length !== checkerIds.length) throw new BadRequestException('Sebagian Checker tidak ditemukan atau nonaktif');
+    if (approvers.length !== approverIds.length) throw new BadRequestException('Sebagian Approver tidak ditemukan atau nonaktif');
 
     const submitter: ReviewerParticipant = { id: user.id, name: user.name, role: user.role, unit: user.unit, bidang: user.bidang };
-    const invalid = validateReviewerSelection(user.id, checkers, approver);
+    const srManajer = await this.prisma.user.findFirst({
+      where: { role: Role.SRMANAJER, bidang: kontrak.bidang, unit: 'KP', isActive: true },
+    });
+    const invalid = validateReviewerSelection(user.id, checkers, approvers, !!srManajer);
     if (invalid) throw new BadRequestException(invalid);
 
-    const steps = buildReviewerSteps(submitter, checkers, approver!);
+    const steps = buildReviewerSteps(submitter, checkers, approvers);
     const history = [
       ...(Array.isArray(kontrak.history) ? (kontrak.history as object[]) : []),
       { stepIndex: 0, actor: user.name, role: user.role, action: 'submitted', label: steps[0].label, ts: new Date().toISOString() },
@@ -293,6 +297,24 @@ export class InputKontrakService {
     await this.prisma.auditLog.create({ data: { actor: user.name, userId: user.id, action: 'kontrak.approve', entity: 'KontrakManajemen', targetId: id, note } });
     await this.cache.del(`kontrak:${k.unitCode}`);
     return result;
+  }
+
+  // Setujui semua dokumen yang menunggu di langkah user sekaligus — reuse getReviewList +
+  // review() per-dokumen (chain advance/chainDone/notifikasi/reset bundle tetap ditangani di
+  // sana). Satu note dipakai untuk semua; satu dokumen gagal tak menggagalkan sisanya.
+  async bulkApprove(user: User, note: string) {
+    if (!note?.trim()) throw new BadRequestException('Catatan/komentar wajib diisi saat menyetujui');
+    const list = await this.getReviewList(user);
+    let approved = 0, failed = 0;
+    for (const doc of list) {
+      try {
+        await this.review(user, doc.id, 'approve', note);
+        approved++;
+      } catch {
+        failed++;
+      }
+    }
+    return { total: list.length, approved, failed };
   }
 
   // Edit KPI items oleh reviewer pada langkah aktif (status=submitted, stepMatches user).

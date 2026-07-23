@@ -479,6 +479,13 @@ model KpiMaster {
   // (cocok utk KPI penalti/pengurang, tanpa syarat Σ=100%).
   aggregationMethod String @default("weighted") // 'weighted' | 'sum'
 
+  // Sub-indikator (opt-in, generik — KPI mana pun boleh dipakai, bukan hardcode nama).
+  // Array [{ nama, satuan, bobot, target, target2? }]. Non-kosong = KPI ini "komposit":
+  // bobot/target tingkat induk (KpiAssignment.bobotKm/target/target2) jadi TURUNAN
+  // (Σ dari sub), dan realisasi diisi per-sub (bukan satu angka induk). Lihat
+  // common/capaian.ts scoreItems() untuk rollup nilai induk = Σ nilai sub.
+  subIndicators Json?
+
   assignments KpiAssignment[]
 
   @@index([year, kmType])

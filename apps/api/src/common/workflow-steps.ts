@@ -50,11 +50,14 @@ function participantLabel(p: ReviewerParticipant): string {
 }
 
 // Bangun template langkah dari pilihan submitter:
-//   [0] submitter (penyusun) → [1..n] checker (berurutan) → [n+1] approver.
+//   [0] submitter (penyusun) → [1..n] checker (berurutan) → [n+1..m] approver (berurutan).
+// Approver diperlakukan persis seperti checker (satu Step per orang, berurutan) sehingga
+// "semua approver harus menyetujui (AND)" terwujud otomatis lewat mesin chain sequential
+// yang sudah ada — dokumen baru 'ready' setelah approver TERAKHIR menyetujui.
 export function buildReviewerSteps(
   submitter: ReviewerParticipant,
   checkers: ReviewerParticipant[],
-  approver: ReviewerParticipant,
+  approvers: ReviewerParticipant[],
 ): Step[] {
   const steps: Step[] = [
     { role: submitter.role, userId: submitter.id, userName: submitter.name, kind: 'submitter', label: `Penyusun — ${submitter.name}` },
@@ -62,18 +65,25 @@ export function buildReviewerSteps(
   checkers.forEach((c, i) => {
     steps.push({ role: c.role, userId: c.id, userName: c.name, kind: 'checker', label: `Checker ${i + 1}: ${participantLabel(c)}` });
   });
-  steps.push({ role: approver.role, userId: approver.id, userName: approver.name, kind: 'approver', label: `Approver: ${participantLabel(approver)}` });
+  approvers.forEach((a, i) => {
+    const label = approvers.length > 1 ? `Approver ${i + 1}: ${participantLabel(a)}` : `Approver: ${participantLabel(a)}`;
+    steps.push({ role: a.role, userId: a.id, userName: a.name, kind: 'approver', label });
+  });
   return steps;
 }
 
 // Validasi pilihan reviewer terhadap aturan role & keunikan. Melempar pesan bila tidak valid.
+// srmanajerAvailableForBidang: bidang dokumen ini punya Senior Manajer aktif → GM tak boleh
+// dipilih sebagai approver individual (GM tetap sign-off final di tahap Bundle). Bidang tanpa
+// Senior Manajer sama sekali (mis. K3L, MRO) tetap boleh memilih GM.
 export function validateReviewerSelection(
   submitterId: string,
   checkers: ReviewerParticipant[],
-  approver: ReviewerParticipant | undefined,
+  approvers: ReviewerParticipant[] | undefined,
+  srmanajerAvailableForBidang: boolean,
 ): string | null {
   if (!checkers || checkers.length === 0) return 'Pilih minimal satu Checker';
-  if (!approver) return 'Pilih satu Approver';
+  if (!approvers || approvers.length === 0) return 'Pilih minimal satu Approver';
   const ids = new Set<string>();
   for (const c of checkers) {
     if (!CHECKER_ROLES.includes(c.role)) return `Checker "${c.name}" harus ASMAN atau Manajer`;
@@ -81,9 +91,15 @@ export function validateReviewerSelection(
     if (ids.has(c.id)) return `Checker "${c.name}" terpilih ganda`;
     ids.add(c.id);
   }
-  if (!APPROVER_ROLES.includes(approver.role)) return 'Approver harus Senior Manajer atau General Manager';
-  if (approver.id === submitterId) return 'Approver tidak boleh sama dengan penyusun';
-  if (ids.has(approver.id)) return 'Approver tidak boleh merangkap sebagai Checker';
+  for (const a of approvers) {
+    if (!APPROVER_ROLES.includes(a.role)) return 'Approver harus Senior Manajer atau General Manager';
+    if (a.id === submitterId) return 'Approver tidak boleh sama dengan penyusun';
+    if (ids.has(a.id)) return `Approver "${a.name}" tidak boleh merangkap sebagai Checker atau terpilih ganda`;
+    if (a.role === Role.GM && srmanajerAvailableForBidang) {
+      return 'General Manager hanya dapat dipilih sebagai Approver untuk bidang tanpa Senior Manajer (mis. K3L, MRO) — persetujuan GM final tetap di tahap Bundle.';
+    }
+    ids.add(a.id);
+  }
   return null;
 }
 

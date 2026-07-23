@@ -19,6 +19,14 @@ class AssignmentDto {
   @IsOptional() @IsObject() reviewerSlots?: Record<string, unknown> | null;
 }
 
+class SubIndicatorDto {
+  @IsString() nama: string;
+  @IsOptional() @IsString() satuan?: string;
+  @IsString() bobot: string;
+  @IsString() target: string;
+  @IsOptional() @IsString() target2?: string;
+}
+
 class SaveMasterDto {
   @IsOptional() @IsString() id?: string;
   @IsOptional() @IsIn(['draft', 'final']) kmType?: string;
@@ -30,6 +38,8 @@ class SaveMasterDto {
   @IsOptional() @IsArray() @IsString({ each: true }) defaultCheckerIds?: string[];
   @IsOptional() @IsString() defaultApproverId?: string;
   @IsOptional() @IsIn(['weighted', 'sum']) aggregationMethod?: string;
+  // Sub-indikator (opt-in, generik) — non-kosong menandai KPI ini "komposit".
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SubIndicatorDto) subIndicators?: SubIndicatorDto[];
 }
 
 class ConsolidationReviewDto {

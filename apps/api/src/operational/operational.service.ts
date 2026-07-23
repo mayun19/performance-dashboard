@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, breakdownComposite, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class OperationalService {
@@ -100,12 +100,28 @@ export class OperationalService {
         return kname.length > 8 && nameLow.slice(0, 20).includes(kname.slice(0, 12));
       });
       const bobot = num(it['bobot']);
-      const target = resolveTarget(it, targetOfRecord);
-      const actual = num(it['realisasi']);
       const satuan = String(it['satuan'] ?? '');
       const isInverse = satuan.toLowerCase() === 'hari kerja';
-      const achievement = computeCapaian(target, actual, isInverse);
-      const nilai = computeNilai(bobot, achievement);
+
+      // KPI komposit (opt-in, generik — lihat kpi-master.service.ts SubIndicatorInput):
+      // nilai = Σ nilai sub (common/capaian.ts breakdownComposite); target/actual induk tak
+      // berarti tunggal (per-sub) — achievement induk ditampilkan sbg rata-rata tertimbang
+      // (nilai/bobot) utk konsistensi tampilan status/warna. subBreakdown dikirim ke frontend
+      // untuk expand baris per sub-indikator.
+      const subs = Array.isArray(it['subIndicators']) ? (it['subIndicators'] as Record<string, unknown>[]) : [];
+      const isComposite = subs.length > 0;
+      let target = 0, actual = 0, achievement = 0, nilai = 0;
+      let subBreakdown: ReturnType<typeof breakdownComposite> | undefined;
+      if (isComposite) {
+        subBreakdown = breakdownComposite(it);
+        nilai = r2(subBreakdown.reduce((s, si) => s + si.nilai, 0));
+        achievement = bobot > 0 ? r2((nilai / bobot) * 100) : 0;
+      } else {
+        target = resolveTarget(it, targetOfRecord);
+        actual = num(it['realisasi']);
+        achievement = computeCapaian(target, actual, isInverse);
+        nilai = computeNilai(bobot, achievement);
+      }
       const prevSpark = (existingKpi?.['sparkline'] ?? Array(12).fill(0)) as number[];
       const no = kpiNo++;
       return {
@@ -129,6 +145,7 @@ export class OperationalService {
         commentary:  existingKpi?.['commentary'] ?? '',
         rootCause:   existingKpi?.['rootCause'] ?? '',
         actionPlan:  existingKpi?.['actionPlan'] ?? '',
+        ...(isComposite ? { subBreakdown } : {}),
       };
     });
 
