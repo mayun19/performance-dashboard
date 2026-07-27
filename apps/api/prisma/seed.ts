@@ -101,7 +101,9 @@ async function main() {
     ['man.aset', 'Manajer Aset & Properti', Role.MANAJER, KKU, 'man_aset_properti'],
     ['sm.kku', 'SM Keuangan, Komunikasi & Umum', Role.SRMANAJER, KKU, 'sm_kku'],
     // K3L & MRO (langsung di bawah GM)
+    ['staff.k3l', 'Staff Kinerja K3L', Role.STAFF, K3L, 'staff_general'],
     ['asman.k3l', 'ASMAN K3L', Role.ASMAN, K3L, 'asman_k3l'],
+    ['staff.mro', 'Staff Kinerja MRO', Role.STAFF, MRO, 'staff_general'],
     ['asman.mro', 'ASMAN Manajemen Risiko & Kepatuhan', Role.ASMAN, MRO, 'asman_risiko'],
   ];
   for (const [slug, name, role, bidang, vc] of KI_USERS) await upsertUser(slug, name, role, bidang, vc);
