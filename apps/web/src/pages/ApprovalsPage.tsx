@@ -481,23 +481,75 @@ export function ApprovalsPage() {
     }
   };
 
-  // Bagikan bobot sesuai porsi assignment (persenAgregasi) bila diketahui — cegah bobot penuh
-  // tercetak berulang saat 1 KPI di-assign ke banyak bidang. Tanpa info porsi (data legacy/tak
-  // lengkap), tampilkan bobot penuh apa adanya (perilaku lama, tak berubah). Dipakai bersama
-  // oleh print Bundle KM & Bundle Realisasi.
-  const bobotShare = (bobot: unknown, persenAgregasi?: number): number => {
-    const b = Number(bobot);
-    if (!Number.isFinite(b)) return 0;
-    if (persenAgregasi == null || persenAgregasi >= 100) return b;
-    return Math.round((b * persenAgregasi / 100) * 100) / 100;
+  // Kunci identitas KPI utk gabung fan-out lintas bidang: masterKpiId bila ada, else nama indikator.
+  const kpiKey = (it: Record<string, unknown>) => String(it['masterKpiId'] ?? it['indikator'] ?? '');
+  const num = (v: unknown): number => {
+    const n = Number(String(v ?? '').replace(',', '.').replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(n) ? n : 0;
   };
-  const bidangLabel = (bidang: string, persenAgregasi?: number): string =>
-    persenAgregasi != null && persenAgregasi < 100 ? `${bidang} (${persenAgregasi}%)` : bidang;
   const getPersenAgregasi = (it: Record<string, unknown>): number | undefined =>
     typeof it['persenAgregasi'] === 'number' ? it['persenAgregasi'] as number : undefined;
   const getSubIndicators = (it: Record<string, unknown>): Record<string, unknown>[] =>
     Array.isArray(it['subIndicators']) ? it['subIndicators'] as Record<string, unknown>[] : [];
   const subLetter = (i: number) => String.fromCharCode(97 + i);
+  // Rollup realisasi lintas bidang: tertimbang persenAgregasi bila Σpct>0 (weighted / single
+  // 100%), else jumlah polos (metode SUM / persenAgregasi tak diketahui).
+  const rollupReal = (vals: number[], pcts: number[]): number => {
+    const totalPct = pcts.reduce((s, p) => s + p, 0);
+    const r = totalPct > 0
+      ? vals.reduce((s, v, i) => s + v * (pcts[i] / 100), 0)
+      : vals.reduce((s, v) => s + v, 0);
+    return Math.round(r * 100) / 100;
+  };
+  // Gabung list {it,bidang} lintas bidang/fan-out → satu entri per KPI (urutan = kemunculan
+  // pertama) — cegah KPI yang di-assign ke banyak bidang tercetak berulang di print. Item wakil =
+  // kemunculan pertama (target/sub/formula/satuan diasumsikan identik antar fan-out, dijamin oleh
+  // fanOut() di kpi-master.service.ts). withRealisasi=true (print Realisasi) → realisasi (item
+  // biasa) atau realisasi tiap sub (komposit, per-index) di-rollup dari SELURUH anggota grup;
+  // false (print KM, tak ada realisasi) → item wakil dipakai apa adanya.
+  const dedupFlat = (
+    flat: { it: Record<string, unknown>; bidang: string }[],
+    withRealisasi: boolean,
+  ): { it: Record<string, unknown>; bidang: string }[] => {
+    const order: string[] = [];
+    const groups = new Map<string, { it: Record<string, unknown>; bidang: string }[]>();
+    for (const entry of flat) {
+      const key = kpiKey(entry.it);
+      if (!groups.has(key)) { groups.set(key, []); order.push(key); }
+      groups.get(key)!.push(entry);
+    }
+    return order.map((key) => {
+      const members = groups.get(key)!;
+      const first = members[0];
+      if (!withRealisasi || members.length === 1) return first;
+      const pcts = members.map((m) => getPersenAgregasi(m.it) ?? 0);
+      const subs = getSubIndicators(first.it);
+      if (subs.length > 0) {
+        const rolledSubs = subs.map((si, j) => ({
+          ...si,
+          realisasi: rollupReal(members.map((m) => num(getSubIndicators(m.it)[j]?.['realisasi'])), pcts),
+        }));
+        return { it: { ...first.it, subIndicators: rolledSubs }, bidang: first.bidang };
+      }
+      return { it: { ...first.it, realisasi: rollupReal(members.map((m) => num(m.it['realisasi'])), pcts) }, bidang: first.bidang };
+    });
+  };
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  // Mirror persis common/capaian.ts (backend) — dipakai print Realisasi utk kolom NILAI.
+  const computeCapaianPct = (target: number, actual: number, isInverse: boolean): number => {
+    if (target <= 0 || actual <= 0) return 0;
+    return isInverse ? Math.min((target / actual) * 100, 110) : Math.min((actual / target) * 100, 110);
+  };
+  // Nilai satu baris (item biasa atau satu sub-indikator). Item/sub pengurang (bobot<0):
+  // nilai = -min(realisasi, |bobot|), realisasi = poin pelanggaran, dibatasi plafon Max Penalti.
+  // Item biasa (bobot>0): nilai = capaian% x bobot.
+  const computeNilaiRow = (bobot: number, target: number, actual: number, satuan: string): number => {
+    if (bobot < 0) return actual > 0 ? r2(-Math.min(actual, Math.abs(bobot))) : 0;
+    const capaian = bobot > 0 && target > 0 && actual > 0
+      ? computeCapaianPct(target, actual, satuan.toLowerCase() === 'hari kerja')
+      : 0;
+    return r2((capaian / 100) * bobot);
+  };
 
   const handlePrintRealBundle = () => {
     if (!bundle) return;
@@ -521,28 +573,6 @@ export function ApprovalsPage() {
       '.sign{margin-top:24pt;display:flex;justify-content:flex-end}' +
       '.sb{text-align:center;width:170pt}.sl{margin-top:46pt;border-top:0.5pt solid #333;padding-top:3pt;font-size:7.5pt}';
     let n = 1;
-    const buildSection = (c: typeof bundle.components[number]): string => {
-      const items = (c.values && typeof c.values === 'object')
-        ? Object.values(c.values as Record<string, Record<string, unknown>>) : [];
-      let rows = '';
-      if (items.length === 0) {
-        rows += `<tr><td class="num">—</td><td colspan="7" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
-      } else {
-        items.forEach((it) => {
-          rows += `<tr>` +
-            `<td class="num">${n++}</td>` +
-            `<td>${it['indikator'] ?? '—'}</td>` +
-            `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
-            `<td class="num">${it['satuan'] ?? '—'}</td>` +
-            `<td class="num">${it['bobot'] ?? '—'}</td>` +
-            `<td class="rt">${it['target'] ?? '—'}</td>` +
-            `<td class="rw">${it['realisasi'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${c.bidang}</td>` +
-            `</tr>`;
-        });
-      }
-      return rows;
-    };
     const kpComps = bundle.components.filter((c) => c.unitCode === 'KP');
     const upmkGroups = Object.entries(
       bundle.components.filter((c) => c.unitCode !== 'KP')
@@ -558,13 +588,14 @@ export function ApprovalsPage() {
       const s = ind.toLowerCase();
       if (s.includes('inspection quality') || s.includes('iqc')) return 10;
       if (s.includes('kajian supervisi')) return 20;
-      if (s.includes('evaluasi, analisa') || s.includes('evaluasi analisa')) return 30;
+      if (s.includes('evaluasi') && s.includes('analisa') && s.includes('rekomendasi')) return 30;
       if (s.includes('persentase pelaksanaan')) return 40;
       if (s.includes('kapasitas pembangkit')) return 50;
       if (s.includes('kapasitas transmisi')) return 60;
       if (s.includes('kapasitas gardu induk')) return 70;
       if (s.includes('pengendalian') && (s.includes('anggaran investasi') || s.includes('penggunaan anggaran'))) return 81;
       if (s.includes('pengendalian nac') || s.includes('non allowable')) return 82;
+      if (s.includes('pengendalian') && s.includes('anggaran')) return 80; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
       if (s.includes('evaluasi akurasi data')) return 90;
       if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 100;
       if (s.includes('dokumen legal aset tanah') || s.includes('penyelesaian dokumen legal')) return 110;
@@ -573,41 +604,55 @@ export function ApprovalsPage() {
       if (s.includes('tata kelola')) return 123;
       return 999;
     };
-    const kpSorted = [...kpAllFlat].sort(
+    const kpDeduped = dedupFlat(kpAllFlat, true);
+    const kpSorted = [...kpDeduped].sort(
       (a, b) => getKpOrder(String(a.it['indikator'] ?? '')) - getKpOrder(String(b.it['indikator'] ?? ''))
     );
     n = 1;
     let grpR8 = false, grpR12 = false, subR8 = 0, subR12 = 0;
     const subLtrR = (i: number) => String.fromCharCode(97 + i);
     let kpBody = '';
-    for (const { it, bidang } of kpSorted) {
-      const persenAgregasi = getPersenAgregasi(it);
+    let kpTotalNilai = 0;
+    for (const { it } of kpSorted) {
       const subs = getSubIndicators(it);
       if (subs.length > 0) {
-        kpBody += `<tr><td class="num">${n++}</td>` +
-          `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
-          `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
-        subs.forEach((si, j) => {
-          kpBody += `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
+        let compositeNilai = 0;
+        const subRows = subs.map((si, j) => {
+          const sBobot = num(si['bobot']);
+          const sTarget = num(si['target2'] ?? si['target']);
+          const sActual = num(si['realisasi']);
+          const sNilai = computeNilaiRow(sBobot, sTarget, sActual, String(si['satuan'] ?? ''));
+          compositeNilai += sNilai;
+          return `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
             `<td style="padding-left:10pt">${si['nama'] ?? '—'}</td>` +
             `<td style="font-size:7pt;color:#444">${si['formula'] ?? '—'}</td>` +
             `<td class="num">${si['satuan'] ?? '—'}</td>` +
-            `<td class="num">${bobotShare(si['bobot'], persenAgregasi) || '—'}</td>` +
+            `<td class="num">${sBobot || '—'}</td>` +
             `<td class="rt">${si['target2'] ?? si['target'] ?? '—'}</td>` +
             `<td class="rw">${si['realisasi'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
-        });
+            `<td class="num">${sNilai || '—'}</td></tr>`;
+        }).join('');
+        compositeNilai = r2(compositeNilai);
+        kpTotalNilai += compositeNilai;
+        kpBody += `<tr><td class="num">${n++}</td>` +
+          `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
+          `<td class="num" style="font-weight:700">${compositeNilai || '—'}</td></tr>` + subRows;
         continue;
       }
+      const bobot = num(it['bobot']);
+      const target = num(it['target']);
+      const actual = num(it['realisasi']);
+      const nilai = computeNilaiRow(bobot, target, actual, String(it['satuan'] ?? ''));
+      kpTotalNilai += nilai;
       const ord = getKpOrder(String(it['indikator'] ?? ''));
       const isG8 = ord === 81 || ord === 82;
       const isG12 = ord === 121 || ord === 122 || ord === 123;
       if (isG8 && !grpR8) {
-        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td></td></tr>`;
         grpR8 = true; subR8 = 0;
       }
       if (isG12 && !grpR12) {
-        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td></td></tr>`;
         grpR12 = true; subR12 = 0;
       }
       if (isG8) {
@@ -616,31 +661,34 @@ export function ApprovalsPage() {
           `<td style="padding-left:10pt">${subInd}</td>` +
           `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
           `<td class="num">${it['satuan'] ?? '—'}</td>` +
-          `<td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+          `<td class="num">${num(it['bobot']) || '—'}</td>` +
           `<td class="rt">${it['target'] ?? '—'}</td>` +
           `<td class="rw">${it['realisasi'] ?? '—'}</td>` +
-          `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+          `<td class="num">${nilai || '—'}</td></tr>`;
       } else if (isG12) {
         const subInd = String(it['indikator'] ?? '').replace(/^Pengurang\s*[-–]\s*/i, '');
         kpBody += `<tr><td class="num" style="font-size:7pt">${subLtrR(subR12++)}.</td>` +
           `<td style="padding-left:10pt">${subInd}</td>` +
           `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
           `<td class="num">${it['satuan'] ?? '—'}</td>` +
-          `<td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+          `<td class="num">${num(it['bobot']) || '—'}</td>` +
           `<td class="rt">${it['target'] ?? '—'}</td>` +
           `<td class="rw">${it['realisasi'] ?? '—'}</td>` +
-          `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+          `<td class="num">${nilai || '—'}</td></tr>`;
       } else {
         kpBody += `<tr><td class="num">${n++}</td>` +
           `<td>${it['indikator'] ?? '—'}</td>` +
           `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
           `<td class="num">${it['satuan'] ?? '—'}</td>` +
-          `<td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+          `<td class="num">${num(it['bobot']) || '—'}</td>` +
           `<td class="rt">${it['target'] ?? '—'}</td>` +
           `<td class="rw">${it['realisasi'] ?? '—'}</td>` +
-          `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+          `<td class="num">${nilai || '—'}</td></tr>`;
       }
     }
+    kpBody += `<tr class="tot">` +
+      `<td colspan="7" style="text-align:right;padding-right:8pt">TOTAL NILAI KANTOR INDUK</td>` +
+      `<td class="num">${r2(kpTotalNilai) || '—'}</td></tr>`;
     let body = catRow('A. KANTOR INDUK') + kpBody;
     const getUpmkOrdR = (ind: string): number => {
       const s = ind.toLowerCase();
@@ -651,6 +699,7 @@ export function ApprovalsPage() {
       if (s.includes('kapasitas gardu induk')) return 50;
       if (s.includes('pengendalian nac') || s.includes('non allowable')) return 61;
       if (s.includes('pengendalian') && s.includes('penggunaan anggaran')) return 62;
+      if (s.includes('pengendalian') && s.includes('anggaran')) return 60; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
       if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 70;
       if (s.includes('evaluasi penyelesaian') || s.includes('penyelesaian proyek supervisi')) return 80;
       if (s.includes('maturity level')) return 91;
@@ -666,37 +715,51 @@ export function ApprovalsPage() {
           ? Object.values(c.values as Record<string, Record<string, unknown>>) : [];
         return vals.map((it) => ({ it, bidang: c.bidang }));
       });
-      const uSorted = [...uFlat].sort(
+      const uDeduped = dedupFlat(uFlat, true);
+      const uSorted = [...uDeduped].sort(
         (a, b) => getUpmkOrdR(String(a.it['indikator'] ?? '')) - getUpmkOrdR(String(b.it['indikator'] ?? ''))
       );
       let uG6 = false, uG9 = false, uS6 = 0, uS9 = 0;
       const slU = (j: number) => String.fromCharCode(97 + j);
-      for (const { it, bidang } of uSorted) {
-        const persenAgregasi = getPersenAgregasi(it);
+      let uTotalNilai = 0;
+      for (const { it } of uSorted) {
         const subs = getSubIndicators(it);
         if (subs.length > 0) {
-          body += `<tr><td class="num">${n++}</td>` +
-            `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
-          subs.forEach((si, j) => {
-            body += `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
+          let compositeNilai = 0;
+          const subRows = subs.map((si, j) => {
+            const sBobot = num(si['bobot']);
+            const sTarget = num(si['target2'] ?? si['target']);
+            const sActual = num(si['realisasi']);
+            const sNilai = computeNilaiRow(sBobot, sTarget, sActual, String(si['satuan'] ?? ''));
+            compositeNilai += sNilai;
+            return `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
               `<td style="padding-left:10pt">${si['nama'] ?? '—'}</td>` +
               `<td style="font-size:7pt;color:#444">${si['formula'] ?? '—'}</td>` +
-              `<td class="num">${si['satuan'] ?? '—'}</td><td class="num">${bobotShare(si['bobot'], persenAgregasi) || '—'}</td>` +
+              `<td class="num">${si['satuan'] ?? '—'}</td><td class="num">${sBobot || '—'}</td>` +
               `<td class="rt">${si['target2'] ?? si['target'] ?? '—'}</td><td class="rw">${si['realisasi'] ?? '—'}</td>` +
-              `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
-          });
+              `<td class="num">${sNilai || '—'}</td></tr>`;
+          }).join('');
+          compositeNilai = r2(compositeNilai);
+          uTotalNilai += compositeNilai;
+          body += `<tr><td class="num">${n++}</td>` +
+            `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
+            `<td class="num" style="font-weight:700">${compositeNilai || '—'}</td></tr>` + subRows;
           continue;
         }
+        const bobot = num(it['bobot']);
+        const target = num(it['target']);
+        const actual = num(it['realisasi']);
+        const nilai = computeNilaiRow(bobot, target, actual, String(it['satuan'] ?? ''));
+        uTotalNilai += nilai;
         const ord = getUpmkOrdR(String(it['indikator'] ?? ''));
         const iG6 = ord === 61 || ord === 62;
         const iG9 = ord === 91 || ord === 92 || ord === 93;
         if (iG6 && !uG6) {
-          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td></td></tr>`;
           uG6 = true; uS6 = 0;
         }
         if (iG9 && !uG9) {
-          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td></td></tr>`;
           uG9 = true; uS9 = 0;
         }
         if (iG6) {
@@ -706,9 +769,9 @@ export function ApprovalsPage() {
           body += `<tr><td class="num" style="font-size:7pt">${slU(uS6++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
-            `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+            `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${num(it['bobot']) || '—'}</td>` +
             `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['realisasi'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+            `<td class="num">${nilai || '—'}</td></tr>`;
         } else if (iG9) {
           const si = String(it['indikator'] ?? '')
             .replace(/^Pengurang\s*[-–]\s*/i, '')
@@ -716,19 +779,23 @@ export function ApprovalsPage() {
           body += `<tr><td class="num" style="font-size:7pt">${slU(uS9++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
-            `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+            `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${num(it['bobot']) || '—'}</td>` +
             `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['realisasi'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+            `<td class="num">${nilai || '—'}</td></tr>`;
         } else {
           body += `<tr><td class="num">${n++}</td><td>${it['indikator'] ?? '—'}</td>` +
             `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
-            `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+            `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${num(it['bobot']) || '—'}</td>` +
             `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['realisasi'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+            `<td class="num">${nilai || '—'}</td></tr>`;
         }
       }
       if (uSorted.length === 0) {
         body += `<tr><td class="num">—</td><td colspan="7" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
+      } else {
+        body += `<tr class="tot">` +
+          `<td colspan="7" style="text-align:right;padding-right:8pt">TOTAL NILAI ${(UNIT_NAMES[unitCode] ?? unitCode).toUpperCase()}</td>` +
+          `<td class="num">${r2(uTotalNilai) || '—'}</td></tr>`;
       }
     });
     const html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">` +
@@ -739,12 +806,12 @@ export function ApprovalsPage() {
       `<p class="t3">Periode ${periodLabel}</p>` +
       `<p class="meta">Dicetak: ${printDate}</p></div>` +
       `<table><colgroup>` +
-      `<col style="width:3%"><col style="width:22%"><col style="width:18%">` +
-      `<col style="width:6%"><col style="width:5%"><col style="width:12%"><col style="width:12%"><col style="width:12%">` +
+      `<col style="width:3%"><col style="width:30%"><col style="width:25%">` +
+      `<col style="width:6%"><col style="width:5%"><col style="width:11%"><col style="width:11%"><col style="width:9%">` +
       `</colgroup>` +
       `<thead><tr>` +
       `<th>No</th><th>INDIKATOR KINERJA KUNCI</th><th>FORMULA</th>` +
-      `<th>SATUAN</th><th>BOBOT</th><th>TARGET</th><th>REALISASI</th><th>PIC</th>` +
+      `<th>SATUAN</th><th>BOBOT</th><th>TARGET</th><th>REALISASI</th><th>NILAI</th>` +
       `</tr></thead>` +
       `<tbody>${body}</tbody></table>` +
       `<div class="summ">Total komponen: <b>${bundle.total}</b> &nbsp;|&nbsp; ` +
@@ -790,13 +857,14 @@ export function ApprovalsPage() {
         const s = ind.toLowerCase();
         if (s.includes('inspection quality') || s.includes('iqc')) return 10;
         if (s.includes('kajian supervisi')) return 20;
-        if (s.includes('evaluasi, analisa') || s.includes('evaluasi analisa')) return 30;
+        if (s.includes('evaluasi') && s.includes('analisa') && s.includes('rekomendasi')) return 30;
         if (s.includes('persentase pelaksanaan')) return 40;
         if (s.includes('kapasitas pembangkit')) return 50;
         if (s.includes('kapasitas transmisi')) return 60;
         if (s.includes('kapasitas gardu induk')) return 70;
         if (s.includes('pengendalian') && (s.includes('anggaran investasi') || s.includes('penggunaan anggaran'))) return 81;
         if (s.includes('pengendalian nac') || s.includes('non allowable')) return 82;
+        if (s.includes('pengendalian') && s.includes('anggaran')) return 80; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
         if (s.includes('evaluasi akurasi data')) return 90;
         if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 100;
         if (s.includes('dokumen legal aset tanah') || s.includes('penyelesaian dokumen legal')) return 110;
@@ -805,10 +873,16 @@ export function ApprovalsPage() {
         if (s.includes('tata kelola')) return 123;
         return 999;
       };
-      const sortedFlat = [...allFlat].sort(
+      const dedupedFlat = dedupFlat(allFlat, false);
+      const sortedFlat = [...dedupedFlat].sort(
         (a, b) => getItemOrder(String(a.it['indikator'] ?? '')) - getItemOrder(String(b.it['indikator'] ?? ''))
       );
-      const totalBobot = allFlat.reduce((s, { it }) => s + bobotShare(it['bobot'], getPersenAgregasi(it)), 0);
+      // Indikator pengurang/penalti (bobot negatif, mis. "Kepatuhan, Maturity Level dan Tata
+      // Kelola Perusahaan") tidak ikut disumasikan ke TOTAL — hanya bobot positif (target 100%).
+      const totalBobot = dedupedFlat.reduce((s, { it }) => {
+        const b = num(it['bobot']);
+        return b > 0 ? s + b : s;
+      }, 0);
       let n = 1;
       let grp8Emitted = false;
       let grp12Emitted = false;
@@ -816,22 +890,19 @@ export function ApprovalsPage() {
       let sub12 = 0;
       const subLtr = (i: number) => String.fromCharCode(97 + i);
       let body = '';
-      for (const { it, bidang } of sortedFlat) {
-        const persenAgregasi = getPersenAgregasi(it);
+      for (const { it } of sortedFlat) {
         const subs = getSubIndicators(it);
         if (subs.length > 0) {
           body += `<tr><td class="num">${n++}</td>` +
-            `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+            `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td></tr>`;
           subs.forEach((si, j) => {
             body += `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
               `<td style="padding-left:10pt">${si['nama'] ?? '—'}</td>` +
               `<td style="font-size:7pt;color:#444">${si['formula'] ?? '—'}</td>` +
               `<td class="num">${si['satuan'] ?? '—'}</td>` +
-              `<td class="num">${bobotShare(si['bobot'], persenAgregasi) || '—'}</td>` +
+              `<td class="num">${num(si['bobot']) || '—'}</td>` +
               `<td class="rt">${si['target'] ?? '—'}</td>` +
-              `<td class="rw">${si['target2'] ?? '—'}</td>` +
-              `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+              `<td class="rw">${si['target2'] ?? '—'}</td></tr>`;
           });
           continue;
         }
@@ -840,14 +911,12 @@ export function ApprovalsPage() {
         const isGrp12 = ord === 121 || ord === 122 || ord === 123;
         if (isGrp8 && !grp8Emitted) {
           body += `<tr><td class="num">${n++}</td>` +
-            `<td colspan="6" style="font-weight:700">Pengendalian Anggaran</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td colspan="6" style="font-weight:700">Pengendalian Anggaran</td></tr>`;
           grp8Emitted = true; sub8 = 0;
         }
         if (isGrp12 && !grp12Emitted) {
           body += `<tr><td class="num">${n++}</td>` +
-            `<td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td></tr>`;
           grp12Emitted = true; sub12 = 0;
         }
         if (isGrp8) {
@@ -856,34 +925,31 @@ export function ApprovalsPage() {
             `<td style="padding-left:10pt">${subInd}</td>` +
             `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
             `<td class="num">${it['satuan'] ?? '—'}</td>` +
-            `<td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+            `<td class="num">${num(it['bobot']) || '—'}</td>` +
             `<td class="rt">${it['target'] ?? '—'}</td>` +
-            `<td class="rw">${it['target2'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+            `<td class="rw">${it['target2'] ?? '—'}</td></tr>`;
         } else if (isGrp12) {
           const subInd = String(it['indikator'] ?? '').replace(/^Pengurang\s*[-–]\s*/i, '');
           body += `<tr><td class="num" style="font-size:7pt">${subLtr(sub12++)}.</td>` +
             `<td style="padding-left:10pt">${subInd}</td>` +
             `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
             `<td class="num">${it['satuan'] ?? '—'}</td>` +
-            `<td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+            `<td class="num">${num(it['bobot']) || '—'}</td>` +
             `<td class="rt">${it['target'] ?? '—'}</td>` +
-            `<td class="rw">${it['target2'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+            `<td class="rw">${it['target2'] ?? '—'}</td></tr>`;
         } else {
           body += `<tr><td class="num">${n++}</td>` +
             `<td>${it['indikator'] ?? '—'}</td>` +
             `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
             `<td class="num">${it['satuan'] ?? '—'}</td>` +
-            `<td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
+            `<td class="num">${num(it['bobot']) || '—'}</td>` +
             `<td class="rt">${it['target'] ?? '—'}</td>` +
-            `<td class="rw">${it['target2'] ?? '—'}</td>` +
-            `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+            `<td class="rw">${it['target2'] ?? '—'}</td></tr>`;
         }
       }
       body += `<tr class="tot">` +
         `<td colspan="4" style="text-align:right;padding-right:8pt">TOTAL</td>` +
-        `<td class="num">${totalBobot || '—'}</td><td colspan="3"></td></tr>`;
+        `<td class="num">${totalBobot || '—'}</td><td colspan="2"></td></tr>`;
       html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">` +
         `<title>Kontrak Manajemen Tahunan — Kantor Induk ${year}</title><style>${css}</style></head><body>` +
         `<div class="hdr"><p class="t1">Kontrak Manajemen Tahunan</p>` +
@@ -891,11 +957,11 @@ export function ApprovalsPage() {
         `<p class="t3">Kantor Induk &mdash; Tahun ${year}</p>` +
         `<p class="meta">Dicetak: ${printDate}</p></div>` +
         `<table><colgroup>` +
-        `<col style="width:3%"><col style="width:20%"><col style="width:18%">` +
-        `<col style="width:6%"><col style="width:5%"><col style="width:13%"><col style="width:13%"><col style="width:12%">` +
+        `<col style="width:3%"><col style="width:27%"><col style="width:23%">` +
+        `<col style="width:6%"><col style="width:5%"><col style="width:13%"><col style="width:13%">` +
         `</colgroup><thead><tr>` +
         `<th>No</th><th>INDIKATOR KINERJA</th><th>FORMULA</th>` +
-        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th><th>PIC</th>` +
+        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th>` +
         `</tr></thead><tbody>${body}</tbody></table>` +
         `<div class="summ">Total KM: <b>${km.total}</b> &nbsp;|&nbsp; ` +
         `Siap: <b>${km.readyCount}</b> &nbsp;|&nbsp; ` +
@@ -929,6 +995,7 @@ export function ApprovalsPage() {
         if (s.includes('kapasitas gardu induk')) return 50;
         if (s.includes('pengendalian nac') || s.includes('non allowable')) return 61;
         if (s.includes('pengendalian') && s.includes('penggunaan anggaran')) return 62;
+        if (s.includes('pengendalian') && s.includes('anggaran')) return 60; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
         if (s.includes('pemenuhan pdn') || s.includes('pdn korporat')) return 70;
         if (s.includes('evaluasi penyelesaian') || s.includes('penyelesaian proyek supervisi')) return 80;
         if (s.includes('maturity level')) return 91;
@@ -938,24 +1005,22 @@ export function ApprovalsPage() {
       };
       const buildUpmkGroupRows = (comps: KmBundleComp[]): string => {
         const flat = comps.flatMap(c => (c.kpiItems ?? []).map(it => ({ it, bidang: c.bidang })));
-        const sorted = [...flat].sort((a, b) => getUpmkOrd(String(a.it['indikator'] ?? '')) - getUpmkOrd(String(b.it['indikator'] ?? '')));
+        const deduped = dedupFlat(flat, false);
+        const sorted = [...deduped].sort((a, b) => getUpmkOrd(String(a.it['indikator'] ?? '')) - getUpmkOrd(String(b.it['indikator'] ?? '')));
         let g6 = false, g9 = false, s6 = 0, s9 = 0;
         const sl = (i: number) => String.fromCharCode(97 + i);
         let rows = '';
-        for (const { it, bidang } of sorted) {
-          const persenAgregasi = getPersenAgregasi(it);
+        for (const { it } of sorted) {
           const subs = getSubIndicators(it);
           if (subs.length > 0) {
             rows += `<tr><td class="num">${n++}</td>` +
-              `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
-              `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+              `<td colspan="6" style="font-weight:700">${it['indikator'] ?? '—'} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td></tr>`;
             subs.forEach((si, j) => {
               rows += `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
                 `<td style="padding-left:10pt">${si['nama'] ?? '—'}</td>` +
                 `<td style="font-size:7pt;color:#444">${si['formula'] ?? '—'}</td>` +
-                `<td class="num">${si['satuan'] ?? '—'}</td><td class="num">${bobotShare(si['bobot'], persenAgregasi) || '—'}</td>` +
-                `<td class="rt">${si['target'] ?? '—'}</td><td class="rw">${si['target2'] ?? '—'}</td>` +
-                `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+                `<td class="num">${si['satuan'] ?? '—'}</td><td class="num">${num(si['bobot']) || '—'}</td>` +
+                `<td class="rt">${si['target'] ?? '—'}</td><td class="rw">${si['target2'] ?? '—'}</td></tr>`;
             });
             continue;
           }
@@ -963,11 +1028,11 @@ export function ApprovalsPage() {
           const iG6 = ord === 61 || ord === 62;
           const iG9 = ord === 91 || ord === 92 || ord === 93;
           if (iG6 && !g6) {
-            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td></tr>`;
             g6 = true; s6 = 0;
           }
           if (iG9 && !g9) {
-            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td></tr>`;
             g9 = true; s9 = 0;
           }
           if (iG6) {
@@ -977,9 +1042,8 @@ export function ApprovalsPage() {
             rows += `<tr><td class="num" style="font-size:7pt">${sl(s6++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
-              `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
-              `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['target2'] ?? '—'}</td>` +
-              `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+              `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${num(it['bobot']) || '—'}</td>` +
+              `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['target2'] ?? '—'}</td></tr>`;
           } else if (iG9) {
             const si = String(it['indikator'] ?? '')
               .replace(/^Pengurang\s*[-–]\s*/i, '')
@@ -987,18 +1051,16 @@ export function ApprovalsPage() {
             rows += `<tr><td class="num" style="font-size:7pt">${sl(s9++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
-              `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
-              `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['target2'] ?? '—'}</td>` +
-              `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+              `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${num(it['bobot']) || '—'}</td>` +
+              `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['target2'] ?? '—'}</td></tr>`;
           } else {
             rows += `<tr><td class="num">${n++}</td><td>${it['indikator'] ?? '—'}</td>` +
               `<td style="font-size:7pt;color:#444">${it['formula'] ?? '—'}</td>` +
-              `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${bobotShare(it['bobot'], persenAgregasi) || '—'}</td>` +
-              `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['target2'] ?? '—'}</td>` +
-              `<td class="num" style="font-size:7pt">${bidangLabel(bidang, persenAgregasi)}</td></tr>`;
+              `<td class="num">${it['satuan'] ?? '—'}</td><td class="num">${num(it['bobot']) || '—'}</td>` +
+              `<td class="rt">${it['target'] ?? '—'}</td><td class="rw">${it['target2'] ?? '—'}</td></tr>`;
           }
         }
-        if (rows === '') rows = `<tr><td class="num">—</td><td colspan="7" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
+        if (rows === '') rows = `<tr><td class="num">—</td><td colspan="6" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
         return rows;
       };
       const groups = Object.entries(
@@ -1006,12 +1068,12 @@ export function ApprovalsPage() {
       ).sort(([a], [b]) => a.localeCompare(b));
       const body = groups.map(([unitCode, comps], gi) => {
         n = 1;
-        return `<tr class="cat"><td colspan="8">${String.fromCharCode(65 + gi)}. ${(UNIT_NAMES[unitCode] ?? unitCode).toUpperCase()}</td></tr>` +
+        return `<tr class="cat"><td colspan="7">${String.fromCharCode(65 + gi)}. ${(UNIT_NAMES[unitCode] ?? unitCode).toUpperCase()}</td></tr>` +
           buildUpmkGroupRows(comps);
       }).join('');
       const colgroup = `<colgroup>` +
-        `<col style="width:3%"><col style="width:22%"><col style="width:18%">` +
-        `<col style="width:6%"><col style="width:5%"><col style="width:12%"><col style="width:12%"><col style="width:12%">` +
+        `<col style="width:3%"><col style="width:29%"><col style="width:23%">` +
+        `<col style="width:6%"><col style="width:5%"><col style="width:12%"><col style="width:12%">` +
         `</colgroup>`;
       html = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">` +
         `<title>Kontrak Manajemen Tahunan — UPMK ${year}</title><style>${css}</style></head><body>` +
@@ -1021,7 +1083,7 @@ export function ApprovalsPage() {
         `<p class="meta">Dicetak: ${printDate}</p></div>` +
         `<table>${colgroup}<thead><tr>` +
         `<th>No</th><th>INDIKATOR KINERJA</th><th>FORMULA</th>` +
-        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th><th>PIC</th>` +
+        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th>` +
         `</tr></thead><tbody>${body}</tbody></table>` +
         `<div class="summ">Total KM: <b>${km.total}</b> &nbsp;|&nbsp; ` +
         `Siap: <b>${km.readyCount}</b> &nbsp;|&nbsp; ` +

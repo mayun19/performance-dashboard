@@ -145,22 +145,32 @@ export class OperationalService {
       };
     });
 
-    // Build kepatuhan from negative-bobot items
+    // Build kepatuhan from negative-bobot items — item komposit (subIndicators, mis. "Kepatuhan,
+    // Maturity Level dan Tata Kelola Perusahaan") diperluas per-sub via breakdownComposite()
+    // (realisasi tersimpan di tiap sub, bukan di induk); item legacy flat pakai realisasi induk
+    // langsung, sama-sama dibatasi plafon |bobot| (lihat common/capaian.ts).
     const existingKepatuhan = (base.kepatuhan ?? []) as Record<string, unknown>[];
     const SUB = 'abcdefghij';
-    const kepatuhanBuilt = pengurangItems.map(({ it }, idx) => {
+    const pengurangRows = pengurangItems.flatMap(({ it }) => {
+      const subs = Array.isArray(it['subIndicators']) ? (it['subIndicators'] as Record<string, unknown>[]) : [];
+      if (subs.length > 0) {
+        return breakdownComposite(it).map((si) => ({ name: si.nama, bobot: si.bobot, nilai: si.nilai, target: si.target || '—' }));
+      }
       const fullName = String(it['indikator'] ?? '');
       const name = fullName.replace(/^Pengurang\s*[-–:]\s*/i, '');
-      const applied = num(it['realisasi']);
-      return {
-        no:         existingKepatuhan[idx]?.['no'] ?? `12${SUB[idx] ?? idx}`,
-        name,
-        maxPenalty: num(it['bobot']),
-        applied:    r2(applied),
-        target:     existingKepatuhan[idx]?.['target'] ?? String(it['target'] ?? '—'),
-        status:     applied === 0 ? 'success' : 'danger',
-      };
+      const bobot = num(it['bobot']);
+      const actual = num(it['realisasi']);
+      const nilai = actual > 0 ? -Math.min(actual, Math.abs(bobot)) : 0;
+      return [{ name, bobot, nilai, target: String(it['target'] ?? '—') }];
     });
+    const kepatuhanBuilt = pengurangRows.map((row, idx) => ({
+      no:         existingKepatuhan[idx]?.['no'] ?? `12${SUB[idx] ?? idx}`,
+      name:       row.name,
+      maxPenalty: row.bobot,
+      applied:    r2(row.nilai),
+      target:     existingKepatuhan[idx]?.['target'] ?? row.target,
+      status:     row.nilai === 0 ? 'success' : 'danger',
+    }));
 
     const kpis = (hasKpData ? kpisBuilt : existingKpis) as Record<string, unknown>[];
     const kepatuhan = (hasKpData ? kepatuhanBuilt : existingKepatuhan) as Record<string, unknown>[];

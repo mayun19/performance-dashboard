@@ -46,6 +46,13 @@ export function breakdownComposite(item: Record<string, unknown>): SubIndicatorS
     const target = num(si['target2'] ?? si['target']);
     const actual = num(si['realisasi']);
     const satuan = String(si['satuan'] ?? '').toLowerCase();
+    // Sub pengurang/penalti (bobot < 0, "Max Penalti"): realisasi = jumlah poin pelanggaran,
+    // langsung jadi pengurang, dibatasi plafon |bobot| (tak bisa melebihi Max Penalti).
+    if (bobot < 0) {
+      const nilai = actual > 0 ? r2(-Math.min(actual, Math.abs(bobot))) : 0;
+      const capaian = bobot !== 0 ? r2((nilai / bobot) * 100) : 0; // % plafon penalti terpakai
+      return { nama: String(si['nama'] ?? ''), satuan, bobot, target, actual, capaian, nilai, formula: String(si['formula'] ?? '') };
+    }
     const capaian = bobot > 0 && target > 0 && actual > 0 ? computeCapaian(target, actual, satuan === 'hari kerja') : 0;
     return { nama: String(si['nama'] ?? ''), satuan, bobot, target, actual, capaian, nilai: computeNilai(bobot, capaian), formula: String(si['formula'] ?? '') };
   });
@@ -69,8 +76,14 @@ export function scoreItems(items: Record<string, unknown>[], overrides?: TargetO
       continue;
     }
     const bobot = num(it['bobot']);
-    const target = resolveTarget(it, overrides);
     const actual = num(it['realisasi']);
+    // Item pengurang/penalti legacy (flat, tanpa sub-indikator): realisasi = poin pelanggaran,
+    // dibatasi plafon |bobot| — sama seperti sub pengurang komposit di breakdownComposite().
+    if (bobot < 0) {
+      total += actual > 0 ? -Math.min(actual, Math.abs(bobot)) : 0;
+      continue;
+    }
+    const target = resolveTarget(it, overrides);
     const satuan = String(it['satuan'] ?? '').toLowerCase();
     if (bobot > 0 && target > 0 && actual > 0) {
       const capaian = computeCapaian(target, actual, satuan === 'hari kerja');
