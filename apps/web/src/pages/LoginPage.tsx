@@ -59,7 +59,9 @@ const DEMO_GROUPS: Array<{ label: string; accounts: Array<{ role: string; email:
   {
     label: 'KI — K3L & MRO',
     accounts: [
+      { role: 'Staff Kinerja K3L', email: 'staff.k3l@pusmanpro.pln.co.id' },
       { role: 'ASMAN K3L', email: 'asman.k3l@pusmanpro.pln.co.id' },
+      { role: 'Staff Kinerja MRO', email: 'staff.mro@pusmanpro.pln.co.id' },
       { role: 'ASMAN Manajemen Risiko & Kepatuhan', email: 'asman.mro@pusmanpro.pln.co.id' },
     ],
   },
