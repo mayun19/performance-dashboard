@@ -58,6 +58,20 @@ const STATUS_PILL: Record<string, string> = {
 // (dan tidak boleh) input ulang sampai package kembali ke dirinya (status 'rejected').
 const IN_FLIGHT_STATUSES = ['submitted', 'ready', 'approved', 'target_fix'];
 
+// Riwayat Keputusan Saya — dokumen yang pernah diberi keputusan oleh reviewer yang sedang login
+// (lihat InputRealisasiService.getMyDecisions di backend).
+type MyDecision = {
+  id: string; unitCode: string; bidang: string; periodLabel: string; status: string;
+  myActions: Array<{ action: string; note?: string; ts: string; stepIndex: number }>;
+};
+const DECISION_ACTION_LABEL: Record<string, string> = {
+  approved: 'Disetujui', returned: 'Ditolak (ke konseptor)', returned_step: 'Ditolak (ke langkah sebelumnya)',
+  flagged_target: 'Ditandai koreksi target',
+};
+const DECISION_ACTION_PILL: Record<string, string> = {
+  approved: 'completed', returned: 'delayed', returned_step: 'delayed', flagged_target: 'needs-revision',
+};
+
 // Unit yang bisa mengisi realisasi: Kantor Induk + 5 UPMK
 const UNIT_OPTIONS = [
   { code: 'KP', name: 'Kantor Induk' },
@@ -73,7 +87,7 @@ export function InputRealisasiPage() {
   const isStaff = user?.role === 'STAFF';
   // Checker (ASMAN/Manajer) & Approver (SRManajer/GM) hanya memeriksa & menyetujui — input
   // realisasi murni tugas PIC Bidang (Staff). Halaman ini jadi tampilan referensi/riwayat
-  // baginya, wording berubah jadi "Persetujuan Realisasi Bulanan" (aksi sungguhan di Persetujuan).
+  // baginya, wording berubah jadi "Tinjauan Realisasi Bulanan" (aksi sungguhan di Persetujuan).
   const isReviewerRole = user?.role === 'ASMAN' || user?.role === 'MANAJER' || user?.role === 'SRMANAJER' || user?.role === 'GM';
   const canInput = !isReviewerRole;
   // Hanya GM yang boleh pilih unit bebas untuk monitoring
@@ -99,6 +113,10 @@ export function InputRealisasiPage() {
   const [revOpen, setRevOpen] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<RevisionLogEntry[]>([]);
   const [revLoading, setRevLoading] = useState(false);
+  // Riwayat Keputusan Saya (reviewer): dokumen yang PERNAH diberi keputusan oleh user ini,
+  // periode terpilih — sengaja tak dibatasi user.bidang (lihat catatan di getMyDecisions()
+  // backend: reviewer seperti SM RPC memutuskan dokumen lintas-bidang lewat rantai konsolidasi).
+  const [myDecisions, setMyDecisions] = useState<MyDecision[]>([]);
 
   const reloadHistory = async () => {
     const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
@@ -189,6 +207,15 @@ export function InputRealisasiPage() {
     };
     loadData();
   }, [selectedUnit, selectedPeriodId, isStaff, user?.bidang]);
+
+  // Riwayat Keputusan Saya — hanya reviewer, periode terpilih, TAK terikat selectedUnit/bidang
+  // (lihat catatan di getMyDecisions() backend).
+  useEffect(() => {
+    if (!isReviewerRole || !selectedPeriodId) { setMyDecisions([]); return; }
+    inputRealisasi.myDecisions(selectedPeriodId)
+      .then((res) => setMyDecisions((res as MyDecision[]) ?? []))
+      .catch(() => setMyDecisions([]));
+  }, [isReviewerRole, selectedPeriodId]);
 
   // Submit membuka picker reviewer; pengiriman sebenarnya di handleConfirmSubmit.
   const handleSubmit = () => {
@@ -300,7 +327,7 @@ export function InputRealisasiPage() {
             <ClipboardEdit size={24} color="var(--color-accent)" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>{isReviewerRole ? 'Persetujuan Realisasi Bulanan' : 'Input Realisasi Bulanan'} — {selectedPeriodLabel}</div>
+            <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>{isReviewerRole ? 'Tinjauan Realisasi Bulanan' : 'Input Realisasi Bulanan'} — {selectedPeriodLabel}</div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
               <span>Periode:</span>
               <select
@@ -670,6 +697,66 @@ export function InputRealisasiPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Riwayat Keputusan Saya (reviewer) */}
+      {isReviewerRole && (
+        <div className="card p-0">
+          <div className="card-header compact">
+            <div className="card-title"><History size={14} />Riwayat Keputusan Saya</div>
+            <span className="card-meta">{myDecisions.length} dokumen</span>
+          </div>
+          {myDecisions.length === 0 ? (
+            <div style={{ padding: 'var(--space-4)', color: 'var(--color-text-muted)', fontSize: 13 }}>
+              Belum ada keputusan Anda pada periode ini.
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th>Bidang</th>
+                    <th>Status Saat Ini</th>
+                    <th>Aksi Anda</th>
+                    <th>Catatan</th>
+                    <th>Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myDecisions.map((d) => (
+                    <Fragment key={d.id}>
+                      {d.myActions.map((a, i) => (
+                        <tr key={`${d.id}-${i}`}>
+                          {i === 0 && (
+                            <>
+                              <td style={{ fontWeight: 600 }} rowSpan={d.myActions.length}>{d.unitCode}</td>
+                              <td style={{ fontSize: 13, color: 'var(--color-text-muted)' }} rowSpan={d.myActions.length}>{d.bidang}</td>
+                              <td rowSpan={d.myActions.length}>
+                                <span className={`status-pill ${STATUS_PILL[d.status] ?? 'in-review'}`} style={{ fontSize: 12 }}>
+                                  {STATUS_LABEL[d.status] ?? d.status}
+                                </span>
+                              </td>
+                            </>
+                          )}
+                          <td>
+                            <span className={`status-pill ${DECISION_ACTION_PILL[a.action] ?? 'in-review'}`} style={{ fontSize: 12 }}>
+                              {DECISION_ACTION_LABEL[a.action] ?? a.action}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 13, color: 'var(--color-text-muted)', maxWidth: 260 }}>{a.note || '—'}</td>
+                          <td style={{ fontSize: 13, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                            {a.ts ? new Date(a.ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

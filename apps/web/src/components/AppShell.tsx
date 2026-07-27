@@ -160,7 +160,7 @@ export function AppShell() {
               <div key={section.section}>
                 <div className="nav-section-label">{section.section}</div>
                 {visibleItems.map(({ to, label, icon: Icon, end }) => {
-                  const displayLabel = to === '/input-realisasi' && isReviewerRole ? 'Persetujuan Realisasi Bulanan' : label;
+                  const displayLabel = to === '/input-realisasi' && isReviewerRole ? 'Tinjauan Realisasi Bulanan' : label;
                   return (
                     <NavLink
                       key={to}

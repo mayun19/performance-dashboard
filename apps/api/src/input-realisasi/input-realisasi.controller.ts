@@ -58,6 +58,11 @@ export class InputRealisasiController {
     return this.svc.getHistory(unitCode, periodId);
   }
 
+  @Get('my-decisions')
+  myDecisions(@CurrentUser() user: User, @Query('periodId') periodId?: string) {
+    return this.svc.getMyDecisions(user, periodId);
+  }
+
   @Get('review/list')
   reviewList(@CurrentUser() user: User) {
     return this.svc.getReviewList(user);

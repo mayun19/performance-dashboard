@@ -50,6 +50,43 @@ export class InputRealisasiService {
     });
   }
 
+  // Daftar dokumen yang PERNAH diberi keputusan (approve/reject/dst) oleh user ini — dipakai
+  // halaman "Tinjauan Realisasi Bulanan". SENGAJA lintas-bidang/unit (tak difilter user.bidang):
+  // reviewer seperti SM Perencanaan & Project Control memutuskan dokumen bidang LAIN juga lewat
+  // rantai konsolidasi RPC (lihat common/workflow-steps.ts RPC_TAIL) — kalau ikut filter bidang,
+  // keputusan lintas-bidang itu hilang dari daftarnya sendiri.
+  async getMyDecisions(user: User, periodId?: string) {
+    const period = periodId
+      ? await this.prisma.period.findUnique({ where: { id: periodId } })
+      : await this.prisma.period.findFirst({ where: { isActive: true } });
+    if (!period) return [];
+
+    const records = await this.prisma.inputRealisasi.findMany({
+      where: { periodId: period.id },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const result: Array<{
+      id: string; unitCode: string; bidang: string; periodLabel: string; status: string;
+      myActions: Array<{ action: string; note?: string; ts: string; stepIndex: number }>;
+    }> = [];
+    for (const r of records) {
+      const history = Array.isArray(r.history) ? (r.history as Record<string, unknown>[]) : [];
+      const myActions = history.filter((h) => (
+        h['actorId'] === user.id || (h['actorId'] == null && h['actor'] === user.name)
+      ));
+      if (myActions.length === 0) continue;
+      result.push({
+        id: r.id, unitCode: r.unitCode, bidang: r.bidang, periodLabel: period.label, status: r.status,
+        myActions: myActions.map((h) => ({
+          action: String(h['action'] ?? ''), note: h['note'] as string | undefined,
+          ts: String(h['ts'] ?? ''), stepIndex: Number(h['stepIndex'] ?? 0),
+        })),
+      });
+    }
+    return result;
+  }
+
   // Daftar kandidat reviewer (Checker: ASMAN/Manajer, Approver: SRManajer/GM).
   // Bila unitCode+bidang diberikan (submit realisasi selalu per unit+bidang): scope Checker
   // ke ASMAN/Manajer unit+bidang yang sama; Approver ke SRManajer KP bidang yang sama, atau GM
@@ -367,7 +404,7 @@ export class InputRealisasiService {
     const baseHistory = Array.isArray(r.history) ? (r.history as object[]) : [];
 
     if (action === 'reject' && returnTo === 'target') {
-      const history = [...baseHistory, { stepIndex: curIdx, actor: user.name, role: user.role, action: 'flagged_target', label: steps[curIdx]?.label, note, ts: new Date().toISOString() }];
+      const history = [...baseHistory, { stepIndex: curIdx, actor: user.name, actorId: user.id, role: user.role, action: 'flagged_target', label: steps[curIdx]?.label, note, ts: new Date().toISOString() }];
       const result = await this.prisma.inputRealisasi.update({
         where: { id },
         data: { status: 'target_fix', history, reviewer: user.name, reviewNote: note, reviewedAt: new Date() },
@@ -392,7 +429,7 @@ export class InputRealisasiService {
     if (action === 'reject') {
       const toPrev = returnTo === 'previous' && curIdx - 1 >= 1;
       const newIdx = toPrev ? curIdx - 1 : 0;
-      const history = [...baseHistory, { stepIndex: curIdx, actor: user.name, role: user.role, action: toPrev ? 'returned_step' : 'returned', toStepIndex: newIdx, label: steps[curIdx]?.label, note, ts: new Date().toISOString() }];
+      const history = [...baseHistory, { stepIndex: curIdx, actor: user.name, actorId: user.id, role: user.role, action: toPrev ? 'returned_step' : 'returned', toStepIndex: newIdx, label: steps[curIdx]?.label, note, ts: new Date().toISOString() }];
       const result = await this.prisma.inputRealisasi.update({
         where: { id },
         data: {
@@ -420,7 +457,7 @@ export class InputRealisasiService {
     // approve → maju
     const nextIdx = curIdx + 1;
     const chainDone = nextIdx >= steps.length;
-    const history = [...baseHistory, { stepIndex: curIdx, actor: user.name, role: user.role, action: 'approved', label: steps[curIdx]?.label, note, ts: new Date().toISOString() }];
+    const history = [...baseHistory, { stepIndex: curIdx, actor: user.name, actorId: user.id, role: user.role, action: 'approved', label: steps[curIdx]?.label, note, ts: new Date().toISOString() }];
     const result = await this.prisma.inputRealisasi.update({
       where: { id },
       data: {

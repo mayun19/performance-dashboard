@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { approvals as approvalsApi, inputKontrak, inputRealisasi, meta as metaApi, admin, periodTarget, type PeriodTarget } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { usePeriod } from '../context/PeriodContext';
@@ -239,6 +239,7 @@ const WORKFLOW_STATIC = [
 export function ApprovalsPage() {
   const { user } = useAuth();
   const { refresh: refreshNotif } = useNotif();
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -265,6 +266,9 @@ export function ApprovalsPage() {
   const [realExpanded, setRealExpanded] = useState<string | null>(null);
   const [realBusy, setRealBusy] = useState(false);
   const [realBulkBusy, setRealBulkBusy] = useState(false);
+  // Modal pasca-keputusan Realisasi: arahkan reviewer ke "Tinjauan Realisasi Bulanan" utk
+  // melihat kembali dokumen yang baru saja diputuskan (lihat riwayat keputusan di sana).
+  const [postReviewModal, setPostReviewModal] = useState<{ action: 'approve' | 'reject'; unitCode: string; bidang: string } | null>(null);
 
   // Living-target: koreksi KM Sementara oleh PIC REN untuk package berstatus 'target_fix'.
   // periodId -> KM Sementara periode tsb (satu package target_fix hanya dikoreksi terhadap periodenya sendiri).
@@ -1127,10 +1131,17 @@ export function ApprovalsPage() {
     if (!realNote.trim()) { alert('Catatan/komentar wajib diisi saat menyetujui atau mengembalikan realisasi'); return; }
     setRealBusy(true);
     try {
+      const target = realList.find((r) => r.id === id);
       await inputRealisasi.review(id, action, realNote, returnTo);
       setRealTarget(null); setRealNote('');
       loadReal();
       refreshNotif();
+      if (target) {
+        setPostReviewModal({
+          action, unitCode: target.unitCode,
+          bidang: (target as RealisasiKinerja & { bidang?: string }).bidang ?? '',
+        });
+      }
     } catch (e) {
       alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal memproses review');
     } finally {
@@ -2414,6 +2425,36 @@ export function ApprovalsPage() {
         );
       })()}
       </div>
+      )}
+
+      {postReviewModal && (
+        <div
+          role="dialog" aria-modal="true"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+        >
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)', maxWidth: 420, width: '90%', boxShadow: '0 12px 32px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+              <CheckCircle size={20} color={postReviewModal.action === 'approve' ? 'var(--color-success)' : 'var(--color-danger)'} />
+              <div style={{ fontSize: 'var(--text-md)', fontWeight: 700 }}>Keputusan Tersimpan</div>
+            </div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
+              Dokumen Realisasi {UNIT_NAMES[postReviewModal.unitCode] ?? postReviewModal.unitCode}
+              {postReviewModal.bidang ? ` — ${postReviewModal.bidang}` : ''} telah{' '}
+              <strong>{postReviewModal.action === 'approve' ? 'disetujui' : 'ditolak'}</strong>.
+              Anda dapat meninjau kembali dokumen ini kapan saja di halaman{' '}
+              <strong>Tinjauan Realisasi Bulanan</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+              <button className="btn btn-sm" onClick={() => setPostReviewModal(null)}>Tutup</button>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => { setPostReviewModal(null); navigate('/input-realisasi'); }}
+              >
+                Buka Tinjauan Realisasi Bulanan
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
