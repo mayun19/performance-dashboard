@@ -115,13 +115,16 @@ export function OperationalPage() {
     );
   }
 
-  const kpiRows = kpis.filter(k => !k.id?.startsWith('pi'));
-  const piRows = pis.length > 0 ? pis : kpis.filter(k => k.id?.startsWith('pi'));
-  // KPI digabung jadi satu (sebelumnya KPI bobot 40 + KPI bobot 60).
-  const allKpiRows = [...kpiRows, ...piRows];
+  // Backend (operational.service.ts) sudah mengirim `kpis` sebagai satu daftar penuh, terurut
+  // sesuai dokumen spesimen — tak perlu dipecah KPI/PI lalu digabung lagi (pemecahan via
+  // id?.startsWith('pi') memakai id legacy yang tak konsisten & merusak urutan spesimen).
+  const allKpiRows = pis.length > 0 ? [...kpis, ...pis] : kpis;
   const kpiNilai = (sm.kpiNilai ?? 0) + (sm.piNilai ?? 0);
   const kpiBobot = (sm.kpiBobot ?? 0) + (sm.piBobot ?? 0);
   const penalty = sm.kepatuhanPenalty ?? 0;
+  // Plafon maksimum pengurang = Σ maxPenalty seluruh sub-indikator pengurang live (bukan
+  // angka statis) — mengikuti bobotKm KPI Master "Kepatuhan..." yang bisa berubah sewaktu-waktu.
+  const maxPenaltyTotal = kepatuhan.reduce((s, k) => s + (k.maxPenalty ?? 0), 0);
   // Total Nilai Kinerja = Σ nilai KPI + pengurang kepatuhan (penalty ≤ 0) — sinkron dgn kartu di atas.
   const totalNilai = kpiNilai + penalty;
   const totalBobot = kpiBobot;
@@ -264,7 +267,7 @@ export function OperationalPage() {
         </div>
         <div className="summary-hero-card pen">
           <div className="summary-hero-label">Pengurang Kepatuhan</div>
-          <div className="summary-hero-value">{penalty}<span className="of">(max -30)</span></div>
+          <div className="summary-hero-value">{penalty}<span className="of">(max {maxPenaltyTotal})</span></div>
           <div className="summary-hero-meta delta-positive">
             {penalty === 0 ? 'Tidak ada pengurang' : `${penalty} poin`}
           </div>
@@ -311,7 +314,7 @@ export function OperationalPage() {
               </div>
               <div>
                 <div className="card-title" style={{ color: 'var(--color-danger)', fontSize: 'var(--text-sm)' }}>Pengurang Kepatuhan</div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>Maks −30 poin</div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>Maks {maxPenaltyTotal} poin</div>
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -349,7 +352,7 @@ export function OperationalPage() {
                 ))}
                 <tr style={{ background: 'var(--color-surface-2)', fontWeight: 700 }}>
                   <td>TOTAL</td>
-                  <td className="num" style={{ color: 'var(--color-danger)' }}>−30</td>
+                  <td className="num" style={{ color: 'var(--color-danger)' }}>{maxPenaltyTotal}</td>
                   <td className="num" style={{ fontWeight: 800, color: (sm.kepatuhanPenalty ?? 0) < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
                     {(sm.kepatuhanPenalty ?? 0) < 0 ? sm.kepatuhanPenalty : '0 ✓'}
                   </td>

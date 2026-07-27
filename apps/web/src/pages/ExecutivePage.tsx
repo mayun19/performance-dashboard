@@ -159,14 +159,17 @@ export function ExecutivePage() {
   const od = (opData?.data ?? {}) as Record<string, unknown>;
   const sm = (od.summary ?? {}) as OpSummary;
   const opKpis = (od.kpis ?? []) as OpKpi[];
-  const opPis = (od.pis ?? od.pi ?? []) as OpKpi[];
   const kepatuhan = (od.kepatuhan ?? []) as Kepatuhan[];
-  const kpiRows = opKpis.filter(k => !k.id?.startsWith('pi'));
-  const piRows = opPis.length > 0 ? opPis : opKpis.filter(k => k.id?.startsWith('pi'));
-  const allKpiRows = [...kpiRows, ...piRows];
+  // Backend (operational.service.ts) sudah mengirim `kpis` sebagai satu daftar penuh, terurut
+  // sesuai dokumen spesimen — tak perlu dipecah KPI/PI lalu digabung lagi (pemecahan via
+  // id?.startsWith('pi') memakai id legacy yang tak konsisten & merusak urutan spesimen).
+  const allKpiRows = opKpis;
   const kpiNilai = (sm.kpiNilai ?? 0) + (sm.piNilai ?? 0);
   const kpiBobot = (sm.kpiBobot ?? 0) + (sm.piBobot ?? 0);
   const penalty = sm.kepatuhanPenalty ?? 0;
+  // Plafon maksimum pengurang = Σ maxPenalty seluruh sub-indikator pengurang live (bukan
+  // angka statis) — mengikuti bobotKm KPI Master "Kepatuhan..." yang bisa berubah sewaktu-waktu.
+  const maxPenaltyTotal = kepatuhan.reduce((s, k) => s + (k.maxPenalty ?? 0), 0);
   const totalNilai = kpiNilai + penalty;
   const totalBobot = kpiBobot;
   const totalStatus = totalNilai >= 100 ? 'Baik' : totalNilai >= 95 ? 'Hati-hati' : 'Perhatian';
@@ -343,7 +346,7 @@ export function ExecutivePage() {
             </div>
             <div className="summary-hero-card pen">
               <div className="summary-hero-label">Pengurang Kepatuhan</div>
-              <div className="summary-hero-value">{penalty}<span className="of">(max -30)</span></div>
+              <div className="summary-hero-value">{penalty}<span className="of">(max {maxPenaltyTotal})</span></div>
               <div className="summary-hero-meta delta-positive">{penalty === 0 ? 'Tidak ada pengurang' : `${penalty} poin`}</div>
             </div>
             <div className="summary-hero-card total">
@@ -357,7 +360,7 @@ export function ExecutivePage() {
             <div style={{borderTop:'1px solid var(--color-border)'}}>
               <div style={{padding:'var(--space-2) var(--space-4)',display:'flex',alignItems:'center',gap:'var(--space-2)'}}>
                 <ShieldAlert size={13} style={{color:'var(--color-danger)'}} />
-                <span style={{fontSize:'var(--text-xs)',fontWeight:700,color:'var(--color-danger)'}}>Pengurang Kepatuhan — Maks −30 poin</span>
+                <span style={{fontSize:'var(--text-xs)',fontWeight:700,color:'var(--color-danger)'}}>Pengurang Kepatuhan — Maks {maxPenaltyTotal} poin</span>
               </div>
               <div className="table-wrap">
                 <table className="data-table compact">

@@ -2,18 +2,14 @@ import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
+import { num, r2, resolveTarget, computeCapaian, computeNilai, dedupFanOutRealisasi, specimenOrder, type PersenLookup, type TargetOverrideMap } from '../common/capaian';
 
 const UNIT_NAMES: Record<string, string> = {
   KP: 'Kantor Induk', UPMK1: 'UPMK I', UPMK2: 'UPMK II',
   UPMK3: 'UPMK III', UPMK4: 'UPMK IV', UPMK5: 'UPMK V',
 };
 
-const num = (v: unknown): number => {
-  if (v == null) return 0;
-  const n = parseFloat(String(v).replace(',', '.').replace(/[^0-9.-]/g, ''));
-  return Number.isFinite(n) ? n : 0;
-};
-const round2 = (n: number) => Math.round(n * 100) / 100;
+const round2 = r2;
 
 interface KpiRekap {
   indikator: string;
@@ -98,44 +94,102 @@ export class KinerjaService {
       orderBy: { unitCode: 'asc' },
     });
 
+    // Target-of-record efektif (living Sementara / KM Final beku) — gabungkan targetOfRecord
+    // seluruh record dalam cakupan, sama seperti executive/operational.service.ts.
+    const targetOfRecord: TargetOverrideMap = {};
+    for (const r of realisasi) Object.assign(targetOfRecord, (r.targetOfRecord ?? {}) as TargetOverrideMap);
+
+    // persenAgregasi lookup (dipakai dedupFanOutRealisasi utk KPI lintas-bidang) — dihitung
+    // sekali dari seluruh masterKpiId yang muncul di cakupan periode ini.
+    const allMasterIds = Array.from(new Set(
+      realisasi.flatMap((r) => Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>))
+        .map((it) => it['masterKpiId']).filter((v): v is string => typeof v === 'string'),
+    ));
+    const allAssignments = allMasterIds.length
+      ? await this.prisma.kpiAssignment.findMany({ where: { kpiMasterId: { in: allMasterIds } } })
+      : [];
+    const persenLookup: PersenLookup = new Map(allAssignments.map((a) => [`${a.kpiMasterId}|${a.unitCode}|${a.bidang}`, a.persenAgregasi]));
+
     // Kelompokkan per unit (gabung semua bidang & semua bulan dalam cakupan).
     const byUnit: Record<string, typeof realisasi> = {};
     for (const r of realisasi) (byUnit[r.unitCode] ||= []).push(r);
 
     const units: UnitRekap[] = Object.entries(byUnit).map(([code, records]) => {
-      // Kumpulkan realisasi bulanan per indikator (key: bidang|indikator).
-      const kpiMap = new Map<string, { indikator: string; satuan: string; bobot: number; target: number; reals: number[] }>();
+      // Dedup fan-out KPI lintas-bidang PER BULAN (persenAgregasi rollup hanya valid dalam satu
+      // periode) — lihat common/capaian.ts dedupFanOutRealisasi. Setelah dedup per-bulan, realisasi
+      // (item biasa) / realisasi tiap sub (komposit) dikumpulkan lintas-bulan lalu dirata-rata.
+      const byPeriod = new Map<string, typeof records>();
+      for (const r of records) {
+        const arr = byPeriod.get(r.periodId) ?? [];
+        arr.push(r);
+        byPeriod.set(r.periodId, arr);
+      }
+      const kpiMap = new Map<string, { it: Record<string, unknown>; reals: number[]; subReals: number[][] }>();
       let lastSubmitter = '';
       let lastReviewer: string | null = null;
-      for (const r of records) {
-        lastSubmitter = r.submitter;
-        lastReviewer = r.reviewer ?? lastReviewer;
-        const entries = Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>);
-        for (const it of entries) {
-          const indikator = String(it.indikator ?? '—');
-          const key = `${r.bidang}|${indikator}`;
-          const e = kpiMap.get(key) ?? { indikator, satuan: String(it.satuan ?? ''), bobot: num(it.bobot), target: num(it.target), reals: [] };
-          e.reals.push(num(it.realisasi));
+      for (const [, periodRecords] of byPeriod) {
+        const rawItems = periodRecords.flatMap((r) => {
+          lastSubmitter = r.submitter;
+          lastReviewer = r.reviewer ?? lastReviewer;
+          return Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>).map((it) => ({ it, bidang: r.bidang }));
+        });
+        const deduped = dedupFanOutRealisasi(rawItems, persenLookup, code);
+        for (const { it } of deduped) {
+          const key = String(it['masterKpiId'] ?? it['indikator'] ?? '');
+          const subs = Array.isArray(it['subIndicators']) ? (it['subIndicators'] as Record<string, unknown>[]) : [];
+          const e = kpiMap.get(key) ?? { it, reals: [], subReals: subs.map(() => []) };
+          if (subs.length > 0) {
+            subs.forEach((si, j) => e.subReals[j]?.push(num(si['realisasi'])));
+          } else {
+            e.reals.push(num(it['realisasi']));
+          }
           kpiMap.set(key, e);
         }
       }
+
       let totalBobot = 0;
       let totalNilai = 0;
-      const kpis: KpiRekap[] = [...kpiMap.values()].map((e) => {
-        const avgReal = e.reals.length ? e.reals.reduce((a, b) => a + b, 0) / e.reals.length : 0;
-        const capaian = e.target > 0 ? (avgReal / e.target) * 100 : 0;
-        const nilai = (capaian / 100) * e.bobot;
-        totalBobot += e.bobot;
+      const avg = (vals: number[]) => (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0);
+      const kpis: KpiRekap[] = [...kpiMap.values()]
+        .sort((a, b) => specimenOrder(String(a.it['indikator'] ?? '')) - specimenOrder(String(b.it['indikator'] ?? '')))
+        .map((e) => {
+        const subs = Array.isArray(e.it['subIndicators']) ? (e.it['subIndicators'] as Record<string, unknown>[]) : [];
+        const indikator = String(e.it['indikator'] ?? '—');
+        const bobotInduk = num(e.it['bobot']);
+        totalBobot += bobotInduk;
+        if (subs.length > 0) {
+          // Komposit: rata-rata realisasi tiap sub lintas-bulan, lalu skor per-sub (sama formula
+          // dgn common/capaian.ts breakdownComposite — termasuk sub pengurang bobot negatif).
+          let nilaiSum = 0;
+          subs.forEach((si, j) => {
+            const subBobot = num(si['bobot']);
+            const avgReal = avg(e.subReals[j] ?? []);
+            if (subBobot < 0) {
+              nilaiSum += avgReal > 0 ? -Math.min(avgReal, Math.abs(subBobot)) : 0;
+              return;
+            }
+            const target = num(si['target2'] ?? si['target']);
+            const satuan = String(si['satuan'] ?? '').toLowerCase();
+            const capaian = subBobot > 0 && target > 0 && avgReal > 0 ? computeCapaian(target, avgReal, satuan === 'hari kerja') : 0;
+            nilaiSum += computeNilai(subBobot, capaian);
+          });
+          const nilai = r2(nilaiSum);
+          totalNilai += nilai;
+          const achievement = bobotInduk !== 0 ? r2((nilai / bobotInduk) * 100) : 0;
+          return { indikator, satuan: '', bobot: round2(bobotInduk), target: 0, realisasi: 0, capaian: achievement, nilai };
+        }
+        const avgReal = avg(e.reals);
+        if (bobotInduk < 0) {
+          const nilai = avgReal > 0 ? r2(-Math.min(avgReal, Math.abs(bobotInduk))) : 0;
+          totalNilai += nilai;
+          return { indikator, satuan: String(e.it['satuan'] ?? ''), bobot: round2(bobotInduk), target: 0, realisasi: round2(avgReal), capaian: 0, nilai };
+        }
+        const target = resolveTarget(e.it, targetOfRecord);
+        const satuan = String(e.it['satuan'] ?? '').toLowerCase();
+        const capaian = bobotInduk > 0 && target > 0 && avgReal > 0 ? computeCapaian(target, avgReal, satuan === 'hari kerja') : 0;
+        const nilai = computeNilai(bobotInduk, capaian);
         totalNilai += nilai;
-        return {
-          indikator: e.indikator,
-          satuan: e.satuan,
-          bobot: round2(e.bobot),
-          target: round2(e.target),
-          realisasi: round2(avgReal),
-          capaian: round2(capaian),
-          nilai: round2(nilai),
-        };
+        return { indikator, satuan: String(e.it['satuan'] ?? ''), bobot: round2(bobotInduk), target: round2(target), realisasi: round2(avgReal), capaian: round2(capaian), nilai: round2(nilai) };
       });
       const score = round2(totalNilai);
       const status = score >= 100 ? 'Baik' : score >= 90 ? 'Hati-hati' : 'Tertinggal';

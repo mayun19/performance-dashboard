@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, breakdownComposite, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, breakdownComposite, dedupFanOutRealisasi, specimenOrder, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class OperationalService {
@@ -63,10 +63,21 @@ export class OperationalService {
       }
     }
 
-    const allItems = kpRecords.flatMap(r =>
+    const rawItems = kpRecords.flatMap(r =>
       Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>)
         .map(it => ({ it, bidang: r.bidang }))
     );
+    // Dedup KPI lintas-bidang (fan-out) SEBELUM discoring — lihat catatan dedupFanOutRealisasi
+    // di common/capaian.ts. Tanpa ini, KPI yang di-assign ke >1 bidang (mis. "Pengendalian
+    // Anggaran" = OMP+KKU) akan dihitung berkali-kali di kpis/kepatuhan & totalBobot/totalNilai.
+    const masterIdsKp = Array.from(new Set(
+      rawItems.map(({ it }) => it['masterKpiId']).filter((v): v is string => typeof v === 'string'),
+    ));
+    const assignmentsKp = masterIdsKp.length
+      ? await this.prisma.kpiAssignment.findMany({ where: { kpiMasterId: { in: masterIdsKp } } })
+      : [];
+    const persenLookupKp = new Map(assignmentsKp.map((a) => [`${a.kpiMasterId}|${a.unitCode}|${a.bidang}`, a.persenAgregasi]));
+    const allItems = dedupFanOutRealisasi(rawItems, persenLookupKp, 'KP');
     const regularItems = allItems.filter(({ it }) => num(it['bobot']) > 0);
     const pengurangItems = allItems.filter(({ it }) => num(it['bobot']) < 0);
 
@@ -88,13 +99,20 @@ export class OperationalService {
     // Build kpis from positive-bobot items (hanya bila ADA submission KP periode ini —
     // jika tidak, pertahankan data KP terakhir dari base agar tidak tertimpa kosong).
     let kpiNo = 1;
-    const kpisBuilt = regularItems.map(({ it, bidang }) => {
+    const kpisBuilt = [...regularItems]
+      .sort((a, b) => specimenOrder(String(a.it['indikator'] ?? '')) - specimenOrder(String(b.it['indikator'] ?? '')))
+      .map(({ it, bidang }) => {
       const name = String(it['indikator'] ?? '');
-      const nameLow = name.toLowerCase();
-      const existingKpi = existingKpis.find(k => {
-        const kname = String(k['name'] ?? '').toLowerCase();
-        return kname.length > 8 && nameLow.slice(0, 20).includes(kname.slice(0, 12));
-      });
+      const nameLow = name.toLowerCase().trim();
+      const masterKpiId = it['masterKpiId'];
+      // Cocokkan via masterKpiId (stabil) bila ada; fallback nama PERSIS (bukan prefix-fuzzy —
+      // prefix 20/12 char sebelumnya menyamakan "Penambahan kapasitas pembangkit/transmisi/
+      // Gardu Induk" krn berbagi awalan sama, sehingga komentar/root cause ikut tertukar).
+      const existingKpi = existingKpis.find(k => (
+        typeof masterKpiId === 'string' && masterKpiId.length > 0
+          ? k['masterKpiId'] === masterKpiId
+          : String(k['name'] ?? '').toLowerCase().trim() === nameLow
+      ));
       const bobot = num(it['bobot']);
       const satuan = String(it['satuan'] ?? '');
       const isInverse = satuan.toLowerCase() === 'hari kerja';
@@ -120,10 +138,11 @@ export class OperationalService {
       }
       const prevSpark = (existingKpi?.['sparkline'] ?? Array(12).fill(0)) as number[];
       const no = kpiNo++;
+      const slug = nameLow.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const id = typeof masterKpiId === 'string' && masterKpiId.length > 0 ? masterKpiId : (slug || `k${no}`);
       return {
-        id:          existingKpi?.['id'] ?? `k${no}`,
-        no,
-        name,
+        id, no, name,
+        masterKpiId: typeof masterKpiId === 'string' ? masterKpiId : null,
         category:    existingKpi?.['category'] ?? (bobot >= 7 ? 'KPI' : 'PI'),
         unit:        satuan,
         target:      r2(target),
