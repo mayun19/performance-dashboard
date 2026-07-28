@@ -824,6 +824,7 @@ function DokumenKmTab() {
   const [submitted, setSubmitted] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [approvedExpanded, setApprovedExpanded] = useState<string | null>(null);
+  const [draftExpanded, setDraftExpanded] = useState<string | null>(null);
 
   const [selectedUnit, setSelectedUnit] = useState('KP');
   const [submitTargetId, setSubmitTargetId] = useState<string | null>(null);
@@ -1042,47 +1043,72 @@ function DokumenKmTab() {
               </thead>
               <tbody>
                 {visibleKontrak.map((k) => (
-                  <tr key={k.id}>
-                    <td style={{ fontWeight: 600 }}>{UNIT_NAMES[k.unitCode] ?? k.unitCode}</td>
-                    <td>{k.bidang}</td>
-                    <td>{k.holder}</td>
-                    <td className="num">{k.kpiItems.length} indikator</td>
-                    <td>
-                      <span className={`status-pill ${STATUS_PILL[k.status] ?? 'in-review'}`}>{STATUS_LABEL[k.status] ?? k.status}</span>
-                      {k.status === 'submitted' && (() => {
-                        const kk = k as KontrakManajemen & { steps?: { label: string }[]; currentStepIndex?: number };
-                        const lbl = (kk.steps ?? [])[kk.currentStepIndex ?? 0]?.label ?? 'tahap review';
-                        return <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>di {lbl}</div>;
-                      })()}
-                      {k.status === 'ready' && <div style={{ fontSize: 12, color: 'var(--color-warning)', marginTop: 2 }}>lolos rantai → menunggu bundle GM</div>}
-                      {k.status === 'rejected' && k.reviewNote && <div style={{ fontSize: 12, color: 'var(--color-danger)', marginTop: 2, maxWidth: 220 }}>{k.reviewNote}</div>}
-                    </td>
-                    <td style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                      {new Date(k.submittedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        {(k.status === 'draft' || k.status === 'rejected') ? (
-                          canActOnRow(k) ? (
-                            <>
-                              <button className="btn btn-primary btn-sm" onClick={() => handleSubmit(k.id)} disabled={submitting} title={isDocReady(k.id) ? 'Alur reviewer default siap' : 'Belum ada default reviewer — pilih manual'}>
-                                <Send size={14} /> Kirim
-                              </button>
-                              <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteKm(k)} disabled={submitting} title="Hapus dokumen KM" style={{ color: 'var(--color-danger)' }}>
-                                <Trash2 size={14} />
-                              </button>
-                            </>
-                          ) : (
-                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-subtle)' }}>Hanya PIC Kinerja (RPC) — lihat saja</span>
-                          )
-                        ) : k.status === 'submitted' ? (
-                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Menunggu review</span>
-                        ) : k.status === 'approved' ? (
-                          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-success)' }}>✓ Disetujui {k.reviewer ? `· ${k.reviewer}` : ''}</span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
+                  <Fragment key={k.id}>
+                    <tr>
+                      <td style={{ fontWeight: 600 }}>{UNIT_NAMES[k.unitCode] ?? k.unitCode}</td>
+                      <td>{k.bidang}</td>
+                      <td>{k.holder}</td>
+                      <td className="num">
+                        <button className="btn btn-ghost btn-sm" onClick={() => setDraftExpanded(draftExpanded === k.id ? null : k.id)}>
+                          {k.kpiItems.length} indikator <ChevronDown size={12} style={{ transform: draftExpanded === k.id ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+                        </button>
+                      </td>
+                      <td>
+                        <span className={`status-pill ${STATUS_PILL[k.status] ?? 'in-review'}`}>{STATUS_LABEL[k.status] ?? k.status}</span>
+                        {k.status === 'submitted' && (() => {
+                          const kk = k as KontrakManajemen & { steps?: { label: string }[]; currentStepIndex?: number };
+                          const lbl = (kk.steps ?? [])[kk.currentStepIndex ?? 0]?.label ?? 'tahap review';
+                          return <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>di {lbl}</div>;
+                        })()}
+                        {k.status === 'ready' && <div style={{ fontSize: 12, color: 'var(--color-warning)', marginTop: 2 }}>lolos rantai → menunggu bundle GM</div>}
+                        {k.status === 'rejected' && k.reviewNote && <div style={{ fontSize: 12, color: 'var(--color-danger)', marginTop: 2, maxWidth: 220 }}>{k.reviewNote}</div>}
+                      </td>
+                      <td style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                        {new Date(k.submittedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                          {(k.status === 'draft' || k.status === 'rejected') ? (
+                            canActOnRow(k) ? (
+                              <>
+                                <button className="btn btn-primary btn-sm" onClick={() => handleSubmit(k.id)} disabled={submitting} title={isDocReady(k.id) ? 'Alur reviewer default siap' : 'Belum ada default reviewer — pilih manual'}>
+                                  <Send size={14} /> Kirim
+                                </button>
+                                <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteKm(k)} disabled={submitting} title="Hapus dokumen KM" style={{ color: 'var(--color-danger)' }}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-subtle)' }}>Hanya PIC Kinerja (RPC) — lihat saja</span>
+                            )
+                          ) : k.status === 'submitted' ? (
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>Menunggu review</span>
+                          ) : k.status === 'approved' ? (
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-success)' }}>✓ Disetujui {k.reviewer ? `· ${k.reviewer}` : ''}</span>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                    {draftExpanded === k.id && (
+                      <tr>
+                        <td colSpan={7} style={{ background: 'var(--color-surface-2)', padding: 0 }}>
+                          <table className="data-table compact" style={{ margin: 0 }}>
+                            <thead>
+                              <tr><th>No</th><th>Indikator Kinerja</th><th>Formula</th><th>Satuan</th><th className="num">Bobot</th><th>Target Sem I</th><th>Target Tahun {CURRENT_YEAR}</th></tr>
+                            </thead>
+                            <tbody>
+                              {(k.kpiItems as Record<string, string>[]).map((it, idx) => (
+                                <tr key={idx}>
+                                  <td>{idx + 1}</td><td>{it.indikator}</td><td>{it.formula}</td><td>{it.satuan}</td>
+                                  <td className="num">{it.bobot}</td><td>{it.target}</td><td>{it.target2}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
