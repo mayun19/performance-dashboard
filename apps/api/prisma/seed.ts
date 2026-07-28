@@ -146,6 +146,7 @@ async function main() {
     { slug: 'pembangkit', label: 'Bagian Pembangkit' },
     { slug: 'jaringan', label: 'Bagian Jaringan' },
     { slug: 'kku', label: 'Bagian KKU' },
+    { slug: 'k3l', label: 'Bagian K3L' },
   ];
   const UPMK_BAGIAN_ROLES: Array<{ key: string; role: Role; label: string }> = [
     { key: 'staff', role: Role.STAFF, label: 'Staff PIC' },

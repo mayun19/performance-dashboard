@@ -13,7 +13,7 @@ const BIDANG_SORT: Record<string, number> = {
   'Keuangan, Komunikasi & Umum': 2, 'Perencanaan & Project Control': 3,
   'MRO': 4, 'K3L': 5,
   // Bagian internal UPMK (taksonomi terpisah dari bidang Kantor Induk di atas)
-  'Bagian Pembangkit': 0, 'Bagian Jaringan': 1, 'Bagian KKU': 2,
+  'Bagian Pembangkit': 0, 'Bagian Jaringan': 1, 'Bagian KKU': 2, 'Bagian K3L': 3,
 };
 
 // Sub-indikator KPI komposit (opt-in, generik) — lihat kpi-master.service.ts SubIndicatorInput.

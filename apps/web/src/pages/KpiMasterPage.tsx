@@ -23,9 +23,9 @@ const BIDANG_OPTIONS = [
   'Operasi Manajemen Proyek', 'QA/QC', 'Keuangan, Komunikasi & Umum',
   'Perencanaan & Project Control', 'K3L', 'MRO',
 ];
-// Tiap UPMK punya 3 bagian internal (Staff PIC + ASMAN sendiri per bagian) — taksonomi terpisah
+// Tiap UPMK punya 4 bagian internal (Staff PIC + ASMAN sendiri per bagian) — taksonomi terpisah
 // dari bidang Kantor Induk, jangan dicampur.
-const UPMK_BIDANG_OPTIONS = ['Bagian Pembangkit', 'Bagian Jaringan', 'Bagian KKU'];
+const UPMK_BIDANG_OPTIONS = ['Bagian Pembangkit', 'Bagian Jaringan', 'Bagian KKU', 'Bagian K3L'];
 const bidangOptionsFor = (unitCode: string) => (unitCode === 'KP' ? BIDANG_OPTIONS : UPMK_BIDANG_OPTIONS);
 const CURRENT_YEAR = new Date().getFullYear();
 // KPI Master (definisi lintas-bidang/unit) dipersempit ke RPC — lihat kpi-master.service.ts save().

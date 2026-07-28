@@ -18,7 +18,8 @@ export const MRO_BIDANG = 'MRO';
 export const UPMK_BAGIAN_PEMBANGKIT = 'Bagian Pembangkit';
 export const UPMK_BAGIAN_JARINGAN = 'Bagian Jaringan';
 export const UPMK_BAGIAN_KKU = 'Bagian KKU';
-export const UPMK_BAGIAN_LIST = [UPMK_BAGIAN_PEMBANGKIT, UPMK_BAGIAN_JARINGAN, UPMK_BAGIAN_KKU];
+export const UPMK_BAGIAN_K3L = 'Bagian K3L';
+export const UPMK_BAGIAN_LIST = [UPMK_BAGIAN_PEMBANGKIT, UPMK_BAGIAN_JARINGAN, UPMK_BAGIAN_KKU, UPMK_BAGIAN_K3L];
 
 // Langkah alur. Tiga mode pencocokan (diperiksa berurutan di stepMatches):
 //   1. userId  → langkah ditujukan ke ORANG spesifik (alur reviewer pilihan submitter).
