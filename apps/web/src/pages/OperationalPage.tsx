@@ -41,12 +41,16 @@ function pct(v: number, d = 1) {
   return (v ?? 0).toFixed(d) + '%';
 }
 
+// Status dari backend (operational.service.ts) bernilai 'success'/'warning'/'danger' — sebelumnya
+// fungsi ini hanya mencocokkan string lama ('on-track'/'at-risk'/'delayed'/'completed') sehingga
+// SEMUA status jatuh ke warna default yang sama (tak ada beda visual sukses/waspada/bahaya).
 function statusPill(s: string) {
-  const cls = s === 'on-track' || s === 'completed' ? 'completed'
-    : s === 'at-risk' ? 'at-risk'
-    : s === 'delayed' ? 'delayed'
-    : 'needs-revision';
-  return <span className={`status-pill ${cls}`}>{s === 'on-track' ? 'On Track' : s === 'at-risk' ? 'At Risk' : s === 'delayed' ? 'Tertinggal' : s === 'completed' ? 'Tercapai' : s}</span>;
+  const cls = s === 'success' || s === 'on-track' || s === 'completed' ? 'success'
+    : s === 'warning' || s === 'at-risk' || s === 'needs-revision' ? 'warning'
+    : s === 'danger' || s === 'delayed' ? 'danger'
+    : 'info';
+  const label = s === 'success' || s === 'on-track' ? 'Tercapai' : s === 'warning' || s === 'at-risk' ? 'Waspada' : s === 'danger' || s === 'delayed' ? 'Tertinggal' : s === 'completed' ? 'Selesai' : s;
+  return <span className={`status-pill ${cls}`}>{label}</span>;
 }
 
 export function OperationalPage() {
@@ -344,7 +348,7 @@ export function OperationalPage() {
                     </td>
                     <td style={{ color: 'var(--color-text-muted)' }}>{k.target}</td>
                     <td>
-                      <span className={`status-pill ${k.status === 'success' ? 'completed' : 'needs-revision'}`}>
+                      <span className={`status-pill ${k.status === 'success' ? 'success' : 'danger'}`}>
                         {k.status === 'success' ? '✓ Aman' : '⚠ Perhatian'}
                       </span>
                     </td>

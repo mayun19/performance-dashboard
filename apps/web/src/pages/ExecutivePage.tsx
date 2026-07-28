@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, Fragment, type ReactNode } from 'react';
 import { executive, kinerja, operational } from '../lib/api';
 import { usePeriod } from '../context/PeriodContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +12,9 @@ import { PhaseControls, type SnapshotPhase } from '../components/PhaseControls';
 import type { ExecutiveData } from '../lib/types';
 
 // Operational types (merged from OperationalPage)
-type OpKpi = { id: string; no?: string; label?: string; name?: string; formula?: string; target: number; actual?: number; realisasi?: number; bobot: number; achievement?: number; nilai?: number; status: string; satuan?: string; unit?: string; commentary?: string; };
+// Sub-indikator KPI komposit (opt-in, generik) — lihat common/capaian.ts breakdownComposite.
+type SubBreakdownItem = { nama: string; satuan: string; bobot: number; target: number; actual: number; capaian: number; nilai: number; formula?: string };
+type OpKpi = { id: string; no?: string; label?: string; name?: string; formula?: string; target: number; actual?: number; realisasi?: number; bobot: number; achievement?: number; nilai?: number; status: string; satuan?: string; unit?: string; commentary?: string; subBreakdown?: SubBreakdownItem[]; };
 type OpSummary = { kpiNilai: number; kpiBobot: number; piNilai: number; piBobot: number; kepatuhanPenalty: number; totalNilai: number; totalBobot: number; status: string; };
 type Kepatuhan = { name: string; maxPenalty: number; applied: number; target: string; status: string };
 
@@ -21,9 +23,16 @@ function fmt(v: unknown, d = 2) {
   return v.toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 function fmtPct(v: number, d = 1) { return (v ?? 0).toFixed(d) + '%'; }
+// Status dari backend (operational.service.ts) bernilai 'success'/'warning'/'danger' — sebelumnya
+// fungsi ini hanya mencocokkan string lama ('on-track'/'at-risk'/'delayed'/'completed') sehingga
+// SEMUA status jatuh ke warna default yang sama (tak ada beda visual sukses/waspada/bahaya).
 function opStatusPill(s: string) {
-  const cls = s === 'on-track' || s === 'completed' ? 'completed' : s === 'at-risk' ? 'at-risk' : s === 'delayed' ? 'delayed' : 'needs-revision';
-  return <span className={`status-pill ${cls}`}>{s === 'on-track' ? 'On Track' : s === 'at-risk' ? 'At Risk' : s === 'delayed' ? 'Tertinggal' : s === 'completed' ? 'Tercapai' : s}</span>;
+  const cls = s === 'success' || s === 'on-track' || s === 'completed' ? 'success'
+    : s === 'warning' || s === 'at-risk' || s === 'needs-revision' ? 'warning'
+    : s === 'danger' || s === 'delayed' ? 'danger'
+    : 'info';
+  const label = s === 'success' || s === 'on-track' ? 'Tercapai' : s === 'warning' || s === 'at-risk' ? 'Waspada' : s === 'danger' || s === 'delayed' ? 'Tertinggal' : s === 'completed' ? 'Selesai' : s;
+  return <span className={`status-pill ${cls}`}>{label}</span>;
 }
 
 // FoldCard — kartu lipat (klik header untuk buka/tutup)
@@ -47,10 +56,10 @@ function FoldCard({ title, icon, right, accent, defaultOpen = true, children, id
 }
 
 function StatusPill({ status }: { status?: string }) {
-  const cls = status === 'Baik' || status === 'on-track' || status === 'completed' ? 'completed'
-    : status === 'at-risk' || status === 'Hati-hati' ? 'at-risk'
-    : status === 'delayed' || status === 'Tertinggal' ? 'delayed'
-    : 'completed';
+  const cls = status === 'Baik' || status === 'success' || status === 'on-track' ? 'success'
+    : status === 'Hati-hati' || status === 'warning' || status === 'at-risk' ? 'warning'
+    : status === 'Tertinggal' || status === 'danger' || status === 'delayed' ? 'danger'
+    : 'success';
   return <span className={`status-pill ${cls}`}>{status}</span>;
 }
 
@@ -185,18 +194,47 @@ export function ExecutivePage() {
             {rows.map((k, i) => {
               const actual = k.actual ?? k.realisasi ?? 0;
               const ach = k.achievement ?? (k.target ? (actual / k.target) * 100 : 0);
+              const isComposite = !!k.subBreakdown && k.subBreakdown.length > 0;
               return (
-                <tr key={i}>
+                <Fragment key={i}>
+                <tr>
                   <td style={{ color: 'var(--color-text-muted)' }}>{k.no ?? k.id}</td>
-                  <td><div style={{ fontWeight: 600, fontSize: 'var(--text-xs)' }}>{k.name ?? k.label}</div>{(k.formula ?? k.commentary) && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginTop: 2 }}>{k.formula ?? k.commentary}</div>}</td>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 'var(--text-xs)' }}>
+                      {k.name ?? k.label}
+                      {isComposite && (
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 4, padding: '1px 4px' }} title={`Komposit — ${k.subBreakdown!.length} sub-indikator`}>
+                          Komposit
+                        </span>
+                      )}
+                    </div>
+                    {(k.formula ?? k.commentary) && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginTop: 2 }}>{k.formula ?? k.commentary}</div>}
+                  </td>
                   <td style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{k.satuan ?? k.unit ?? '—'}</td>
-                  <td className="num">{fmt(k.target, 1)}</td>
-                  <td className="num" style={{ fontWeight: 700 }}>{fmt(actual, 2)}</td>
+                  <td className="num">{isComposite ? '—' : fmt(k.target, 1)}</td>
+                  <td className="num" style={{ fontWeight: 700 }}>{isComposite ? '—' : fmt(actual, 2)}</td>
                   <td className="num">{k.bobot}</td>
                   <td className={`num ${ach >= 100 ? 'delta-positive' : ach >= 90 ? '' : 'delta-negative'}`} style={{ fontWeight: 700 }}>{fmtPct(ach)}</td>
                   <td className="num" style={{ fontWeight: 700 }}>{fmt(k.nilai ?? 0, 2)}</td>
                   <td>{opStatusPill(k.status)}</td>
                 </tr>
+                {isComposite && k.subBreakdown!.map((si, j) => (
+                  <tr key={`${i}.${j}`} style={{ background: 'var(--color-surface-2)' }}>
+                    <td />
+                    <td style={{ paddingLeft: 'var(--space-4)' }}>
+                      <span style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>↳ {si.nama}</span>
+                      {si.formula && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginTop: 2, paddingLeft: 12 }}>{si.formula}</div>}
+                    </td>
+                    <td style={{ color: 'var(--color-text-muted)' }}>{si.satuan || '—'}</td>
+                    <td className="num">{fmt(si.target, 1)}</td>
+                    <td className="num">{fmt(si.actual, 2)}</td>
+                    <td className="num">{si.bobot}</td>
+                    <td className={`num ${si.capaian >= 100 ? 'delta-positive' : si.capaian >= 90 ? '' : 'delta-negative'}`}>{fmtPct(si.capaian)}</td>
+                    <td className="num">{fmt(si.nilai, 2)}</td>
+                    <td />
+                  </tr>
+                ))}
+                </Fragment>
               );
             })}
           </tbody>
@@ -325,7 +363,7 @@ export function ExecutivePage() {
       {/* ── OPERATIONAL KPIs (merged) ── */}
       {hasOpData && (
         <FoldCard
-          title="Operational KPIs — Rangkuman Kinerja"
+          title="Rangkuman Kinerja"
           icon={<Target size={14} />}
           accent="var(--color-accent)"
           right={<span className="status-pill" style={{background:'var(--color-accent-tint)',color:'var(--color-accent)',fontWeight:700}}>Total {fmt(totalNilai)} · {totalStatus}</span>}
@@ -372,7 +410,7 @@ export function ExecutivePage() {
                         <td className="num" style={{color:'var(--color-danger)',fontWeight:700}}>{k.maxPenalty}</td>
                         <td className="num" style={{fontWeight:700,color:k.applied < 0 ? 'var(--color-danger)' : 'var(--color-success)'}}>{k.applied < 0 ? k.applied : '—'}</td>
                         <td style={{color:'var(--color-text-muted)'}}>{k.target}</td>
-                        <td><span className={`status-pill ${k.status === 'success' ? 'completed' : 'needs-revision'}`}>{k.status === 'success' ? '✓ Aman' : '⚠ Perhatian'}</span></td>
+                        <td><span className={`status-pill ${k.status === 'success' ? 'success' : 'danger'}`}>{k.status === 'success' ? '✓ Aman' : '⚠ Perhatian'}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -428,7 +466,6 @@ export function ExecutivePage() {
               </div>
               <div className="kpi-md-meta-row">
                 <div><span className="label">Polarity</span> <span>{String(selectedKpi.polarity ?? 'higher-is-better')}</span></div>
-                <div><span className="label">ID</span> <code>{String(selectedKpi.id ?? '')}</code></div>
               </div>
             </div>
           )}
