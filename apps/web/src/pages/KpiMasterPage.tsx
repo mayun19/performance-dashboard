@@ -108,6 +108,14 @@ type Rollup = {
 
 const emptyAssignment = (): Assignment => ({ unitCode: 'UPMK1', bidang: UPMK_BIDANG_OPTIONS[0], holder: '', target: '', target2: '', persenAgregasi: 0, reviewerSlots: null });
 
+// Beda dgn num() longgar di common/capaian.ts (backend, strip huruf shg "Tanggal 5" jadi 5) —
+// di sini SELURUH string harus berupa angka valid, else null. Dipakai gating fitur auto-hitung
+// Bobot Agregasi supaya tak salah aktif utk target non-numerik (tanggal/milestone).
+const strictNum = (s: string): number | null => {
+  const t = s.trim().replace(',', '.');
+  return t !== '' && /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
+};
+
 function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const { user } = useAuth();
   const { periodId } = usePeriod();
@@ -136,6 +144,9 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const [bobotKm, setBobotKm] = useState('');
   const [targetParent, setTargetParent] = useState('');
   const [assignments, setAssignments] = useState<Assignment[]>([emptyAssignment()]);
+  // Auto-hitung Bobot Agregasi dari Target Tahun — default OFF (baik buat baru maupun edit)
+  // supaya tak pernah diam-diam menimpa nilai yang sudah ada/sengaja diisi manual.
+  const [autoCalcPersen, setAutoCalcPersen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -163,7 +174,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setEditingId(null); setEditingIsPending(false); setKmType('draft'); setAggregationMethod('weighted');
     setIndikator(''); setFormula(''); setSatuan(''); setBobotKm('');
     setTargetParent(''); setAssignments([emptyAssignment()]); setFormError(null); setShowForm(false);
-    setIsComposite(false); setSubIndicators([]);
+    setIsComposite(false); setSubIndicators([]); setAutoCalcPersen(false);
   };
 
   const handleEdit = (m: KpiMasterRow) => {
@@ -178,6 +189,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setEditingIsPending(m.isPending);
     setIsComposite(!!(m.subIndicators && m.subIndicators.length > 0));
     setSubIndicators(m.subIndicators ? m.subIndicators.map((s) => ({ ...s })) : []);
+    setAutoCalcPersen(false);
     setShowForm(true); setFormError(null);
   };
 
@@ -208,6 +220,26 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const isSingleAssignment = assignments.length === 1;
   const totalPersenForm = isSingleAssignment ? 100 : assignments.reduce((s, a) => s + (a.persenAgregasi || 0), 0);
   const anyPersenSet = isSingleAssignment || assignments.some((a) => (a.persenAgregasi || 0) > 0);
+
+  // Auto-hitung Bobot Agregasi dari Target Tahun (target2) — hanya berlaku non-komposit (target
+  // di-assignment level dipakai apa adanya, bukan turunan sub) & seluruh baris numerik murni.
+  const target2Nums = assignments.map((a) => strictNum(a.target2));
+  const allTarget2Numeric = !isSingleAssignment && !isComposite && target2Nums.every((n) => n !== null);
+  const target1Nums = assignments.map((a) => strictNum(a.target));
+  const allTarget1Numeric = !isComposite && target1Nums.every((n) => n !== null);
+  const target2Key = assignments.map((a) => a.target2).join('|');
+  useEffect(() => {
+    if (aggregationMethod !== 'weighted' || isSingleAssignment || !autoCalcPersen || !allTarget2Numeric) return;
+    const nums = target2Nums as number[];
+    const total = nums.reduce((s, n) => s + n, 0);
+    if (total <= 0) return;
+    const raw = nums.map((n) => Math.round((n / total) * 10000) / 100); // 2 desimal
+    const sumExceptLast = raw.slice(0, -1).reduce((s, n) => s + n, 0);
+    const computed = [...raw.slice(0, -1), Math.round((100 - sumExceptLast) * 100) / 100];
+    const changed = assignments.some((a, i) => (a.persenAgregasi || 0) !== computed[i]);
+    if (changed) setAssignments((prev) => prev.map((a, i) => ({ ...a, persenAgregasi: computed[i] })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCalcPersen, aggregationMethod, isSingleAssignment, allTarget2Numeric, target2Key]);
 
   const fetchRollup = async (masterId: string) => {
     setRollupLoading(masterId);
@@ -406,6 +438,13 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
               <div>
                 <label className="form-label">Target Gabungan (Parent)</label>
                 <input className="form-input" value={targetParent} onChange={(e) => setTargetParent(e.target.value)} placeholder="Target keseluruhan" />
+                {assignments.length > 1 && (allTarget1Numeric || allTarget2Numeric) && (
+                  <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+                    {allTarget1Numeric && <>Σ Target Sem I: <b>{target1Nums.reduce((s, n) => s + (n ?? 0), 0)}</b></>}
+                    {allTarget1Numeric && allTarget2Numeric && ' · '}
+                    {allTarget2Numeric && <>Σ Target {CURRENT_YEAR}: <b>{target2Nums.reduce((s, n) => s + (n ?? 0), 0)}</b></>}
+                  </p>
+                )}
               </div>
             </div>
             <div>
@@ -487,6 +526,22 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                   <>Metode <b>SUM</b>: nilai parent = jumlah polos realisasi tiap unit/bidang (cocok untuk KPI penalti/pengurang lintas bidang). Tidak perlu Bobot Agregasi.</>
                 )}
               </p>
+              {aggregationMethod === 'weighted' && !isSingleAssignment && !isComposite && (
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-xs)', cursor: allTarget2Numeric ? 'pointer' : 'not-allowed' }}>
+                    <input
+                      type="checkbox" checked={autoCalcPersen} disabled={!allTarget2Numeric}
+                      onChange={(e) => setAutoCalcPersen(e.target.checked)}
+                    />
+                    Hitung otomatis dari Target {CURRENT_YEAR} (%)
+                  </label>
+                  {!allTarget2Numeric && (
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginTop: 2 }}>
+                      Nonaktif — semua baris &quot;Target {CURRENT_YEAR}&quot; harus berupa angka murni.
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="table-wrap">
                 <table className="data-table compact">
                   <thead>
@@ -529,9 +584,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                         {aggregationMethod === 'weighted' && !isSingleAssignment && (
                           <td>
                             <input
-                              type="number" min={0} max={100} step={1}
+                              type="number" min={0} max={100} step={0.01}
                               className="form-input form-input-sm" style={{ textAlign: 'center' }}
-                              value={a.persenAgregasi || ''} onChange={(e) => updatePersen(i, e.target.value)} placeholder="0"
+                              value={a.persenAgregasi || ''} disabled={autoCalcPersen && allTarget2Numeric}
+                              onChange={(e) => updatePersen(i, e.target.value)} placeholder="0"
                             />
                           </td>
                         )}
