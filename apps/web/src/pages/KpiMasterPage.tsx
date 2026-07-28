@@ -228,8 +228,27 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const target1Nums = assignments.map((a) => strictNum(a.target));
   const allTarget1Numeric = !isComposite && target1Nums.every((n) => n !== null);
   const target2Key = assignments.map((a) => a.target2).join('|');
+
+  // Satuan non-aditif — target tiap unit adalah rate/tenggat independen, bukan potongan dari
+  // suatu total, jadi Σ/auto-calc-proporsional (dua-duanya berbasis penjumlahan) tak bermakna.
+  // Kata kunci dicek via .includes() pada satuan.trim().toLowerCase() — case-insensitive,
+  // substring match (jadi "Hari kerja" & "waktu proses" dst ikut tertangkap).
+  const RATE_LIKE_KEYWORDS = ['hari', 'waktu', 'jam', 'minggu', 'bulan'];
+  const DATE_LIKE_KEYWORDS = ['tanggal', 'tgl', 'deadline'];
+  const isPercentSatuan = satuan.trim() === '%';
+  const isRateLikeSatuan = !isPercentSatuan && RATE_LIKE_KEYWORDS.some((k) => satuan.trim().toLowerCase().includes(k));
+  const isDateLikeSatuan = DATE_LIKE_KEYWORDS.some((k) => satuan.trim().toLowerCase().includes(k));
+  // Kategori "rata-rata": % atau durasi/rate non-persen — sama-sama ditampilkan sbg average.
+  const isAverageSatuan = isPercentSatuan || isRateLikeSatuan;
+  const isNonAdditiveSatuan = isAverageSatuan || isDateLikeSatuan;
+
   useEffect(() => {
-    if (aggregationMethod !== 'weighted' || isSingleAssignment || !autoCalcPersen || !allTarget2Numeric) return;
+    if (isNonAdditiveSatuan && autoCalcPersen) setAutoCalcPersen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNonAdditiveSatuan]);
+
+  useEffect(() => {
+    if (aggregationMethod !== 'weighted' || isSingleAssignment || !autoCalcPersen || !allTarget2Numeric || isNonAdditiveSatuan) return;
     const nums = target2Nums as number[];
     const total = nums.reduce((s, n) => s + n, 0);
     if (total <= 0) return;
@@ -239,7 +258,19 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     const changed = assignments.some((a, i) => (a.persenAgregasi || 0) !== computed[i]);
     if (changed) setAssignments((prev) => prev.map((a, i) => ({ ...a, persenAgregasi: computed[i] })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoCalcPersen, aggregationMethod, isSingleAssignment, allTarget2Numeric, target2Key]);
+  }, [autoCalcPersen, aggregationMethod, isSingleAssignment, allTarget2Numeric, isNonAdditiveSatuan, target2Key]);
+
+  const weightedOrPlainAvg = (nums: (number | null)[]) => {
+    const valid = nums.filter((n): n is number => n !== null);
+    if (valid.length === 0) return null;
+    if (anyPersenSet) {
+      const weighted = assignments.reduce((s, a, i) => s + (nums[i] ?? 0) * ((a.persenAgregasi || 0) / 100), 0);
+      return Math.round(weighted * 100) / 100;
+    }
+    return Math.round((valid.reduce((s, n) => s + n, 0) / valid.length) * 100) / 100;
+  };
+  const target1Avg = isAverageSatuan ? weightedOrPlainAvg(target1Nums) : null;
+  const target2Avg = isAverageSatuan ? weightedOrPlainAvg(target2Nums) : null;
 
   const fetchRollup = async (masterId: string) => {
     setRollupLoading(masterId);
@@ -438,11 +469,22 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
               <div>
                 <label className="form-label">Target Gabungan (Parent)</label>
                 <input className="form-input" value={targetParent} onChange={(e) => setTargetParent(e.target.value)} placeholder="Target keseluruhan" />
-                {assignments.length > 1 && (allTarget1Numeric || allTarget2Numeric) && (
+                {assignments.length > 1 && !isDateLikeSatuan && (allTarget1Numeric || allTarget2Numeric) && (
                   <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
-                    {allTarget1Numeric && <>Σ Target Sem I: <b>{target1Nums.reduce((s, n) => s + (n ?? 0), 0)}</b></>}
-                    {allTarget1Numeric && allTarget2Numeric && ' · '}
-                    {allTarget2Numeric && <>Σ Target {CURRENT_YEAR}: <b>{target2Nums.reduce((s, n) => s + (n ?? 0), 0)}</b></>}
+                    {isAverageSatuan ? (
+                      <>
+                        {allTarget1Numeric && <>Rata-rata Target Sem I: <b>{target1Avg} {satuan}</b></>}
+                        {allTarget1Numeric && allTarget2Numeric && ' · '}
+                        {allTarget2Numeric && <>Rata-rata Target {CURRENT_YEAR}: <b>{target2Avg} {satuan}</b></>}
+                        {anyPersenSet && <> (tertimbang Bobot Agregasi)</>}
+                      </>
+                    ) : (
+                      <>
+                        {allTarget1Numeric && <>Σ Target Sem I: <b>{target1Nums.reduce((s, n) => s + (n ?? 0), 0)}</b></>}
+                        {allTarget1Numeric && allTarget2Numeric && ' · '}
+                        {allTarget2Numeric && <>Σ Target {CURRENT_YEAR}: <b>{target2Nums.reduce((s, n) => s + (n ?? 0), 0)}</b></>}
+                      </>
+                    )}
                   </p>
                 )}
               </div>
@@ -526,7 +568,14 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                   <>Metode <b>SUM</b>: nilai parent = jumlah polos realisasi tiap unit/bidang (cocok untuk KPI penalti/pengurang lintas bidang). Tidak perlu Bobot Agregasi.</>
                 )}
               </p>
-              {aggregationMethod === 'weighted' && !isSingleAssignment && !isComposite && (
+              {aggregationMethod === 'weighted' && !isSingleAssignment && !isComposite && isNonAdditiveSatuan && (
+                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '0 0 var(--space-2)' }}>
+                  {isDateLikeSatuan
+                    ? 'Satuan bertipe tanggal/deadline — Bobot Agregasi tidak dihitung otomatis dari nilai target (angka tanggal bukan indikator besar-kecil kontribusi). Isi manual sesuai proporsi kontribusi riil tiap unit.'
+                    : `Satuan ${satuan || '—'} — Bobot Agregasi tidak dihitung otomatis dari nilai target (target rate/durasi tiap unit independen, bukan kontribusi aditif). Isi manual sesuai proporsi kontribusi riil tiap unit.`}
+                </p>
+              )}
+              {aggregationMethod === 'weighted' && !isSingleAssignment && !isComposite && !isNonAdditiveSatuan && (
                 <div style={{ marginBottom: 'var(--space-2)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-xs)', cursor: allTarget2Numeric ? 'pointer' : 'not-allowed' }}>
                     <input
