@@ -136,7 +136,7 @@ const NAV_ITEMS: Array<{
   },
 ];
 
-const RPC_BIDANG = 'Perencanaan & Project Control';
+const RPC_BIDANG = "Perencanaan & Project Control";
 
 const ROLE_LABELS: Record<string, string> = {
   STAFF: "Staff",
@@ -149,22 +149,22 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROUTE_NAMES: Record<string, string> = {
-  '/': 'Executive Summary',
-  '/financial': 'Cost & Capex',
-  '/operational': 'Operational KPIs',
-  '/proses-bisnis': 'Proses Bisnis L2',
-  '/struktur-organisasi': 'Struktur Organisasi',
-  '/gcg-esg': 'GCG & ESG',
-  '/strategic': 'Strategic Targets',
-  '/human-capital': 'Human Capital',
-  '/risk': 'Manajemen Risiko',
-  '/peta': 'Peta Geografis UPMK',
-  '/approvals': 'Persetujuan',
-  '/input-realisasi': 'Input Realisasi',
-  '/input-kontrak': 'Manajemen KPI',
-  '/kpi-master': 'Manajemen KPI',
-  '/settings': 'Settings',
-  '/admin': 'Admin Tools',
+  "/": "Executive Summary",
+  "/financial": "Cost & Capex",
+  "/operational": "Operational KPIs",
+  "/proses-bisnis": "Proses Bisnis L2",
+  "/struktur-organisasi": "Struktur Organisasi",
+  "/gcg-esg": "GCG & ESG",
+  "/strategic": "Strategic Targets",
+  "/human-capital": "Human Capital",
+  "/risk": "Manajemen Risiko",
+  "/peta": "Peta Geografis UPMK",
+  "/approvals": "Persetujuan",
+  "/input-realisasi": "Input Realisasi",
+  "/input-kontrak": "Manajemen KPI",
+  "/kpi-master": "Manajemen KPI",
+  "/settings": "Settings",
+  "/admin": "Admin Tools",
 };
 
 export function AppShell() {
@@ -191,14 +191,46 @@ export function AppShell() {
   const exportRef = useRef<HTMLDivElement>(null);
   const roleRef = useRef<HTMLDivElement>(null);
 
-  const isReviewerRoleForBreadcrumb = user?.role === 'ASMAN' || user?.role === 'MANAJER' || user?.role === 'SRMANAJER' || user?.role === 'GM';
-  const currentPageName = location.pathname === '/input-realisasi' && isReviewerRoleForBreadcrumb
-    ? 'Persetujuan Realisasi'
-    : ROUTE_NAMES[location.pathname] ?? 'Dashboard';
-  const effectiveRole = viewAs ?? user?.role ?? 'STAFF';
-  const avatarInitials = user?.name?.split(' ').map((w) => w[0]).slice(0, 2).join('') ?? '?';
+  // Accordion state for collapsible nav sections.
+  // Lazy-init: any section containing the current active route starts open,
+  // so a hard refresh on a deep route doesn't hide the active item.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(
+    () => {
+      const initial: Record<string, boolean> = {};
+      NAV_ITEMS.forEach((section) => {
+        const isActive = section.items.some(
+          ({ to, end }) =>
+            location.pathname === to ||
+            (!end && to !== "/" && location.pathname.startsWith(to)),
+        );
+        if (isActive) initial[section.section] = true;
+      });
+      return initial;
+    },
+  );
+
+  const toggleSection = (key: string) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const lightTheme = theme === "light";
+
+  const isReviewerRoleForBreadcrumb =
+    user?.role === "ASMAN" ||
+    user?.role === "MANAJER" ||
+    user?.role === "SRMANAJER" ||
+    user?.role === "GM";
+  const currentPageName =
+    location.pathname === "/input-realisasi" && isReviewerRoleForBreadcrumb
+      ? "Persetujuan Realisasi"
+      : (ROUTE_NAMES[location.pathname] ?? "Dashboard");
+  const effectiveRole = viewAs ?? user?.role ?? "STAFF";
+  const avatarInitials =
+    user?.name
+      ?.split(" ")
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join("") ?? "?";
 
   const handleLogout = async () => {
     await logout();
@@ -251,12 +283,20 @@ export function AppShell() {
             // hideForUpmk: sembunyikan dari user unit UPMK (non-KP)
             const isUpmkUser = user?.unit && user.unit !== "KP";
             // devOnly: hanya tampil untuk SUPERADMIN dan DEVELOPER
-            const isPrivileged = user?.role === 'SUPERADMIN' || user?.role === 'DEVELOPER';
+            const isPrivileged =
+              user?.role === "SUPERADMIN" || user?.role === "DEVELOPER";
             // Checker/Approver hanya memeriksa & menyetujui realisasi — bukan mengisi.
-            const isReviewerRole = user?.role === 'ASMAN' || user?.role === 'MANAJER' || user?.role === 'SRMANAJER' || user?.role === 'GM';
+            const isReviewerRole =
+              user?.role === "ASMAN" ||
+              user?.role === "MANAJER" ||
+              user?.role === "SRMANAJER" ||
+              user?.role === "GM";
             // rpcOnly: Manajemen KPI hanya untuk PIC Kinerja (Staff RPC) — role lain (termasuk GM)
             // tidak melihat menu ini sama sekali. Akun privileged tetap dapat melihat utk dev/testing.
-            const isRpcStaff = user?.role === 'STAFF' && user?.unit === 'KP' && user?.bidang === RPC_BIDANG;
+            const isRpcStaff =
+              user?.role === "STAFF" &&
+              user?.unit === "KP" &&
+              user?.bidang === RPC_BIDANG;
             const visibleItems = section.items.filter((it) => {
               if (isUpmkUser && it.hideForUpmk) return false;
               if (it.devOnly && !isPrivileged) return false;
@@ -270,26 +310,70 @@ export function AppShell() {
             ).icon;
             const hasMultipleSubmenus = section.items.length > 1;
             const showSectionIcon = hasMultipleSubmenus && SectionIcon;
-            
+
+            // Cek apakah salah satu submenu di section ini sedang aktif
+            const isSectionActive = visibleItems.some(({ to, end }) => {
+              return (
+                location.pathname === to ||
+                (!end && to !== "/" && location.pathname.startsWith(to))
+              );
+            });
+
+            const sectionId = `nav-section-${section.section
+              .toLowerCase()
+              .replace(/\s+/g, "-")}`;
+            // Sections with only one submenu are always "open" (nothing to toggle)
+            const isOpen = hasMultipleSubmenus
+              ? !!openSections[section.section]
+              : true;
+
             return (
               <div key={section.section}>
-                <div className="nav-section-label">{section.section}</div>
-                {visibleItems.map(({ to, label, icon: Icon, end }) => {
-                  const displayLabel = to === '/input-realisasi' && isReviewerRole ? 'Tinjauan Realisasi Bulanan' : label;
-                  return (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      end={end}
-                      className="nav-item"
-                      aria-current={location.pathname === to || (!end && location.pathname.startsWith(to) && to !== '/') ? 'page' : undefined}
-                      title={collapsed ? displayLabel : undefined}
-                    >
-                      <Icon size={18} className="nav-icon" />
-                      <span className="nav-label">{displayLabel}</span>
-                    </NavLink>
-                  );
-                })}
+                <button
+                  type="button"
+                  className="nav-section"
+                  aria-current={isSectionActive ? "page" : undefined}
+                  aria-expanded={hasMultipleSubmenus ? isOpen : undefined}
+                  aria-controls={hasMultipleSubmenus ? sectionId : undefined}
+                  disabled={!hasMultipleSubmenus}
+                  onClick={() =>
+                    hasMultipleSubmenus && toggleSection(section.section)
+                  }>
+                  {showSectionIcon && <SectionIcon size={14} />}
+                  <span className="nav-section-label">{section.section}</span>
+                </button>
+
+                <div
+                  id={sectionId}
+                  className="nav-section-collapse"
+                  data-open={isOpen}>
+                  <div className="nav-section-items">
+                    {visibleItems.map(({ to, label, icon: Icon, end }) => {
+                       const displayLabel =
+                         to === "/input-realisasi" && isReviewerRole
+                           ? "Tinjauan Realisasi Bulanan"
+                           : label;
+                      return (
+                        <NavLink
+                          key={to}
+                          to={to}
+                          end={end}
+                          className="nav-item"
+                          aria-current={
+                            location.pathname === to ||
+                            (!end &&
+                              location.pathname.startsWith(to) &&
+                              to !== "/")
+                              ? "page"
+                              : undefined
+                          }
+                          title={collapsed ? displayLabel : undefined}>
+                          <span className="nav-label">{displayLabel}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             );
           })}
