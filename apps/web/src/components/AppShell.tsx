@@ -263,8 +263,8 @@ export function AppShell() {
               src={`/brand/${lightTheme ? "logo-new-pln-simpp-white-ic" : "logo-new-pln-simpp-dark-ic"}.svg`}
               alt="PLN"
               style={{
-                width: 196,
-                height: 44,
+                width: 200,
+                height: 56,
               }}
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
