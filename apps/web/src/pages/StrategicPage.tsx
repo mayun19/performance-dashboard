@@ -119,13 +119,13 @@ export function StrategicPage() {
                         <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.4 }}>
                           {obj.name}
                         </div>
-                        <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>{perspective}</div>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{perspective}</div>
                       </div>
                       <div style={{ width: 80, flexShrink: 0 }}>
                         <div style={{ height: 6, background: 'var(--color-surface-2)', borderRadius: 3, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${Math.min(100, progress)}%`, background: statusColor, borderRadius: 3 }} />
                         </div>
-                        <div style={{ fontSize: 10, textAlign: 'right', color: 'var(--color-text-muted)', marginTop: 2 }}>{progress}%</div>
+                        <div style={{ fontSize: 12, textAlign: 'right', color: 'var(--color-text-muted)', marginTop: 2 }}>{progress}%</div>
                       </div>
                     </div>
                   );
@@ -169,11 +169,11 @@ export function StrategicPage() {
                             <div style={{ flex: 1, height: 6, background: 'var(--color-surface-hover)', borderRadius: 3, overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${Math.min(100, progress)}%`, background: statusColor, borderRadius: 3 }} />
                             </div>
-                            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', minWidth: 28, textAlign: 'right' }}>{progress}%</span>
+                            <span style={{ fontSize: 12, color: 'var(--color-text-muted)', minWidth: 28, textAlign: 'right' }}>{progress}%</span>
                           </div>
                         </td>
                         <td>
-                          <span className={`status-pill ${status}`} style={{ fontSize: 10, padding: '2px 8px' }}>
+                          <span className={`status-pill ${status}`} style={{ fontSize: 12, padding: '2px 8px' }}>
                             {STATUS_LABEL[status] ?? status}
                           </span>
                         </td>
@@ -210,7 +210,7 @@ export function StrategicPage() {
                       <tr key={ii}>
                         <td>{item.name}</td>
                         <td>
-                          <span className={`status-pill ${item.status}`} style={{ fontSize: 10 }}>{STATUS_LABEL[item.status] ?? item.status}</span>
+                          <span className={`status-pill ${item.status}`} style={{ fontSize: 12 }}>{STATUS_LABEL[item.status] ?? item.status}</span>
                         </td>
                       </tr>
                     ))}

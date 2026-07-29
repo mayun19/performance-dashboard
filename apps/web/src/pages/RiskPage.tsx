@@ -143,20 +143,20 @@ export function RiskPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, lineHeight: 1.4 }}>{r.desc}</div>
-                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
                         {r.category ?? r.cat} · {r.unit} · {r.owner}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: sc }}>{score}</div>
-                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>L{r.likelihood}×I{r.impact}</div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>L{r.likelihood}×I{r.impact}</div>
                     </div>
                   </div>
                   <div style={{ marginTop: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                     <div style={{ flex: 1, height: 4, background: 'var(--color-surface-2)', borderRadius: 2, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${r.mitigationPct ?? 0}%`, background: 'var(--color-success)', borderRadius: 2 }} />
                     </div>
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{r.mitigationPct ?? 0}%</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)', flexShrink: 0 }}>{r.mitigationPct ?? 0}%</span>
                   </div>
                 </div>
               );
@@ -173,16 +173,16 @@ export function RiskPage() {
             <table style={{ borderCollapse: 'collapse', width: '100%', maxWidth: 340 }}>
               <thead>
                 <tr>
-                  <th style={{ width: 32, fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 600, textAlign: 'center', padding: 4 }}>L↓ I→</th>
+                  <th style={{ width: 32, fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600, textAlign: 'center', padding: 4 }}>L↓ I→</th>
                   {[1, 2, 3, 4, 5].map(i => (
-                    <th key={i} style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 600, textAlign: 'center', padding: 4 }}>{i}</th>
+                    <th key={i} style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600, textAlign: 'center', padding: 4 }}>{i}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {[5, 4, 3, 2, 1].map(l => (
                   <tr key={l}>
-                    <td style={{ fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'center', fontWeight: 600, padding: 4 }}>{l}</td>
+                    <td style={{ fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center', fontWeight: 600, padding: 4 }}>{l}</td>
                     {[1, 2, 3, 4, 5].map(i => {
                       const score = l * i;
                       const { bg, border } = heatColor(l, i);
@@ -198,8 +198,8 @@ export function RiskPage() {
                             borderRadius: 4,
                           }}
                         >
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>{score}</div>
-                          {count > 0 && <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{count}R</div>}
+                          <div style={{ fontSize: 15, fontWeight: 700 }}>{score}</div>
+                          {count > 0 && <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{count}R</div>}
                         </td>
                       );
                     })}
@@ -258,7 +258,7 @@ export function RiskPage() {
             {heatFilter && (
               <button
                 onClick={() => setHeatFilter(null)}
-                style={{ marginLeft: 8, fontSize: 10, background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+                style={{ marginLeft: 8, fontSize: 12, background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', color: 'var(--color-text-muted)' }}
               >
                 ✕ Reset
               </button>
@@ -295,7 +295,7 @@ export function RiskPage() {
                       <span style={{ fontWeight: 800, color: sc }}>{score}</span>
                     </td>
                     <td>
-                      <span className={`status-pill ${r.status === 'open' ? 'at-risk' : r.status === 'mitigated' ? 'completed' : 'in-review'}`} style={{ fontSize: 10, padding: '2px 8px' }}>
+                      <span className={`status-pill ${r.status === 'open' ? 'at-risk' : r.status === 'mitigated' ? 'completed' : 'in-review'}`} style={{ fontSize: 12, padding: '2px 8px' }}>
                         {r.status}
                       </span>
                     </td>
@@ -305,7 +305,7 @@ export function RiskPage() {
                         <div style={{ flex: 1, height: 4, background: 'var(--color-surface-2)', borderRadius: 2, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${r.mitigationPct ?? 0}%`, background: 'var(--color-success)', borderRadius: 2 }} />
                         </div>
-                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{r.mitigationPct ?? 0}%</span>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)', flexShrink: 0 }}>{r.mitigationPct ?? 0}%</span>
                       </div>
                     </td>
                   </tr>

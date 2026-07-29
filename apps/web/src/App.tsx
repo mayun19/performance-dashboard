@@ -13,8 +13,6 @@ import { OrganisasiPage } from './pages/OrganisasiPage';
 import { GcgEsgPage } from './pages/GcgEsgPage';
 import { PetaPage } from './pages/PetaPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
-import { WorkflowKmUsulanPage } from './pages/WorkflowKmUsulanPage';
-import { WorkflowKmRealisasiPage } from './pages/WorkflowKmRealisasiPage';
 import { InputRealisasiPage } from './pages/InputRealisasiPage';
 import { KpiMasterPage } from './pages/KpiMasterPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -42,8 +40,6 @@ export default function App() {
         <Route path="gcg-esg" element={<GcgEsgPage />} />
         <Route path="peta" element={<PetaPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
-        <Route path="workflow-km/usulan" element={<WorkflowKmUsulanPage />} />
-        <Route path="workflow-km/realisasi" element={<WorkflowKmRealisasiPage />} />
         <Route path="input-realisasi" element={<InputRealisasiPage />} />
         {/* Input Kontrak Manajemen kini digabung ke "Manajemen KPI" (tab Dokumen KM) */}
         <Route path="input-kontrak" element={<Navigate to="/kpi-master" replace />} />

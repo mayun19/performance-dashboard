@@ -16,7 +16,6 @@ export interface AssignmentInput {
   unitCode: string;
   bidang: string;
   holder?: string;
-  bobotKm?: string;
   target?: string;
   target2?: string;
   persenAgregasi?: number; // bobot rollup ke parent (0-100), diinput RPC Perencanaan
@@ -32,6 +31,7 @@ export interface SubIndicatorInput {
   bobot: string; // poin KM (Σ seluruh sub = bobotKm assignment, turunan otomatis)
   target: string;
   target2?: string;
+  formula?: string; // teks deskriptif cara pengukuran sub ini — tak memengaruhi nilai (sama sifatnya dgn KpiMaster.formula)
 }
 export interface SaveMasterInput {
   id?: string;
@@ -39,6 +39,7 @@ export interface SaveMasterInput {
   indikator: string;
   formula?: string;
   satuan?: string;
+  bobotKm?: string; // bobot skor KM (poin) — data parent, sama untuk semua assignment
   targetParent?: string;
   assignments: AssignmentInput[];
   defaultCheckerIds?: string[]; // default alur reviewer (Fase C) — diwariskan ke picker submit
@@ -147,7 +148,12 @@ export class KpiMasterService {
 
   // Validasi & normalisasi sub-indikator (opt-in, generik — lihat SubIndicatorInput). Array
   // kosong/tak ada → null (KPI ini bukan komposit). Melempar bila ada baris tak valid.
-  private sanitizeSubIndicators(input: unknown): SubIndicatorInput[] | null {
+  // aggregationMethod menentukan tanda bobot yang sah: 'sum' (KPI penalti/pengurang, mis.
+  // "Kepatuhan, Maturity Level & Tata Kelola") → bobot = max penalti, harus NEGATIF (mis. -3);
+  // 'weighted' (KPI positif biasa) → bobot = poin, harus POSITIF. Rumus nilai (breakdownComposite
+  // di common/capaian.ts) tak berubah — tetap (capaian% × bobot), jadi bobot negatif otomatis
+  // menghasilkan nilai negatif proporsional ke capaian.
+  private sanitizeSubIndicators(input: unknown, aggregationMethod: 'weighted' | 'sum'): SubIndicatorInput[] | null {
     if (!Array.isArray(input) || input.length === 0) return null;
     const seen = new Set<string>();
     const out: SubIndicatorInput[] = [];
@@ -159,10 +165,18 @@ export class KpiMasterService {
       seen.add(nama);
       const bobotStr = String(r?.bobot ?? '').trim();
       const bobotNum = Number(bobotStr.replace(',', '.'));
-      if (!Number.isFinite(bobotNum) || bobotNum <= 0) throw new BadRequestException(`Bobot sub-indikator "${nama}" harus angka > 0`);
+      if (aggregationMethod === 'sum') {
+        if (!Number.isFinite(bobotNum) || bobotNum >= 0) throw new BadRequestException(`Max penalti sub-indikator "${nama}" harus angka negatif (mis. -3)`);
+      } else if (!Number.isFinite(bobotNum) || bobotNum <= 0) {
+        throw new BadRequestException(`Bobot sub-indikator "${nama}" harus angka > 0`);
+      }
       const target = String(r?.target ?? '').trim();
       if (!target) throw new BadRequestException(`Target sub-indikator "${nama}" wajib diisi`);
-      out.push({ nama, satuan: String(r?.satuan ?? ''), bobot: bobotStr, target, target2: String(r?.target2 ?? '') || undefined });
+      out.push({
+        nama, satuan: String(r?.satuan ?? ''), bobot: bobotStr, target,
+        target2: String(r?.target2 ?? '') || undefined,
+        formula: String(r?.formula ?? '') || undefined,
+      });
     }
     return out;
   }
@@ -460,7 +474,14 @@ export class KpiMasterService {
 
   // Buat/ubah definisi KPI parent + assignment-nya, lalu sebar (fan-out) ke dokumen KM.
   async save(user: User, dto: SaveMasterInput) {
-    if (user.unit !== 'KP') throw new ForbiddenException('KPI Master hanya dapat disusun oleh Kantor Induk');
+    // KPI Master mendefinisikan KPI lintas-bidang/unit — dipersempit ke RPC (Perencanaan &
+    // Project Control, semua jenjang: Staff/Manajer/SM), sesuai peran RPC sbg pemilik cascading
+    // KPI (selaras isPicRen() di period-target.service.ts). GM & Admin tetap boleh override.
+    const isAdminOverride = user.role === Role.GM || user.role === Role.SUPERADMIN || user.role === Role.DEVELOPER;
+    const isRpc = user.unit === 'KP' && user.bidang === RPC_BIDANG;
+    if (!isAdminOverride && !isRpc) {
+      throw new ForbiddenException('KPI Master hanya dapat disusun oleh Perencanaan & Project Control (RPC), GM, atau Admin');
+    }
     if (!dto.indikator?.trim()) throw new BadRequestException('Nama indikator wajib diisi');
     if (!Array.isArray(dto.assignments) || dto.assignments.length === 0) {
       throw new BadRequestException('Pilih minimal satu unit/bidang untuk di-assign');
@@ -475,15 +496,30 @@ export class KpiMasterService {
       if (keys.has(k)) throw new BadRequestException(`Assignment ganda untuk ${a.unitCode} — ${a.bidang}`);
       keys.add(k);
     }
+    // Target wajib diisi — KPI tanpa target diam-diam dilewati dari penilaian (scoreItems di
+    // common/capaian.ts, target<=0 → item dilewati) tanpa peringatan. Komposit taruh target di
+    // level sub-indikator (divalidasi di sanitizeSubIndicators), bukan di assignment.
+    const isCompositeDto = Array.isArray(dto.subIndicators) && dto.subIndicators.length > 0;
+    if (!isCompositeDto) {
+      for (const a of dto.assignments) {
+        if (!a.target?.trim()) throw new BadRequestException(`Target Sem I wajib diisi untuk ${a.unitCode} — ${a.bidang}`);
+      }
+    }
     // Metode agregasi (Fase E) — dipilih per-KPI. 'sum' = jumlah polos tiap kontribusi
     // (KPI penalti/pengurang, tanpa syarat Σ=100%). 'weighted' = rata-rata tertimbang
     // pakai persenAgregasi (Σ=100% wajib bila diisi) — perilaku Fase B, default.
     const aggregationMethod = dto.aggregationMethod === 'sum' ? 'sum' : 'weighted';
     if (aggregationMethod === 'weighted') {
-      const totalPersen = dto.assignments.reduce((s, a) => s + (Number(a.persenAgregasi) || 0), 0);
-      const anyPersenSet = dto.assignments.some((a) => Number(a.persenAgregasi) > 0);
-      if (anyPersenSet && Math.abs(totalPersen - 100) > 0.01) {
-        throw new BadRequestException(`Total bobot agregasi harus 100%, saat ini ${totalPersen}%`);
+      // 1 assignment saja → tak ada yang perlu dibagi, paksa 100% (tak bergantung pada apa
+      // yang dikirim klien — konsisten dengan default FE, sekaligus jaga-jaga klien lama/API langsung).
+      if (dto.assignments.length === 1) {
+        dto.assignments[0].persenAgregasi = 100;
+      } else {
+        const totalPersen = dto.assignments.reduce((s, a) => s + (Number(a.persenAgregasi) || 0), 0);
+        const anyPersenSet = dto.assignments.some((a) => Number(a.persenAgregasi) > 0);
+        if (anyPersenSet && Math.abs(totalPersen - 100) > 0.01) {
+          throw new BadRequestException(`Total bobot agregasi harus 100%, saat ini ${totalPersen}%`);
+        }
       }
     }
 
@@ -523,13 +559,13 @@ export class KpiMasterService {
       if (slots.approver) await check(slots.approver, APPROVER_ROLES, 'Approver');
     }
 
-    // Sub-indikator (opt-in, generik): non-kosong → KPI ini "komposit". bobotKm tiap
-    // assignment jadi TURUNAN (Σ bobot sub) — override input user, konsisten di semua bidang
-    // yang di-assign (sub-indikator sama untuk semua, didefinisikan sekali di KPI Master).
-    const subIndicators = this.sanitizeSubIndicators(dto.subIndicators);
+    // Sub-indikator (opt-in, generik): non-kosong → KPI ini "komposit". bobotKm (kini data
+    // parent di KpiMaster, sama untuk semua assignment) jadi TURUNAN (Σ bobot sub) — override
+    // input user.
+    const subIndicators = this.sanitizeSubIndicators(dto.subIndicators, aggregationMethod);
     if (subIndicators) {
       const compositeBobot = subIndicators.reduce((s, si) => s + (Number(String(si.bobot).replace(',', '.')) || 0), 0);
-      for (const a of dto.assignments) a.bobotKm = String(compositeBobot);
+      dto.bobotKm = String(compositeBobot);
     }
     const subIndicatorsJson = subIndicators ? (subIndicators as unknown as Prisma.InputJsonValue) : Prisma.JsonNull;
 
@@ -563,7 +599,7 @@ export class KpiMasterService {
           where: { id: dto.id },
           data: {
             indikator: dto.indikator.trim(), formula: dto.formula ?? '', satuan: dto.satuan ?? '',
-            targetParent: dto.targetParent ?? '', kmType, defaultCheckerIds, defaultApproverId, aggregationMethod,
+            bobotKm: dto.bobotKm ?? '', targetParent: dto.targetParent ?? '', kmType, defaultCheckerIds, defaultApproverId, aggregationMethod,
             subIndicators: subIndicatorsJson,
           },
         });
@@ -576,7 +612,7 @@ export class KpiMasterService {
         master = await this.prisma.kpiMaster.create({
           data: {
             year: nextPeriod.yearMonth.slice(0, 4), kmType, indikator: dto.indikator.trim(), formula: dto.formula ?? '',
-            satuan: dto.satuan ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
+            satuan: dto.satuan ?? '', bobotKm: dto.bobotKm ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
             defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson,
             effectiveMonth: nextMonth, version: existing.version + 1, previousVersionId: existing.id,
           },
@@ -588,7 +624,7 @@ export class KpiMasterService {
       master = await this.prisma.kpiMaster.create({
         data: {
           year: activePeriod.yearMonth.slice(0, 4), kmType, indikator: dto.indikator.trim(), formula: dto.formula ?? '',
-          satuan: dto.satuan ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
+          satuan: dto.satuan ?? '', bobotKm: dto.bobotKm ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
           defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson,
           effectiveMonth: activePeriod.yearMonth, version: 1,
         },
@@ -601,7 +637,7 @@ export class KpiMasterService {
         const slots = this.sanitizeReviewerSlots(a.reviewerSlots);
         return {
           kpiMasterId: master.id, unitCode: a.unitCode, bidang: a.bidang,
-          holder: a.holder ?? '', bobotKm: a.bobotKm ?? '', target: a.target ?? '', target2: a.target2 ?? '',
+          holder: a.holder ?? '', target: a.target ?? '', target2: a.target2 ?? '',
           persenAgregasi: Number(a.persenAgregasi) || 0,
           reviewerSlots: slots === null ? Prisma.DbNull : (slots as unknown as Prisma.InputJsonValue),
         };
@@ -660,8 +696,8 @@ export class KpiMasterService {
 
   // ===== Fan-out: sinkronkan item KPI ke dokumen KM DRAFT per-(unit,bidang) =====
   private async fanOut(
-    master: { id: string; kmType: string; indikator: string; formula: string; satuan: string; createdBy: string; createdById: string | null; subIndicators?: Prisma.JsonValue | null },
-    assignments: Array<{ unitCode: string; bidang: string; holder: string; bobotKm: string; target: string; target2: string }>,
+    master: { id: string; kmType: string; indikator: string; formula: string; satuan: string; bobotKm: string; createdBy: string; createdById: string | null; subIndicators?: Prisma.JsonValue | null },
+    assignments: Array<{ unitCode: string; bidang: string; holder: string; target: string; target2: string }>,
     periodId: string,
   ): Promise<{ docsAffected: number }> {
     // Sub-indikator (opt-in): template sama disebar ke SEMUA assignment (definisi target,
@@ -692,7 +728,7 @@ export class KpiMasterService {
       const item: FannedItem = {
         masterKpiId: master.id,
         indikator: master.indikator, formula: master.formula, satuan: master.satuan,
-        bobot: a.bobotKm, target: a.target, target2: a.target2,
+        bobot: master.bobotKm, target: a.target, target2: a.target2,
         ...(subIndicatorsTemplate ? { subIndicators: subIndicatorsTemplate } : {}),
       };
       const existingKm = await this.prisma.kontrakManajemen.findFirst({
@@ -808,8 +844,9 @@ export class KpiMasterService {
       const first = entries[0].item; // kemunculan pertama -> definisi master
       const formula = typeof first['formula'] === 'string' ? first['formula'] : '';
       const satuan = typeof first['satuan'] === 'string' ? first['satuan'] : '';
+      const bobotKm = typeof first['bobot'] === 'string' ? first['bobot'] : ''; // kini data parent
 
-      // Satu assignment per (unitCode,bidang) — bobot/target ambil kemunculan pertama pasangan tsb.
+      // Satu assignment per (unitCode,bidang) — target ambil kemunculan pertama pasangan tsb.
       const byPair = new Map<string, BackfillGroupItem>();
       for (const e of entries) {
         const pairKey = `${e.unitCode}||${e.bidang}`;
@@ -818,7 +855,7 @@ export class KpiMasterService {
 
       const master = await this.prisma.kpiMaster.create({
         data: {
-          year: activePeriod.yearMonth.slice(0, 4), kmType, indikator, formula, satuan,
+          year: activePeriod.yearMonth.slice(0, 4), kmType, indikator, formula, satuan, bobotKm,
           targetParent: '', createdBy: user.name, createdById: user.id,
           effectiveMonth: activePeriod.yearMonth, version: 1, status: 'active',
         },
@@ -828,7 +865,6 @@ export class KpiMasterService {
       await this.prisma.kpiAssignment.createMany({
         data: Array.from(byPair.values()).map((e) => ({
           kpiMasterId: master.id, unitCode: e.unitCode, bidang: e.bidang,
-          bobotKm: typeof e.item['bobot'] === 'string' ? e.item['bobot'] : '',
           target: typeof e.item['target'] === 'string' ? e.item['target'] : '',
           target2: typeof e.item['target2'] === 'string' ? e.item['target2'] : '',
         })),

@@ -16,7 +16,7 @@ const ROLE_LABEL: Record<string, string> = {
   ASMAN: 'ASMAN', MANAJER: 'Manajer', SRMANAJER: 'Senior Manajer', GM: 'General Manager',
 };
 const desc = (c: ReviewerCandidate) =>
-  `${ROLE_LABEL[c.role] ?? c.role}${c.unit && c.unit !== 'KP' ? ' · ' + (UNIT_LABEL[c.unit] ?? c.unit) : ''}`;
+  `${ROLE_LABEL[c.role] ?? c.role}${c.unit && c.unit !== 'KP' ? ' · ' + (UNIT_LABEL[c.unit] ?? c.unit) : ''}${c.bidang ? ' · ' + c.bidang : ''}`;
 
 type Props = {
   open: boolean;
@@ -112,31 +112,31 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
         </div>
 
         <div style={{ padding: 'var(--space-4)' }}>
-          <p style={{ margin: '0 0 var(--space-3)', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          <p style={{ margin: '0 0 var(--space-3)', fontSize: 14, color: 'var(--color-text-muted)' }}>
             Tentukan <b>Checker</b> (berurutan; ASMAN/Manajer) lalu satu atau lebih <b>Approver</b> (Senior
             Manajer/GM). Dokumen mengalir: Anda → Checker 1 → Checker 2 → … → Approver 1 → … → Approver
             terakhir — <b>semua Approver terpilih harus menyetujui</b> sebelum dokumen selesai.
           </p>
           {prefilled && (order.length > 0 || approverOrder.length > 0) && (
-            <div style={{ margin: '0 0 var(--space-3)', padding: '6px 10px', background: 'var(--color-accent-tint)', borderRadius: 6, fontSize: 11, color: 'var(--color-accent)' }}>
+            <div style={{ margin: '0 0 var(--space-3)', padding: '6px 10px', background: 'var(--color-accent-tint)', borderRadius: 6, fontSize: 13, color: 'var(--color-accent)' }}>
               Terisi otomatis dari default KPI Master — Anda tetap bisa mengubahnya.
             </div>
           )}
           {srManajerAvailable && (
-            <div style={{ margin: '0 0 var(--space-3)', padding: '6px 10px', background: 'var(--color-surface-2)', borderRadius: 6, fontSize: 11, color: 'var(--color-text-muted)' }}>
+            <div style={{ margin: '0 0 var(--space-3)', padding: '6px 10px', background: 'var(--color-surface-2)', borderRadius: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
               General Manager disembunyikan dari kandidat Approver — bidang ini punya Senior Manajer.
             </div>
           )}
 
           {loading && <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--color-text-muted)' }}>Memuat kandidat…</div>}
-          {loadErr && <div style={{ padding: 'var(--space-3)', color: 'var(--color-danger)', fontSize: 13 }}>{loadErr}</div>}
+          {loadErr && <div style={{ padding: 'var(--space-3)', color: 'var(--color-danger)', fontSize: 15 }}>{loadErr}</div>}
 
           {!loading && !loadErr && (
             <>
               {/* Urutan checker terpilih */}
               {order.length > 0 && (
                 <div style={{ marginBottom: 'var(--space-3)' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <UserCheck size={14} /> Urutan Checker ({order.length})
                   </div>
                   {order.map((id, i) => {
@@ -145,7 +145,7 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
                     return (
                       <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-surface-2)', borderRadius: 6, marginBottom: 4 }}>
                         <span style={{ fontWeight: 700, minWidth: 18 }}>{i + 1}.</span>
-                        <span style={{ flex: 1, fontSize: 13 }}>{c.name} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>· {desc(c)}</span></span>
+                        <span style={{ flex: 1, fontSize: 15 }}>{c.name} <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>· {desc(c)}</span></span>
                         <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => move(id, -1)} aria-label="Naik"><ArrowUp size={13} /></button>
                         <button className="btn btn-ghost btn-sm" disabled={i === order.length - 1} onClick={() => move(id, 1)} aria-label="Turun"><ArrowDown size={13} /></button>
                         <button className="btn btn-ghost btn-sm" onClick={() => toggleChecker(id)} aria-label="Hapus"><X size={13} /></button>
@@ -157,7 +157,7 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
 
               {/* Daftar kandidat checker */}
               <div style={{ marginBottom: 'var(--space-4)' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 'var(--space-2)' }}>Kandidat Checker</div>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 'var(--space-2)' }}>Kandidat Checker</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
                   {checkers.map((c) => {
                     const picked = order.includes(c.id);
@@ -168,18 +168,18 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
                         style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: `1px solid ${picked ? 'var(--color-accent)' : 'var(--color-border)'}`, background: picked ? 'var(--color-accent-tint)' : 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                       >
                         <span style={{ width: 16 }}>{picked && <Check size={14} />}</span>
-                        <span style={{ fontSize: 13 }}>{c.name}<br /><span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>{desc(c)}</span></span>
+                        <span style={{ fontSize: 15 }}>{c.name}<br /><span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>{desc(c)}</span></span>
                       </button>
                     );
                   })}
-                  {checkers.length === 0 && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Tidak ada kandidat checker.</span>}
+                  {checkers.length === 0 && <span style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>Tidak ada kandidat checker.</span>}
                 </div>
               </div>
 
               {/* Urutan approver terpilih */}
               {approverOrder.length > 0 && (
                 <div style={{ marginBottom: 'var(--space-3)' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <ShieldCheck size={14} /> Urutan Approver ({approverOrder.length})
                   </div>
                   {approverOrder.map((id, i) => {
@@ -188,7 +188,7 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
                     return (
                       <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-surface-2)', borderRadius: 6, marginBottom: 4 }}>
                         <span style={{ fontWeight: 700, minWidth: 18 }}>{i + 1}.</span>
-                        <span style={{ flex: 1, fontSize: 13 }}>{a.name} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>· {desc(a)}</span></span>
+                        <span style={{ flex: 1, fontSize: 15 }}>{a.name} <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>· {desc(a)}</span></span>
                         <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveApprover(id, -1)} aria-label="Naik"><ArrowUp size={13} /></button>
                         <button className="btn btn-ghost btn-sm" disabled={i === approverOrder.length - 1} onClick={() => moveApprover(id, 1)} aria-label="Turun"><ArrowDown size={13} /></button>
                         <button className="btn btn-ghost btn-sm" onClick={() => toggleApprover(id)} aria-label="Hapus"><X size={13} /></button>
@@ -200,7 +200,7 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
 
               {/* Daftar kandidat approver */}
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 'var(--space-2)' }}>Kandidat Approver</div>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 'var(--space-2)' }}>Kandidat Approver</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
                   {visibleApprovers.map((a) => {
                     const picked = approverOrder.includes(a.id);
@@ -211,11 +211,11 @@ export default function ReviewerPickerModal({ open, title, busy, fetchCandidates
                         style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: `1px solid ${picked ? 'var(--color-accent)' : 'var(--color-border)'}`, background: picked ? 'var(--color-accent-tint)' : 'var(--color-surface)', color: 'var(--color-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                       >
                         <span style={{ width: 16 }}>{picked && <Check size={14} />}</span>
-                        <span style={{ fontSize: 13 }}>{a.name}<br /><span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>{desc(a)}</span></span>
+                        <span style={{ fontSize: 15 }}>{a.name}<br /><span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>{desc(a)}</span></span>
                       </button>
                     );
                   })}
-                  {visibleApprovers.length === 0 && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Tidak ada kandidat approver.</span>}
+                  {visibleApprovers.length === 0 && <span style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>Tidak ada kandidat approver.</span>}
                 </div>
               </div>
             </>

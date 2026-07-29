@@ -10,7 +10,6 @@ class AssignmentDto {
   @IsString() unitCode: string;
   @IsString() bidang: string;
   @IsOptional() @IsString() holder?: string;
-  @IsOptional() @IsString() bobotKm?: string;
   @IsOptional() @IsString() target?: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsNumber() persenAgregasi?: number;
@@ -25,6 +24,7 @@ class SubIndicatorDto {
   @IsString() bobot: string;
   @IsString() target: string;
   @IsOptional() @IsString() target2?: string;
+  @IsOptional() @IsString() formula?: string;
 }
 
 class SaveMasterDto {
@@ -33,6 +33,7 @@ class SaveMasterDto {
   @IsString() indikator: string;
   @IsOptional() @IsString() formula?: string;
   @IsOptional() @IsString() satuan?: string;
+  @IsOptional() @IsString() bobotKm?: string;
   @IsOptional() @IsString() targetParent?: string;
   @IsArray() @ValidateNested({ each: true }) @Type(() => AssignmentDto) assignments: AssignmentDto[];
   @IsOptional() @IsArray() @IsString({ each: true }) defaultCheckerIds?: string[];

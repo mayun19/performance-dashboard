@@ -139,27 +139,6 @@ export interface HistoryEntry {
   ts: string;
 }
 
-export interface KMDocument {
-  id: string;
-  docId: string;
-  tipe: 'WF1' | 'WF1B' | 'WF2' | 'WF3';
-  bidangUnit: string;
-  holder: string;
-  status: 'IN_REVIEW_C1' | 'IN_REVIEW_C2' | 'IN_REVIEW_SM' | 'APPROVED' | 'SIGNED_GM' | 'RETURNED' | 'OVERDUE' | 'DRAFT';
-  deadline?: string;
-  slaRemain?: number;
-  reviews: KMReview[];
-}
-
-export interface KMReview {
-  id: string;
-  docId: string;
-  actor: string;
-  action: string;
-  note?: string;
-  createdAt: string;
-}
-
 export interface Notification {
   id: string;
   type: string;

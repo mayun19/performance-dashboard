@@ -217,7 +217,7 @@ export function AdminPage() {
               ].map(([label, table]) => (
                 <tr key={table}>
                   <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--color-border)' }}>{label}</td>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-danger)', fontWeight: 600, fontSize: 10 }}>AKAN DIHAPUS</td>
+                  <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-danger)', fontWeight: 600, fontSize: 12 }}>AKAN DIHAPUS</td>
                 </tr>
               ))}
               {[
@@ -227,7 +227,7 @@ export function AdminPage() {
               ].map(([label, table]) => (
                 <tr key={table}>
                   <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--color-border)' }}>{label}</td>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-success)', fontWeight: 600, fontSize: 10 }}>AMAN</td>
+                  <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-success)', fontWeight: 600, fontSize: 12 }}>AMAN</td>
                 </tr>
               ))}
             </tbody>
@@ -279,13 +279,13 @@ export function AdminPage() {
                   <div key={p.recipientId} style={{ border: '1px solid var(--color-border, #e5e5e5)', borderRadius: 6 }}>
                     <button
                       onClick={() => setWaPreviewOpen(waPreviewOpen === p.recipientId ? null : p.recipientId)}
-                      style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', justifyContent: 'space-between' }}
+                      style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', justifyContent: 'space-between' }}
                     >
                       <span><b>{p.recipientName}</b> {p.phone ? `· ${p.phone}` : '· (nomor belum diisi)'}</span>
                       <span style={{ color: 'var(--color-text-muted)' }}>{p.items.length} dokumen</span>
                     </button>
                     {waPreviewOpen === p.recipientId && (
-                      <pre style={{ margin: 0, padding: '8px 10px', borderTop: '1px solid var(--color-border)', fontSize: 11, whiteSpace: 'pre-wrap', fontFamily: 'inherit', background: 'var(--color-surface-2)', color: 'var(--color-text)' }}>
+                      <pre style={{ margin: 0, padding: '8px 10px', borderTop: '1px solid var(--color-border)', fontSize: 13, whiteSpace: 'pre-wrap', fontFamily: 'inherit', background: 'var(--color-surface-2)', color: 'var(--color-text)' }}>
                         {p.message}
                       </pre>
                     )}
@@ -330,7 +330,7 @@ export function AdminPage() {
                       {waLogOpen === l.id && (
                         <tr>
                           <td colSpan={5} style={{ padding: 0, borderBottom: '1px solid var(--color-border)' }}>
-                            <pre style={{ margin: 0, padding: '8px 10px', fontSize: 11, whiteSpace: 'pre-wrap', fontFamily: 'inherit', background: 'var(--color-surface-2)', color: 'var(--color-text)' }}>
+                            <pre style={{ margin: 0, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap', fontFamily: 'inherit', background: 'var(--color-surface-2)', color: 'var(--color-text)' }}>
                               {l.message}
                             </pre>
                           </td>

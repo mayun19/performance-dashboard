@@ -31,6 +31,11 @@ const BIDANG_SORT: Record<string, number> = {
   "Perencanaan & Project Control": 3,
   MRO: 4,
   K3L: 5,
+  // Bagian internal UPMK (taksonomi terpisah dari bidang Kantor Induk di atas)
+  "Bagian Pembangkit": 0,
+  "Bagian Jaringan": 1,
+  "Bagian KKU": 2,
+  "Bagian K3L": 3,
 };
 
 // Sub-indikator KPI komposit (opt-in, generik) — lihat kpi-master.service.ts SubIndicatorInput.
@@ -42,6 +47,7 @@ type SubIndicatorItem = {
   target: string;
   target2?: string;
   realisasi?: number | string;
+  formula?: string;
 };
 
 type KpiItem = {
@@ -105,6 +111,7 @@ const STATUS_LABEL: Record<string, string> = {
   ready: "Siap Konsolidasi (GM)",
   approved: "Disetujui",
   rejected: "Dikembalikan",
+  target_fix: "Menunggu Koreksi Target (PIC REN)",
 };
 const STATUS_PILL: Record<string, string> = {
   draft: "in-review",
@@ -112,6 +119,38 @@ const STATUS_PILL: Record<string, string> = {
   ready: "at-risk",
   approved: "completed",
   rejected: "delayed",
+  target_fix: "needs-revision",
+};
+// Status yang berarti package sudah terkirim & sedang berjalan di alur — PIC tidak perlu
+// (dan tidak boleh) input ulang sampai package kembali ke dirinya (status 'rejected').
+const IN_FLIGHT_STATUSES = ["submitted", "ready", "approved", "target_fix"];
+
+// Riwayat Keputusan Saya — dokumen yang pernah diberi keputusan oleh reviewer yang sedang login
+// (lihat InputRealisasiService.getMyDecisions di backend).
+type MyDecision = {
+  id: string;
+  unitCode: string;
+  bidang: string;
+  periodLabel: string;
+  status: string;
+  myActions: Array<{
+    action: string;
+    note?: string;
+    ts: string;
+    stepIndex: number;
+  }>;
+};
+const DECISION_ACTION_LABEL: Record<string, string> = {
+  approved: "Disetujui",
+  returned: "Ditolak (ke konseptor)",
+  returned_step: "Ditolak (ke langkah sebelumnya)",
+  flagged_target: "Ditandai koreksi target",
+};
+const DECISION_ACTION_PILL: Record<string, string> = {
+  approved: "completed",
+  returned: "delayed",
+  returned_step: "delayed",
+  flagged_target: "needs-revision",
 };
 
 // Unit yang bisa mengisi realisasi: Kantor Induk + 5 UPMK
@@ -127,6 +166,15 @@ const UNIT_OPTIONS = [
 export function InputRealisasiPage() {
   const { user } = useAuth();
   const isStaff = user?.role === "STAFF";
+  // Checker (ASMAN/Manajer) & Approver (SRManajer/GM) hanya memeriksa & menyetujui — input
+  // realisasi murni tugas PIC Bidang (Staff). Halaman ini jadi tampilan referensi/riwayat
+  // baginya, wording berubah jadi "Tinjauan Realisasi Bulanan" (aksi sungguhan di Persetujuan).
+  const isReviewerRole =
+    user?.role === "ASMAN" ||
+    user?.role === "MANAJER" ||
+    user?.role === "SRMANAJER" ||
+    user?.role === "GM";
+  const canInput = !isReviewerRole;
   // Hanya GM yang boleh pilih unit bebas untuk monitoring
   const canSelectUnit = user?.role === "GM";
   const lockedUnit = user?.unit ?? "KP";
@@ -150,6 +198,10 @@ export function InputRealisasiPage() {
   const [revOpen, setRevOpen] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<RevisionLogEntry[]>([]);
   const [revLoading, setRevLoading] = useState(false);
+  // Riwayat Keputusan Saya (reviewer): dokumen yang PERNAH diberi keputusan oleh user ini,
+  // periode terpilih — sengaja tak dibatasi user.bidang (lihat catatan di getMyDecisions()
+  // backend: reviewer seperti SM RPC memutuskan dokumen lintas-bidang lewat rantai konsolidasi).
+  const [myDecisions, setMyDecisions] = useState<MyDecision[]>([]);
 
   const reloadHistory = async () => {
     const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
@@ -230,18 +282,19 @@ export function InputRealisasiPage() {
         const periodObj = periods.find((p) => p.id === selectedPeriodId);
         const selectedYear = periodObj?.yearMonth?.slice(0, 4);
         const kmType = periodObj?.kmReference ?? "draft";
-        const [histRes, approvedRes, ptRes] = await Promise.allSettled([
+        const [histRes, kmRes, ptRes] = await Promise.allSettled([
           inputRealisasi.history(selectedUnit, selectedPeriodId),
-          inputKontrak.approved(selectedUnit, selectedYear, kmType),
+          inputKontrak.forRealisasi(selectedUnit, selectedYear, kmType),
           periodTarget.list(selectedPeriodId),
         ]);
         if (histRes.status === "fulfilled")
           setHistory(histRes.value as unknown[]);
         // Living-target: KM Sementara per assignment periode ini (untuk package view).
         setPeriodTargets(ptRes.status === "fulfilled" ? ptRes.value : []);
-        if (approvedRes.status === "fulfilled") {
-          // Acuan realisasi = KPI dari Kontrak Manajemen yang sudah DISETUJUI (final GM) untuk unit terpilih.
-          const kontrak = approvedRes.value as KontrakManajemen[];
+        if (kmRes.status === "fulfilled") {
+          // Acuan realisasi = KPI dari KM yang sudah DISUBMIT Staff RPC (KM Sementara berjalan
+          // paralel dengan alur review-nya sendiri — bukan menunggu approval penuh).
+          const kontrak = kmRes.value as KontrakManajemen[];
           let merged: KpiItem[] = kontrak.flatMap((k) =>
             (k.kpiItems as KpiItem[]).map((it) => ({
               ...it,
@@ -268,6 +321,19 @@ export function InputRealisasiPage() {
     };
     loadData();
   }, [selectedUnit, selectedPeriodId, isStaff, user?.bidang]);
+
+  // Riwayat Keputusan Saya — hanya reviewer, periode terpilih, TAK terikat selectedUnit/bidang
+  // (lihat catatan di getMyDecisions() backend).
+  useEffect(() => {
+    if (!isReviewerRole || !selectedPeriodId) {
+      setMyDecisions([]);
+      return;
+    }
+    inputRealisasi
+      .myDecisions(selectedPeriodId)
+      .then((res) => setMyDecisions((res as MyDecision[]) ?? []))
+      .catch(() => setMyDecisions([]));
+  }, [isReviewerRole, selectedPeriodId]);
 
   // Submit membuka picker reviewer; pengiriman sebenarnya di handleConfirmSubmit.
   const handleSubmit = () => {
@@ -387,6 +453,21 @@ export function InputRealisasiPage() {
       year: "numeric",
     });
 
+  // Package bidang PIC sendiri yang sudah terkirim & sedang berjalan (bukan draft/rejected) —
+  // form input ditutup selama ini berlangsung, cegah kirim ulang/menimpa yang sedang direview.
+  const myActivePackage =
+    isStaff && user?.bidang
+      ? (history as Record<string, unknown>[]).find(
+          (h) =>
+            h.bidang === user.bidang &&
+            IN_FLIGHT_STATUSES.includes(String(h.status ?? "")),
+        )
+      : undefined;
+  const myActiveStatus = myActivePackage
+    ? String(myActivePackage.status ?? "")
+    : null;
+  const formOpen = canInput && !myActivePackage;
+
   // Living-target: KM Sementara yang berlaku untuk satu KPI row (cocokkan masterKpiId + unit + bidang).
   const livingTargetFor = (kpi: KpiItem): PeriodTarget | undefined =>
     kpi.masterKpiId
@@ -431,11 +512,14 @@ export function InputRealisasiPage() {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: "var(--text-lg)", fontWeight: 700 }}>
-              Input Realisasi Bulanan — {selectedPeriodLabel}
+              {isReviewerRole
+                ? "Tinjauan Realisasi Bulanan"
+                : "Input Realisasi Bulanan"}{" "}
+              — {selectedPeriodLabel}
             </div>
             <div
               style={{
-                fontSize: "var(--text-sm)",
+                fontSize: "var(--text-xs)",
                 color: "var(--color-text-muted)",
                 marginTop: 4,
                 display: "flex",
@@ -475,7 +559,7 @@ export function InputRealisasiPage() {
                     lockedUnit}
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       color: "var(--color-text-subtle)",
                       marginLeft: 4,
                     }}>
@@ -507,51 +591,55 @@ export function InputRealisasiPage() {
                 ))}
             </div>
           </div>
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div
-              style={{
-                fontSize: "var(--text-sm)",
-                color: "var(--color-text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}>
-              Progress Isi
+          {formOpen && (
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div
+                style={{
+                  fontSize: "var(--text-2xs)",
+                  color: "var(--color-text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}>
+                Progress Isi
+              </div>
+              <div
+                style={{
+                  fontSize: "var(--text-xl)",
+                  fontWeight: 800,
+                  color:
+                    completionPct === 100
+                      ? "var(--color-success)"
+                      : "var(--color-accent)",
+                }}>
+                {completionPct}%
+              </div>
+              <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                {filledCount}/{kpiList.length} terisi
+              </div>
             </div>
+          )}
+        </div>
+        {formOpen && (
+          <div
+            style={{
+              height: 4,
+              background: "var(--color-surface-2)",
+              borderRadius: "0 0 var(--radius-lg) var(--radius-lg)",
+              overflow: "hidden",
+            }}>
             <div
               style={{
-                fontSize: "var(--text-xl)",
-                fontWeight: 800,
-                color:
+                height: "100%",
+                width: `${completionPct}%`,
+                background:
                   completionPct === 100
                     ? "var(--color-success)"
                     : "var(--color-accent)",
-              }}>
-              {completionPct}%
-            </div>
-            <div style={{ fontSize: 14, color: "var(--color-text-muted)" }}>
-              {filledCount}/{kpiList.length} terisi
-            </div>
+                transition: "width 0.3s",
+              }}
+            />
           </div>
-        </div>
-        <div
-          style={{
-            height: 4,
-            background: "var(--color-surface-2)",
-            borderRadius: "0 0 var(--radius-lg) var(--radius-lg)",
-            overflow: "hidden",
-          }}>
-          <div
-            style={{
-              height: "100%",
-              width: `${completionPct}%`,
-              background:
-                completionPct === 100
-                  ? "var(--color-success)"
-                  : "var(--color-accent)",
-              transition: "width 0.3s",
-            }}
-          />
-        </div>
+        )}
       </div>
 
       {fillWindow && !windowOpen && (
@@ -576,6 +664,28 @@ export function InputRealisasiPage() {
         </div>
       )}
 
+      {canInput && myActivePackage && (
+        <div
+          className="status-banner"
+          style={{
+            marginBottom: "var(--space-4)",
+            background: "var(--color-accent-tint)",
+          }}>
+          <CheckCircle size={18} color="var(--color-accent)" />
+          <strong>
+            Realisasi bidang Anda untuk {selectedPeriodLabel} sudah dikirim —
+            status:{" "}
+            <span
+              className={`status-pill ${STATUS_PILL[myActiveStatus ?? ""] ?? "in-review"}`}
+              style={{ fontSize: 12 }}>
+              {STATUS_LABEL[myActiveStatus ?? ""] ?? myActiveStatus}
+            </span>
+            . Form input ditutup sampai package ini selesai direview atau
+            dikembalikan.
+          </strong>
+        </div>
+      )}
+
       {/* KPI Input Table */}
       <div className="card p-0" style={{ marginBottom: "var(--space-6)" }}>
         <div className="card-header compact">
@@ -586,7 +696,19 @@ export function InputRealisasiPage() {
               selectedUnit}
           </div>
           <span className="card-meta">
-            Isi nilai realisasi {selectedPeriodLabel} · Acuan:{" "}
+            {!canInput ? (
+              <>
+                Referensi KPI {selectedPeriodLabel} — input hanya oleh PIC
+                Bidang
+              </>
+            ) : myActivePackage ? (
+              <>
+                Realisasi {selectedPeriodLabel} sudah terkirim — menunggu proses
+              </>
+            ) : (
+              <>Isi nilai realisasi {selectedPeriodLabel}</>
+            )}{" "}
+            · Acuan:{" "}
             <b>
               {selectedPeriod?.kmReference === "final"
                 ? "KM Final"
@@ -598,154 +720,153 @@ export function InputRealisasiPage() {
           {kpiList.length === 0 ? (
             <EmptyState
               title="Belum ada KPI acuan"
-              message="Belum ada Kontrak Manajemen yang disetujui (final GM) untuk unit Anda. Selesaikan persetujuan KM terlebih dahulu di menu Input Kontrak Manajemen → Persetujuan."
+              message="Belum ada KM Sementara yang disubmit Staff RPC untuk unit Anda. Setelah KPI di-assign & dokumen KM dikirim dari menu Manajemen KPI → Dokumen KM, KPI akan muncul di sini."
             />
           ) : (
-            <div className="table-scroll able-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>No</th>
-                    <th>Bidang</th>
-                    <th>Indikator</th>
-                    <th>Formula</th>
-                    <th>Satuan</th>
-                    <th className="num">Bobot</th>
-                    <th className="num">Target Sem I</th>
-                    <th className="num">Target {CURRENT_YEAR}</th>
-                    {anyLivingTarget && (
-                      <th
-                        className="num"
-                        title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
-                        KM Sementara
-                      </th>
-                    )}
-                    <th className="num">Realisasi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpiList.map((kpi, i) => {
-                    const isComposite =
-                      !!kpi.subIndicators && kpi.subIndicators.length > 0;
-                    const hasVal = isItemFilled(kpi, i);
-                    const lt = livingTargetFor(kpi);
-                    return (
-                      <Fragment key={i}>
-                        <tr
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Bidang</th>
+                  <th>Indikator</th>
+                  <th>Formula</th>
+                  <th>Satuan</th>
+                  <th className="num">Bobot</th>
+                  <th className="num">Target Sem I</th>
+                  <th className="num">Target {CURRENT_YEAR}</th>
+                  {anyLivingTarget && (
+                    <th
+                      className="num"
+                      title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
+                      KM Sementara
+                    </th>
+                  )}
+                  <th>Realisasi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpiList.map((kpi, i) => {
+                  const isComposite =
+                    !!kpi.subIndicators && kpi.subIndicators.length > 0;
+                  const hasVal = isItemFilled(kpi, i);
+                  const lt = livingTargetFor(kpi);
+                  return (
+                    <Fragment key={i}>
+                      <tr
+                        style={{
+                          background: hasVal
+                            ? "rgba(34,197,94,0.03)"
+                            : "transparent",
+                        }}>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {kpi.no ?? i + 1}
+                        </td>
+                        <td
                           style={{
-                            background: hasVal
-                              ? "rgba(34,197,94,0.03)"
-                              : "transparent",
+                            fontSize: 13,
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
                           }}>
-                          <td style={{ color: "var(--color-text-muted)" }}>
-                            {kpi.no ?? i + 1}
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                              whiteSpace: "nowrap",
-                            }}>
-                            {kpi.bidang ?? "—"}
-                          </td>
-                          <td style={{ maxWidth: 220, fontWeight: 500 }}>
-                            {kpi.indikator ?? "—"}
-                            {isComposite && (
+                          {kpi.bidang ?? "—"}
+                        </td>
+                        <td style={{ maxWidth: 220, fontWeight: 500 }}>
+                          {kpi.indikator ?? "—"}
+                          {isComposite && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "var(--color-accent)",
+                                border: "1px solid var(--color-accent)",
+                                borderRadius: 4,
+                                padding: "1px 4px",
+                              }}
+                              title="Komposit — isi realisasi per sub-indikator di bawah">
+                              Komposit
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: 12,
+                            color: "var(--color-text-muted)",
+                            maxWidth: 200,
+                          }}>
+                          {kpi.formula ?? "—"}
+                        </td>
+                        <td
+                          style={{
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}>
+                          {kpi.satuan ?? "—"}
+                        </td>
+                        <td
+                          className="num"
+                          style={{
+                            fontWeight: 700,
+                            color: "var(--color-accent)",
+                          }}>
+                          {kpi.bobot ?? "—"}
+                        </td>
+                        <td className="num">
+                          {isComposite ? "— (per sub)" : (kpi.target ?? "—")}
+                        </td>
+                        <td className="num">
+                          {isComposite ? "— (per sub)" : (kpi.target2 ?? "—")}
+                        </td>
+                        {anyLivingTarget && (
+                          <td className="num" style={{ whiteSpace: "nowrap" }}>
+                            {lt ? (
+                              <>
+                                <span style={{ fontWeight: 700 }}>
+                                  {lt.frozen
+                                    ? (lt.frozenTarget ?? lt.target)
+                                    : lt.target}
+                                </span>
+                                <span
+                                  title={
+                                    lt.frozen
+                                      ? "Sudah dibekukan (bundle GM disetujui / deadline / restatement)"
+                                      : lt.source === "carried"
+                                        ? "Dibawa dari bulan lalu (belum diubah)"
+                                        : "Diinput/diubah bulan ini"
+                                  }
+                                  style={{
+                                    marginLeft: 4,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    padding: "1px 4px",
+                                    borderRadius: 4,
+                                    border: "1px solid var(--color-border)",
+                                    color: lt.frozen
+                                      ? "var(--color-text-muted)"
+                                      : lt.source === "carried"
+                                        ? "var(--color-warning)"
+                                        : "var(--color-accent)",
+                                  }}>
+                                  {lt.frozen
+                                    ? "BEKU"
+                                    : lt.source === "carried"
+                                      ? "CARRY"
+                                      : "HIDUP"}
+                                </span>
+                              </>
+                            ) : (
                               <span
-                                style={{
-                                  marginLeft: 6,
-                                  fontSize: 9,
-                                  fontWeight: 700,
-                                  color: "var(--color-accent)",
-                                  border: "1px solid var(--color-accent)",
-                                  borderRadius: 4,
-                                  padding: "1px 4px",
-                                }}
-                                title="Komposit — isi realisasi per sub-indikator di bawah">
-                                Komposit
+                                style={{ color: "var(--color-text-subtle)" }}>
+                                —
                               </span>
                             )}
                           </td>
-                          <td
-                            style={{
-                              fontSize: 14,
-                              color: "var(--color-text-muted)",
-                              maxWidth: 200,
-                            }}>
-                            {kpi.formula ?? "—"}
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                              whiteSpace: "nowrap",
-                            }}>
-                            {kpi.satuan ?? "—"}
-                          </td>
-                          <td
-                            className="num"
-                            style={{
-                              fontWeight: 700,
-                              color: "var(--color-accent)",
-                            }}>
-                            {kpi.bobot ?? "—"}
-                          </td>
-                          <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target ?? "—")}
-                          </td>
-                          <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target2 ?? "—")}
-                          </td>
-                          {anyLivingTarget && (
-                            <td
-                              className="num"
-                              style={{ whiteSpace: "nowrap" }}>
-                              {lt ? (
-                                <>
-                                  <span style={{ fontWeight: 700 }}>
-                                    {lt.frozen
-                                      ? (lt.frozenTarget ?? lt.target)
-                                      : lt.target}
-                                  </span>
-                                  <span
-                                    title={
-                                      lt.frozen
-                                        ? "Sudah dibekukan (bundle GM disetujui / deadline / restatement)"
-                                        : lt.source === "carried"
-                                          ? "Dibawa dari bulan lalu (belum diubah)"
-                                          : "Diinput/diubah bulan ini"
-                                    }
-                                    style={{
-                                      marginLeft: 4,
-                                      fontSize: 9,
-                                      fontWeight: 700,
-                                      padding: "1px 4px",
-                                      borderRadius: 4,
-                                      border: "1px solid var(--color-border)",
-                                      color: lt.frozen
-                                        ? "var(--color-text-muted)"
-                                        : lt.source === "carried"
-                                          ? "var(--color-warning)"
-                                          : "var(--color-accent)",
-                                    }}>
-                                    {lt.frozen
-                                      ? "BEKU"
-                                      : lt.source === "carried"
-                                        ? "CARRY"
-                                        : "HIDUP"}
-                                  </span>
-                                </>
-                              ) : (
-                                <span
-                                  style={{ color: "var(--color-text-subtle)" }}>
-                                  —
-                                </span>
-                              )}
-                            </td>
-                          )}
-                          <td style={{ minWidth: 340 }}>
-                            {isComposite ? (
+                        )}
+                        <td style={{ minWidth: 140 }}>
+                          {formOpen ? (
+                            isComposite ? (
                               <span
                                 style={{
-                                  fontSize: 12,
+                                  fontSize: 13,
                                   color: "var(--color-text-muted)",
                                 }}>
                                 Isi di bawah ↓
@@ -768,44 +889,57 @@ export function InputRealisasiPage() {
                                 }
                                 placeholder={`Target: ${kpi.target ?? "—"}`}
                               />
-                            )}
-                          </td>
-                        </tr>
-                        {isComposite &&
-                          kpi.subIndicators!.map((si, j) => {
-                            const subVal = values[`${i}.${j}`] ?? "";
-                            const subHasVal = subVal.trim() !== "";
-                            return (
-                              <tr
-                                key={`${i}.${j}`}
+                            )
+                          ) : (
+                            <span style={{ color: "var(--color-text-subtle)" }}>
+                              —
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                      {isComposite &&
+                        kpi.subIndicators!.map((si, j) => {
+                          const subVal = values[`${i}.${j}`] ?? "";
+                          const subHasVal = subVal.trim() !== "";
+                          return (
+                            <tr
+                              key={`${i}.${j}`}
+                              style={{
+                                background: subHasVal
+                                  ? "rgba(34,197,94,0.03)"
+                                  : "var(--color-surface-2)",
+                              }}>
+                              <td />
+                              <td />
+                              <td
                                 style={{
-                                  background: subHasVal
-                                    ? "rgba(34,197,94,0.03)"
-                                    : "var(--color-surface-2)",
+                                  paddingLeft: "var(--space-4)",
+                                  fontSize: 14,
+                                  color: "var(--color-text-muted)",
                                 }}>
-                                <td />
-                                <td />
-                                <td
-                                  style={{
-                                    paddingLeft: "var(--space-4)",
-                                    fontSize: 12,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  ↳ {si.nama}
-                                </td>
-                                <td />
-                                <td
-                                  style={{
-                                    color: "var(--color-text-muted)",
-                                    whiteSpace: "nowrap",
-                                  }}>
-                                  {si.satuan ?? "—"}
-                                </td>
-                                <td className="num">{si.bobot}</td>
-                                <td className="num">{si.target}</td>
-                                <td className="num">{si.target2 ?? "—"}</td>
-                                {anyLivingTarget && <td />}
-                                <td style={{ minWidth: 340 }}>
+                                ↳ {si.nama}
+                              </td>
+                              <td
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--color-text-muted)",
+                                  maxWidth: 200,
+                                }}>
+                                {si.formula ?? "—"}
+                              </td>
+                              <td
+                                style={{
+                                  color: "var(--color-text-muted)",
+                                  whiteSpace: "nowrap",
+                                }}>
+                                {si.satuan ?? "—"}
+                              </td>
+                              <td className="num">{si.bobot}</td>
+                              <td className="num">{si.target}</td>
+                              <td className="num">{si.target2 ?? "—"}</td>
+                              {anyLivingTarget && <td />}
+                              <td style={{ minWidth: 140 }}>
+                                {formOpen ? (
                                   <input
                                     type="text"
                                     className="form-input form-input-sm"
@@ -823,19 +957,26 @@ export function InputRealisasiPage() {
                                     }
                                     placeholder={`Target: ${si.target ?? "—"}`}
                                   />
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                ) : (
+                                  <span
+                                    style={{
+                                      color: "var(--color-text-subtle)",
+                                    }}>
+                                    {subVal || "—"}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
-        {kpiList.length > 0 && (
+        {formOpen && kpiList.length > 0 && (
           <div
             className="card-footer"
             style={{
@@ -846,7 +987,7 @@ export function InputRealisasiPage() {
             }}>
             <span
               style={{
-                fontSize: "var(--text-sm)",
+                fontSize: "var(--text-xs)",
                 color: "var(--color-text-muted)",
               }}>
               {filledCount} dari {kpiList.length} indikator terisi
@@ -876,362 +1017,447 @@ export function InputRealisasiPage() {
             </div>
             <span className="card-meta">{history.length} entri</span>
           </div>
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
-            <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>Submitter</th>
-                    <th>Status</th>
-                    <th>Tanggal Submit</th>
-                    <th style={{ width: 90 }}>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((h, i) => {
-                    const item = h as Record<string, unknown>;
-                    const status = String(item.status ?? "");
-                    const itemSteps =
-                      (item.steps as { label?: string }[] | undefined) ?? [];
-                    const stepLabel =
-                      itemSteps[Number(item.currentStepIndex ?? 0)]?.label;
-                    const canDelete =
-                      status !== "approved" &&
-                      (item.submitterId === user?.id || user?.role === "GM");
-                    const atts =
-                      (item.attachments as
-                        | Array<{ id: string; name: string; size: number }>
-                        | undefined) ?? [];
-                    const rid = item.id as string;
-                    return (
-                      <Fragment key={i}>
-                        <tr>
-                          <td style={{ fontWeight: 600 }}>
-                            {(item.unitCode as string) ?? "—"}
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                            }}>
-                            {(item.bidang as string) ?? "—"}
-                          </td>
-                          <td>{(item.submitter as string) ?? "—"}</td>
-                          <td>
-                            <span
-                              className={`status-pill ${STATUS_PILL[status] ?? "in-review"}`}>
-                              {STATUS_LABEL[status] ?? status}
-                            </span>
-                            {status === "submitted" && stepLabel && (
-                              <div
-                                style={{
-                                  color: "var(--color-text-muted)",
-                                  marginTop: 4,
-                                  fontSize: 14,
-                                  fontWeight: 500,
-                                }}>
-                                di {stepLabel}
-                              </div>
-                            )}
-                            {status === "rejected" && item.reviewNote ? (
-                              <div
-                                style={{
-                                  color: "var(--color-danger)",
-                                  marginTop: 4,
-                                  maxWidth: 240,
-                                  fontSize: 14,
-                                  fontWeight: 500,
-                                }}>
-                                {item.reviewNote as string}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td style={{ color: "var(--color-text-muted)" }}>
-                            {item.submittedAt
-                              ? new Date(
-                                  item.submittedAt as string,
-                                ).toLocaleDateString("id-ID", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : "—"}
-                          </td>
-                          <td>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Unit</th>
+                  <th>Bidang</th>
+                  <th>Submitter</th>
+                  <th>Status</th>
+                  <th>Tanggal Submit</th>
+                  <th style={{ width: 90 }}>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h, i) => {
+                  const item = h as Record<string, unknown>;
+                  const status = String(item.status ?? "");
+                  const itemSteps =
+                    (item.steps as { label?: string }[] | undefined) ?? [];
+                  const stepLabel =
+                    itemSteps[Number(item.currentStepIndex ?? 0)]?.label;
+                  const canDelete =
+                    status !== "approved" &&
+                    (item.submitterId === user?.id || user?.role === "GM");
+                  const atts =
+                    (item.attachments as
+                      | Array<{ id: string; name: string; size: number }>
+                      | undefined) ?? [];
+                  const rid = item.id as string;
+                  return (
+                    <Fragment key={i}>
+                      <tr>
+                        <td style={{ fontWeight: 600 }}>
+                          {(item.unitCode as string) ?? "—"}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: 13,
+                            color: "var(--color-text-muted)",
+                          }}>
+                          {(item.bidang as string) ?? "—"}
+                        </td>
+                        <td>{(item.submitter as string) ?? "—"}</td>
+                        <td>
+                          <span
+                            className={`status-pill ${STATUS_PILL[status] ?? "in-review"}`}
+                            style={{ fontSize: 12 }}>
+                            {STATUS_LABEL[status] ?? status}
+                          </span>
+                          {status === "submitted" && stepLabel && (
                             <div
                               style={{
-                                display: "flex",
-                                gap: 6,
-                                alignItems: "center",
-                                width: "100%",
+                                fontSize: 12,
+                                color: "var(--color-text-muted)",
+                                marginTop: 2,
                               }}>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{
-                                  fontSize: 14,
-                                  textAlign: "center",
-                                  gap: 4,
-                                  width: "100%",
-                                }}
-                                onClick={() =>
-                                  setEvidOpen(evidOpen === rid ? null : rid)
-                                }
-                                title="Lampiran evidence">
-                                <Paperclip size={14} /> {atts.length}
-                              </button>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => toggleRevisions(rid)}
-                                title="Riwayat revisi (target & nilai realisasi)">
-                                <History size={14} />
-                              </button>
-                              {canDelete && (
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => handleDelete(rid)}
-                                  title="Hapus realisasi"
-                                  style={{ color: "var(--color-danger)" }}>
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
+                              di {stepLabel}
                             </div>
+                          )}
+                          {status === "rejected" && item.reviewNote ? (
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "var(--color-danger)",
+                                marginTop: 2,
+                                maxWidth: 240,
+                              }}>
+                              {item.reviewNote as string}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {item.submittedAt
+                            ? new Date(
+                                item.submittedAt as string,
+                              ).toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            : "—"}
+                        </td>
+                        <td>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              alignItems: "center",
+                            }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() =>
+                                setEvidOpen(evidOpen === rid ? null : rid)
+                              }
+                              title="Lampiran evidence">
+                              <Paperclip size={14} /> {atts.length}
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => toggleRevisions(rid)}
+                              title="Riwayat revisi (target & nilai realisasi)">
+                              <History size={14} />
+                            </button>
+                            {canDelete && (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => handleDelete(rid)}
+                                title="Hapus realisasi"
+                                style={{ color: "var(--color-danger)" }}>
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {evidOpen === rid && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            style={{
+                              background: "var(--color-surface-2)",
+                              padding: "var(--space-3)",
+                            }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                marginBottom: 6,
+                              }}>
+                              Evidence Realisasi
+                            </div>
+                            {atts.length === 0 ? (
+                              <div
+                                style={{
+                                  fontSize: 13,
+                                  color: "var(--color-text-muted)",
+                                  marginBottom: 6,
+                                }}>
+                                Belum ada berkas.
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 4,
+                                  marginBottom: 8,
+                                }}>
+                                {atts.map((a) => (
+                                  <div
+                                    key={a.id}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      fontSize: 13,
+                                    }}>
+                                    <Paperclip
+                                      size={12}
+                                      style={{
+                                        color: "var(--color-text-muted)",
+                                      }}
+                                    />
+                                    <a
+                                      href={inputRealisasi.evidenceUrl(
+                                        rid,
+                                        a.id,
+                                      )}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{ color: "var(--color-accent)" }}>
+                                      {a.name}
+                                    </a>
+                                    <span
+                                      style={{
+                                        color: "var(--color-text-subtle)",
+                                      }}>
+                                      ({fmtSize(a.size)})
+                                    </span>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() =>
+                                        handleDeleteEvid(rid, a.id)
+                                      }
+                                      title="Hapus berkas"
+                                      style={{
+                                        color: "var(--color-danger)",
+                                        padding: "0 4px",
+                                      }}>
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <input
+                              ref={evidInputRef}
+                              type="file"
+                              multiple
+                              accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png"
+                              style={{ display: "none" }}
+                              onChange={(e) =>
+                                handleUploadEvid(rid, e.target.files)
+                              }
+                            />
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              disabled={evidBusy || atts.length >= 5}
+                              onClick={() => evidInputRef.current?.click()}>
+                              <Upload size={12} />{" "}
+                              {evidBusy ? "Mengunggah…" : "Unggah Evidence"}
+                            </button>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "var(--color-text-muted)",
+                                marginLeft: 8,
+                              }}>
+                              Maks 5 berkas · ≤ 10 MB/berkas · PDF, Excel, Word,
+                              JPG/PNG{" "}
+                              {atts.length >= 5 ? "· (batas tercapai)" : ""}
+                            </span>
                           </td>
                         </tr>
-                        {evidOpen === rid && (
-                          <tr>
-                            <td
-                              colSpan={6}
+                      )}
+                      {revOpen === rid && (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            style={{
+                              background: "var(--color-surface-2)",
+                              padding: "var(--space-3)",
+                            }}>
+                            <div
                               style={{
-                                background: "var(--color-surface-2)",
-                                padding: "var(--space-3)",
+                                fontSize: 13,
+                                fontWeight: 600,
+                                marginBottom: 6,
                               }}>
+                              Riwayat Revisi (Target & Nilai Realisasi)
+                            </div>
+                            {revLoading ? (
                               <div
                                 style={{
-                                  fontSize: 14,
-                                  fontWeight: 600,
-                                  marginBottom: 6,
+                                  fontSize: 13,
+                                  color: "var(--color-text-muted)",
                                 }}>
-                                Evidence Realisasi
+                                Memuat…
                               </div>
-                              {atts.length === 0 ? (
-                                <div
-                                  style={{
-                                    fontSize: 12,
-                                    color: "var(--color-text-muted)",
-                                    marginBottom: 6,
-                                  }}>
-                                  Belum ada berkas.
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 4,
-                                    marginBottom: 8,
-                                  }}>
-                                  {atts.map((a) => (
-                                    <div
-                                      key={a.id}
+                            ) : revisions.length === 0 ? (
+                              <div
+                                style={{
+                                  fontSize: 13,
+                                  color: "var(--color-text-muted)",
+                                }}>
+                                Belum ada revisi tercatat untuk package ini.
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 6,
+                                }}>
+                                {revisions.map((rv) => (
+                                  <div
+                                    key={rv.id}
+                                    style={{
+                                      display: "flex",
+                                      gap: 8,
+                                      fontSize: 13,
+                                      alignItems: "flex-start",
+                                      borderLeft: `2px solid ${rv.entity === "period_target" ? "var(--color-accent)" : "var(--color-warning)"}`,
+                                      paddingLeft: 8,
+                                    }}>
+                                    <span
                                       style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 8,
-                                        fontSize: 14,
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        padding: "1px 5px",
+                                        borderRadius: 4,
+                                        whiteSpace: "nowrap",
+                                        background:
+                                          rv.entity === "period_target"
+                                            ? "var(--color-accent-tint)"
+                                            : "var(--color-warning-tint)",
+                                        color:
+                                          rv.entity === "period_target"
+                                            ? "var(--color-accent)"
+                                            : "var(--color-warning)",
                                       }}>
-                                      <Paperclip
-                                        size={12}
+                                      {rv.entity === "period_target"
+                                        ? "TARGET (PIC REN)"
+                                        : "REALISASI (KI)"}
+                                    </span>
+                                    <div style={{ flex: 1 }}>
+                                      {rv.field === "target" ? (
+                                        <span>
+                                          Target:{" "}
+                                          <b>{String(rv.oldValue ?? "—")}</b> →{" "}
+                                          <b>{String(rv.newValue ?? "—")}</b>
+                                        </span>
+                                      ) : (
+                                        <RealisasiDiff
+                                          oldValue={rv.oldValue}
+                                          newValue={rv.newValue}
+                                        />
+                                      )}
+                                      <div
                                         style={{
                                           color: "var(--color-text-muted)",
-                                        }}
-                                      />
-                                      <a
-                                        href={inputRealisasi.evidenceUrl(
-                                          rid,
-                                          a.id,
-                                        )}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        style={{
-                                          fontWeight: 600,
-                                        }}>
-                                        {a.name}
-                                      </a>
-                                      <span
-                                        style={{
-                                          color: "var(--color-text-subtle)",
-                                        }}>
-                                        ({fmtSize(a.size)})
-                                      </span>
-                                      <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() =>
-                                          handleDeleteEvid(rid, a.id)
-                                        }
-                                        title="Hapus berkas"
-                                        style={{
-                                          color: "var(--color-danger)",
-                                          padding: "0 4px",
-                                        }}>
-                                        <X size={12} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <input
-                                ref={evidInputRef}
-                                type="file"
-                                multiple
-                                accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png"
-                                style={{ display: "none" }}
-                                onChange={(e) =>
-                                  handleUploadEvid(rid, e.target.files)
-                                }
-                              />
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                style={{
-                                  fontSize: 14,
-                                }}
-                                disabled={evidBusy || atts.length >= 5}
-                                onClick={() => evidInputRef.current?.click()}>
-                                <Upload size={12} />{" "}
-                                {evidBusy ? "Mengunggah…" : "Unggah Evidence"}
-                              </button>
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  color: "var(--color-text-muted)",
-                                  marginLeft: 8,
-                                }}>
-                                Maks 5 berkas · ≤ 10 MB/berkas · PDF, Excel,
-                                Word, JPG/PNG{" "}
-                                {atts.length >= 5 ? "· (batas tercapai)" : ""}
-                              </span>
-                            </td>
-                          </tr>
-                        )}
-                        {revOpen === rid && (
-                          <tr>
-                            <td
-                              colSpan={6}
-                              style={{
-                                background: "var(--color-surface-2)",
-                                padding: "var(--space-3)",
-                              }}>
-                              <div
-                                style={{
-                                  fontSize: 14,
-                                  fontWeight: 600,
-                                  marginBottom: 6,
-                                }}>
-                                Riwayat Revisi (Target & Nilai Realisasi)
-                              </div>
-                              {revLoading ? (
-                                <div
-                                  style={{
-                                    fontSize: 14,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  Memuat…
-                                </div>
-                              ) : revisions.length === 0 ? (
-                                <div
-                                  style={{
-                                    fontSize: 14,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  Belum ada revisi tercatat untuk package ini.
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 6,
-                                  }}>
-                                  {revisions.map((rv) => (
-                                    <div
-                                      key={rv.id}
-                                      style={{
-                                        display: "flex",
-                                        gap: 8,
-                                        fontSize: 14,
-                                        alignItems: "flex-start",
-                                        borderLeft: `2px solid ${rv.entity === "period_target" ? "var(--color-accent)" : "var(--color-warning)"}`,
-                                        paddingLeft: 8,
-                                      }}>
-                                      <span
-                                        style={{
                                           fontSize: 12,
-                                          fontWeight: 700,
-                                          padding: "1px 5px",
-                                          borderRadius: 4,
-                                          whiteSpace: "nowrap",
-                                          background:
-                                            rv.entity === "period_target"
-                                              ? "var(--color-accent-tint)"
-                                              : "var(--color-warning-tint)",
-                                          color:
-                                            rv.entity === "period_target"
-                                              ? "var(--color-accent)"
-                                              : "var(--color-warning)",
+                                          marginTop: 2,
                                         }}>
-                                        {rv.entity === "period_target"
-                                          ? "TARGET (PIC REN)"
-                                          : "REALISASI (KI)"}
-                                      </span>
-                                      <div style={{ flex: 1 }}>
-                                        {rv.field === "target" ? (
-                                          <span>
-                                            Target:{" "}
-                                            <b>{String(rv.oldValue ?? "—")}</b>{" "}
-                                            →{" "}
-                                            <b>{String(rv.newValue ?? "—")}</b>
-                                          </span>
-                                        ) : (
-                                          <RealisasiDiff
-                                            oldValue={rv.oldValue}
-                                            newValue={rv.newValue}
-                                          />
-                                        )}
-                                        <div
-                                          style={{
-                                            color: "var(--color-text-muted)",
-                                            fontSize: 10,
-                                            marginTop: 2,
-                                          }}>
-                                          {rv.actor} ·{" "}
-                                          {new Date(
-                                            rv.createdAt,
-                                          ).toLocaleString("id-ID", {
+                                        {rv.actor} ·{" "}
+                                        {new Date(rv.createdAt).toLocaleString(
+                                          "id-ID",
+                                          {
                                             day: "2-digit",
                                             month: "short",
                                             year: "numeric",
                                             hour: "2-digit",
                                             minute: "2-digit",
-                                          })}
-                                          {rv.note && ` · "${rv.note}"`}
-                                        </div>
+                                          },
+                                        )}
+                                        {rv.note && ` · "${rv.note}"`}
                                       </div>
                                     </div>
-                                  ))}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Riwayat Keputusan Saya (reviewer) */}
+      {isReviewerRole && (
+        <div className="card p-0">
+          <div className="card-header compact">
+            <div className="card-title">
+              <History size={14} />
+              Riwayat Keputusan Saya
+            </div>
+            <span className="card-meta">{myDecisions.length} dokumen</span>
+          </div>
+          {myDecisions.length === 0 ? (
+            <div
+              style={{
+                padding: "var(--space-4)",
+                color: "var(--color-text-muted)",
+                fontSize: 13,
+              }}>
+              Belum ada keputusan Anda pada periode ini.
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th>Bidang</th>
+                    <th>Status Saat Ini</th>
+                    <th>Aksi Anda</th>
+                    <th>Catatan</th>
+                    <th>Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myDecisions.map((d) => (
+                    <Fragment key={d.id}>
+                      {d.myActions.map((a, i) => (
+                        <tr key={`${d.id}-${i}`}>
+                          {i === 0 && (
+                            <>
+                              <td
+                                style={{ fontWeight: 600 }}
+                                rowSpan={d.myActions.length}>
+                                {d.unitCode}
+                              </td>
+                              <td
+                                style={{
+                                  fontSize: 13,
+                                  color: "var(--color-text-muted)",
+                                }}
+                                rowSpan={d.myActions.length}>
+                                {d.bidang}
+                              </td>
+                              <td rowSpan={d.myActions.length}>
+                                <span
+                                  className={`status-pill ${STATUS_PILL[d.status] ?? "in-review"}`}
+                                  style={{ fontSize: 12 }}>
+                                  {STATUS_LABEL[d.status] ?? d.status}
+                                </span>
+                              </td>
+                            </>
+                          )}
+                          <td>
+                            <span
+                              className={`status-pill ${DECISION_ACTION_PILL[a.action] ?? "in-review"}`}
+                              style={{ fontSize: 12 }}>
+                              {DECISION_ACTION_LABEL[a.action] ?? a.action}
+                            </span>
+                          </td>
+                          <td
+                            style={{
+                              fontSize: 13,
+                              color: "var(--color-text-muted)",
+                              maxWidth: 260,
+                            }}>
+                            {a.note || "—"}
+                          </td>
+                          <td
+                            style={{
+                              fontSize: 13,
+                              color: "var(--color-text-muted)",
+                              whiteSpace: "nowrap",
+                            }}>
+                            {a.ts
+                              ? new Date(a.ts).toLocaleDateString("id-ID", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -1239,7 +1465,9 @@ export function InputRealisasiPage() {
         open={pickerOpen}
         title="Alur Reviewer Realisasi"
         busy={submitting}
-        fetchCandidates={inputRealisasi.reviewerCandidates}
+        fetchCandidates={() =>
+          inputRealisasi.reviewerCandidates(selectedUnit, kpiList[0]?.bidang)
+        }
         onConfirm={handleConfirmSubmit}
         onCancel={() => setPickerOpen(false)}
         bidang={user?.bidang ?? undefined}

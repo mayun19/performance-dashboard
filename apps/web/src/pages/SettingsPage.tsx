@@ -91,7 +91,7 @@ export function SettingsPage() {
                     <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>{user?.name ?? '—'}</div>
                     <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 4 }}>{user?.email}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 8 }}>
-                      <span className="status-pill in-review" style={{ fontSize: 10 }}>{ROLE_LABELS[user?.role ?? ''] ?? user?.role}</span>
+                      <span className="status-pill in-review" style={{ fontSize: 12 }}>{ROLE_LABELS[user?.role ?? ''] ?? user?.role}</span>
                       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>· Unit: {user?.unit ?? '—'}</span>
                     </div>
                   </div>
@@ -152,16 +152,16 @@ export function SettingsPage() {
                         </div>
                         <div>
                           <div className="card-title" style={{ fontSize: 'var(--text-sm)' }}>{roleLabel}</div>
-                          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>{roleKey}</div>
+                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>{roleKey}</div>
                         </div>
                       </div>
-                      {isCurrentRole && <span className="status-pill completed" style={{ fontSize: 10 }}>Peran Anda</span>}
+                      {isCurrentRole && <span className="status-pill completed" style={{ fontSize: 12 }}>Peran Anda</span>}
                     </div>
                     <div className="card-body">
                       <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {(ROLE_PERMS[roleKey] ?? []).map((perm, i) => (
                           <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-xs)' }}>
-                            <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', flexShrink: 0 }}>✓</span>
+                            <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', flexShrink: 0 }}>✓</span>
                             {perm}
                           </li>
                         ))}
@@ -226,14 +226,14 @@ export function SettingsPage() {
                     <tbody>
                       {logs.map((l) => (
                         <tr key={l.id}>
-                          <td style={{ fontSize: 10, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                          <td style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
                             {new Date(l.createdAt).toLocaleString('id-ID')}
                           </td>
                           <td style={{ fontWeight: 500 }}>{l.actor}</td>
-                          <td><code style={{ fontSize: 10 }}>{l.action}</code></td>
+                          <td><code style={{ fontSize: 12 }}>{l.action}</code></td>
                           <td style={{ color: 'var(--color-text-muted)' }}>{l.entity ?? '—'}</td>
                           <td style={{ color: 'var(--color-text-muted)', maxWidth: 200 }}>{l.note ?? '—'}</td>
-                          <td style={{ fontSize: 10, color: 'var(--color-text-subtle)', fontFamily: 'monospace' }}>{(l as unknown as Record<string, unknown>).ip as string ?? '—'}</td>
+                          <td style={{ fontSize: 12, color: 'var(--color-text-subtle)', fontFamily: 'monospace' }}>{(l as unknown as Record<string, unknown>).ip as string ?? '—'}</td>
                         </tr>
                       ))}
                       {logs.length === 0 && (
@@ -280,7 +280,7 @@ export function SettingsPage() {
                         <tr key={i}>
                           <td style={{ fontWeight: 600, color: 'var(--color-accent)' }}>{a.role}</td>
                           <td style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)' }}>{a.email}</td>
-                          <td><code style={{ fontSize: 10 }}>Pusmanpro@2026</code></td>
+                          <td><code style={{ fontSize: 12 }}>Pusmanpro@2026</code></td>
                         </tr>
                       ))}
                     </tbody>

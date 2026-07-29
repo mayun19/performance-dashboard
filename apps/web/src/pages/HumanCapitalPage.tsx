@@ -162,13 +162,13 @@ export function HumanCapitalPage() {
                     <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.name}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
                       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{k.tersertifikasi}/{k.target}</span>
-                      <span className={`status-pill ${statusPill}`} style={{ fontSize: 10, padding: '1px 6px' }}>{pct}%</span>
+                      <span className={`status-pill ${statusPill}`} style={{ fontSize: 12, padding: '1px 6px' }}>{pct}%</span>
                     </div>
                   </div>
                   <div style={{ height: 8, background: 'var(--color-surface-2)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${barW}%`, background: statusColor, borderRadius: 'var(--radius-full)', transition: 'width 0.8s' }} />
                   </div>
-                  {k.lembaga && <div style={{ fontSize: 10, color: 'var(--color-text-subtle)' }}>{k.lembaga}</div>}
+                  {k.lembaga && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)' }}>{k.lembaga}</div>}
                 </div>
               );
             }) : <EmptyState title="Tidak ada data" />}
@@ -223,11 +223,11 @@ export function HumanCapitalPage() {
                             <div style={{ flex: 1, height: 6, background: 'var(--color-surface-hover)', borderRadius: 3, overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${comp}%`, background: comp >= 100 ? 'var(--color-success)' : TEAL, borderRadius: 3 }} />
                             </div>
-                            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', minWidth: 30 }}>{comp}%</span>
+                            <span style={{ fontSize: 12, color: 'var(--color-text-muted)', minWidth: 30 }}>{comp}%</span>
                           </div>
                         </td>
                         <td>
-                          <span className={`status-pill ${t.status === 'completed' ? 'completed' : t.status === 'ongoing' ? 'at-risk' : 'in-review'}`} style={{ fontSize: 10, padding: '2px 8px' }}>
+                          <span className={`status-pill ${t.status === 'completed' ? 'completed' : t.status === 'ongoing' ? 'at-risk' : 'in-review'}`} style={{ fontSize: 12, padding: '2px 8px' }}>
                             {STATUS_LABEL[t.status ?? ''] ?? t.status ?? '—'}
                           </span>
                         </td>

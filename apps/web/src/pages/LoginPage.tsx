@@ -14,6 +14,14 @@ import {
 
 const DEMO_PASSWORD = "Pusmanpro@2026";
 
+// Harus sinkron dengan UPMK_BAGIAN di apps/api/prisma/seed.ts.
+const UPMK_BAGIAN: Array<{ slug: string; label: string }> = [
+  { slug: 'pembangkit', label: 'Bagian Pembangkit' },
+  { slug: 'jaringan', label: 'Bagian Jaringan' },
+  { slug: 'kku', label: 'Bagian KKU' },
+  { slug: 'k3l', label: 'Bagian K3L' },
+];
+
 // Akun demo per role yang telah di-seed (Kantor Induk per bidang + UPMK + GM).
 const DEMO_GROUPS: Array<{
   label: string;
@@ -90,19 +98,22 @@ const DEMO_GROUPS: Array<{
   {
     label: "KI — K3L & MRO",
     accounts: [
-      { role: "ASMAN K3L", email: "asman.k3l@pusmanpro.pln.co.id" },
-      {
-        role: "ASMAN Manajemen Risiko & Kepatuhan",
-        email: "asman.mro@pusmanpro.pln.co.id",
-      },
+      { role: 'Staff Kinerja K3L', email: 'staff.k3l@pusmanpro.pln.co.id' },
+      { role: 'ASMAN K3L', email: 'asman.k3l@pusmanpro.pln.co.id' },
+      { role: 'Staff Kinerja MRO', email: 'staff.mro@pusmanpro.pln.co.id' },
+      { role: 'ASMAN Manajemen Risiko & Kepatuhan', email: 'asman.mro@pusmanpro.pln.co.id' },
     ],
   },
   ...["1", "2", "3", "4", "5"].map((n) => ({
     label: `UPMK ${["I", "II", "III", "IV", "V"][Number(n) - 1]}`,
     accounts: [
-      { role: "Staff Kinerja", email: `staff.upmk${n}@pusmanpro.pln.co.id` },
-      { role: "ASMAN UPMK", email: `asman.upmk${n}@pusmanpro.pln.co.id` },
-      { role: "Manajer (MUP)", email: `manajer.upmk${n}@pusmanpro.pln.co.id` },
+      { role: 'Staff Kinerja', email: `staff.upmk${n}@pusmanpro.pln.co.id` },
+      { role: 'ASMAN UPMK', email: `asman.upmk${n}@pusmanpro.pln.co.id` },
+      { role: 'Manajer (MUP)', email: `manajer.upmk${n}@pusmanpro.pln.co.id` },
+      ...UPMK_BAGIAN.flatMap((bg) => [
+        { role: `Staff PIC — ${bg.label}`, email: `staff.${bg.slug}.upmk${n}@pusmanpro.pln.co.id` },
+        { role: `ASMAN — ${bg.label}`, email: `asman.${bg.slug}.upmk${n}@pusmanpro.pln.co.id` },
+      ]),
     ],
   })),
 ];
@@ -293,12 +304,7 @@ export function LoginPage() {
                     </optgroup>
                   ))}
                 </select>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "var(--color-text-muted)",
-                    marginTop: 8,
-                  }}>
+                <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 8 }}>
                   Password semua akun demo: <code>{DEMO_PASSWORD}</code>
                 </div>
               </div>

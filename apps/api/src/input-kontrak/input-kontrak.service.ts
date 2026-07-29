@@ -55,6 +55,30 @@ export class InputKontrakService {
     });
   }
 
+  // KM yang bisa dipakai sebagai acuan Input Realisasi — KM Sementara berjalan PARALEL
+  // dengan alur reviewnya sendiri (Staff RPC → Checker → Approver), BUKAN prasyarat serial.
+  // Begitu Staff RPC men-submit (keluar dari 'draft'), unit/bidang yang dituju sudah dapat
+  // mengisi realisasi terhadapnya; dokumen KM lanjut direview independen di tab Dokumen KM.
+  async getForRealisasi(unitCode?: string, year?: string, kmType?: string) {
+    let periodIdsInYear: string[] | undefined;
+    if (year) {
+      const periods = await this.prisma.period.findMany({
+        where: { yearMonth: { startsWith: `${year}-` } },
+        select: { id: true },
+      });
+      periodIdsInYear = periods.map((p) => p.id);
+    }
+    return this.prisma.kontrakManajemen.findMany({
+      where: {
+        status: { in: ['submitted', 'ready', 'approved'] },
+        ...(unitCode ? { unitCode } : {}),
+        ...(periodIdsInYear ? { periodId: { in: periodIdsInYear } } : {}),
+        ...(kmType ? { kmType } : {}),
+      },
+      orderBy: [{ unitCode: 'asc' }, { submittedAt: 'desc' }],
+    });
+  }
+
   // Save: create a NEW kontrak, or update an existing one when `id` is given.
   // Tidak lagi menimpa kontrak lain pada unit/periode yang sama.
   async save(
@@ -365,13 +389,27 @@ export class InputKontrakService {
     // untuk scope ini — misal UPMK yang disahkan lewat bundle lama sebelum fitur pisah scope).
     const allApproved = components.length > 0 && components.every((c) => c.status === 'approved');
     const effectiveStatus = readyCount > 0 ? 'open' : allApproved ? 'approved' : (bundle?.status ?? 'open');
+    // Sisipkan persenAgregasi ke tiap item (read-only, tak ditulis balik ke DB) — konsumen
+    // (print bundle di FE) pakai ini utk membagi bobot sesuai porsi assignment alih-alih
+    // mencetak bobotKm penuh berulang di tiap bidang saat 1 KPI di-assign ke banyak bidang.
+    const masterIds = Array.from(new Set(
+      components.flatMap((c) => (Array.isArray(c.kpiItems) ? c.kpiItems as Record<string, unknown>[] : [])
+        .map((it) => it['masterKpiId']).filter((v): v is string => typeof v === 'string')),
+    ));
+    const assignments = masterIds.length
+      ? await this.prisma.kpiAssignment.findMany({ where: { kpiMasterId: { in: masterIds } } })
+      : [];
+    const persenLookup = new Map(assignments.map((a) => [`${a.kpiMasterId}|${a.unitCode}|${a.bidang}`, a.persenAgregasi]));
     return {
       year: yr, scope, kmType, status: effectiveStatus, reviewer: bundle?.reviewer ?? null,
       reviewNote: bundle?.reviewNote ?? null, reviewedAt: bundle?.reviewedAt ?? null,
       total: components.length, readyCount, canApprove,
       components: components.map((c) => ({
         id: c.id, unitCode: c.unitCode, bidang: c.bidang, status: c.status,
-        submitter: c.submitter, holder: c.holder, kpiItems: c.kpiItems, history: c.history,
+        submitter: c.submitter, holder: c.holder, history: c.history,
+        kpiItems: (Array.isArray(c.kpiItems) ? c.kpiItems as Record<string, unknown>[] : []).map((it) => ({
+          ...it, persenAgregasi: persenLookup.get(`${it['masterKpiId']}|${c.unitCode}|${c.bidang}`),
+        })),
       })),
     };
   }

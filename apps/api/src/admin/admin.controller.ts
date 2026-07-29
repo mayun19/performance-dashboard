@@ -39,11 +39,15 @@ export class AdminController {
     }
     await this.prisma.notification.deleteMany({});
     await this.prisma.auditLog.deleteMany({});
+    await this.prisma.revisionLog.deleteMany({});
+    await this.prisma.kpiRollupReview.deleteMany({});
     await this.prisma.realisasiBundle.deleteMany({});
     await this.prisma.inputRealisasi.deleteMany({});
     await this.prisma.kMBundle.deleteMany({});
     await this.prisma.kontrakManajemen.deleteMany({});
-    return { success: true, message: 'Semua data KM, realisasi, notifikasi, dan log audit berhasil dihapus.' };
+    // PeriodTarget & KpiAssignment ikut terhapus otomatis (onDelete: Cascade dari KpiMaster).
+    await this.prisma.kpiMaster.deleteMany({});
+    return { success: true, message: 'Semua data KPI Master, KM, realisasi, target periode, notifikasi, dan log audit berhasil dihapus.' };
   }
 
   // Override manual window pengisian realisasi — keputusan bisnis GM, bukan hanya admin sistem.

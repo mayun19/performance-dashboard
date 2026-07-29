@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, scoreItems, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, scoreItems, dedupFanOutRealisasi, resolveTarget, computeCapaian, computeNilai, breakdownComposite, specimenOrder, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class ExecutiveService {
@@ -31,13 +31,10 @@ export class ExecutiveService {
       return (await this.prisma.executiveSnapshot.findUnique({ where: { periodId_phase: { periodId: pid, phase: 'final' } } }))
         ?? this.prisma.executiveSnapshot.findUnique({ where: { periodId_phase: { periodId: pid, phase: 'sementara' } } });
     };
-    let snap = await pick(period.id);
-    // Fallback: bila periode terpilih belum punya snapshot naratif, pakai snapshot periode aktif
-    // sebagai baseline. Angka kinerja LIVE tetap mengikuti realisasi periode terpilih (via /kinerja/rekap).
-    if (!snap) {
-      const active = await this.prisma.period.findFirst({ where: { isActive: true } });
-      if (active && active.id !== period.id) snap = await pick(active.id);
-    }
+    // Tidak ada fallback ke snapshot periode lain — periode tanpa snapshot sendiri berarti
+    // benar-benar belum ada data kinerja utk periode itu (FE tampilkan empty state), bukan
+    // menampilkan angka periode lain seolah-olah itu data periode terpilih.
+    const snap = await pick(period.id);
     const result = { period, data: snap?.data ?? null, phase: snap?.phase ?? (phase ?? 'sementara') };
     await this.cache.set(cacheKey, result);
     return result;
@@ -67,12 +64,25 @@ export class ExecutiveService {
       }
     }
 
+    // Dedup KPI lintas-bidang (fan-out) SEBELUM discoring — lihat catatan dedupFanOutRealisasi
+    // di common/capaian.ts. Tanpa ini, KPI yang di-assign ke >1 bidang dalam unit yang sama
+    // (mis. "Pengendalian Anggaran" = OMP+KKU) dihitung berkali-kali di overall/unitScores.
+    const allMasterIds = Array.from(new Set(
+      allRecords.flatMap((r) => Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>))
+        .map((it) => it['masterKpiId']).filter((v): v is string => typeof v === 'string'),
+    ));
+    const allAssignments = allMasterIds.length
+      ? await this.prisma.kpiAssignment.findMany({ where: { kpiMasterId: { in: allMasterIds } } })
+      : [];
+    const persenLookup = new Map(allAssignments.map((a) => [`${a.kpiMasterId}|${a.unitCode}|${a.bidang}`, a.persenAgregasi]));
+
     // Per-unit score computation (KI-adjusted track — `values` adalah salinan kerja hasil
     // koreksi berjenjang, yang rolls up ke agregat parent).
     const byUnit: Record<string, typeof allRecords> = {};
     for (const r of allRecords) (byUnit[r.unitCode] ??= []).push(r);
     const unitScores = Object.entries(byUnit).map(([code, records]) => {
-      const items = records.flatMap((r) => Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>));
+      const rawItems = records.flatMap((r) => Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>).map((it) => ({ it, bidang: r.bidang })));
+      const items = dedupFanOutRealisasi(rawItems, persenLookup, code).map((f) => f.it);
       return { code, name: UNIT_NAMES[code] ?? code, score: scoreItems(items, targetOfRecord) };
     });
     // UPMK track (self-reported) — dihitung terpisah, tak pernah menimpa track KI.
@@ -85,10 +95,11 @@ export class ExecutiveService {
       ? r2(unitScores.reduce((s, u) => s + u.score, 0) / unitScores.length)
       : 0;
 
-    // Extract KP-specific KPI values
-    const kpItems = allRecords
+    // Extract KP-specific KPI values (deduped — dipakai widget efficiency/csat/safety dsb.)
+    const kpRawItems = allRecords
       .filter(r => r.unitCode === 'KP')
-      .flatMap(r => Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>));
+      .flatMap(r => Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>).map((it) => ({ it, bidang: r.bidang })));
+    const kpItems = dedupFanOutRealisasi(kpRawItems, persenLookup, 'KP').map((f) => f.it);
     const findKp = (test: (s: string) => boolean) =>
       kpItems.find(it => test(String(it['indikator'] ?? '').toLowerCase()));
     const iqcItem    = findKp(s => s.includes('inspection quality') || s.includes('iqc'));
@@ -136,21 +147,50 @@ export class ExecutiveService {
       ...(item ? { value: num(item['realisasi']) } : {}),
     });
 
-    // Update kpis sparklines (match by id or label keyword)
-    const existingKpis = (base.kpis ?? []) as Record<string, unknown>[];
-    const kpisUpdated = existingKpis.map(kpi => {
-      const label = String(kpi['label'] ?? '').toLowerCase();
-      const id = String(kpi['id'] ?? '').toLowerCase();
-      let item: Record<string, unknown> | undefined;
-      if (id === 'iqc' || label.includes('iqc') || label.includes('inspection quality')) item = iqcItem;
-      else if (label.includes('pelaksanaan konstruksi') || label.includes('persentase pelaksanaan')) item = pctItem;
-      else if (id === 'mw' || label.includes('pembangkit')) item = pembangkitItem;
-      else if (id === 'capex' || label.includes('capex') || label.includes('anggaran')) item = capexItem;
-      if (!item) return kpi;
-      const newVal = num(item['realisasi']);
-      const prevSpark = (kpi['sparkline'] ?? Array(12).fill(0)) as number[];
-      return { ...kpi, value: newVal, sparkline: [...prevSpark.slice(-11), newVal] };
-    });
+    // Bangun ulang daftar kartu KPI Executive Summary SEPENUHNYA dari data live tiap refresh
+    // (sebelumnya hanya "menempel" nilai ke beberapa entri prototype tetap — tak pernah
+    // mencerminkan seluruh KPI nyata, & tak bisa pulih sendiri bila basisnya tertimpa data
+    // seed). Sekarang mirror operational.service.ts: 1 kartu per KPI (termasuk item pengurang),
+    // diurutkan sesuai dokumen spesimen resmi (specimenOrder). id berbasis masterKpiId/nama
+    // (stabil lintas-refresh) — sparkline existing tetap dilanjutkan bila id cocok.
+    const existingKpisById = new Map(
+      ((base.kpis ?? []) as Record<string, unknown>[]).map((k) => [String(k['id'] ?? ''), k]),
+    );
+    const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const kpisBuilt = [...kpItems]
+      .sort((a, b) => specimenOrder(String(a['indikator'] ?? '')) - specimenOrder(String(b['indikator'] ?? '')))
+      .map((it, idx) => {
+        const name = String(it['indikator'] ?? '');
+        const id = typeof it['masterKpiId'] === 'string' ? (it['masterKpiId'] as string) : (slug(name) || `k${idx}`);
+        const existing = existingKpisById.get(id);
+        const bobot = num(it['bobot']);
+        const satuan = String(it['satuan'] ?? '');
+        const isInverse = satuan.toLowerCase() === 'hari kerja';
+        const subs = Array.isArray(it['subIndicators']) ? (it['subIndicators'] as Record<string, unknown>[]) : [];
+        let target = 0, actual = 0, achievement = 0, nilai = 0;
+        if (subs.length > 0) {
+          nilai = r2(breakdownComposite(it).reduce((s, si) => s + si.nilai, 0));
+          achievement = bobot !== 0 ? r2((nilai / bobot) * 100) : 0;
+        } else if (bobot < 0) {
+          actual = num(it['realisasi']);
+          nilai = actual > 0 ? r2(-Math.min(actual, Math.abs(bobot))) : 0;
+          achievement = bobot !== 0 ? r2((nilai / bobot) * 100) : 0;
+        } else {
+          target = resolveTarget(it, targetOfRecord);
+          actual = num(it['realisasi']);
+          achievement = computeCapaian(target, actual, isInverse);
+          nilai = computeNilai(bobot, achievement);
+        }
+        const prevSpark = (existing?.['sparkline'] ?? Array(12).fill(0)) as number[];
+        return {
+          id, label: name, name, bidang: it['bidang'] ?? '', category: bobot >= 7 ? 'KPI' : 'PI',
+          satuan, unit: satuan, target: r2(target), actual: r2(actual), value: r2(actual),
+          achievement: r2(achievement), status: achievement >= 100 ? 'Baik' : achievement >= 90 ? 'Hati-hati' : 'Tertinggal',
+          polarity: isInverse ? 'lower-is-better' : 'higher-is-better', polaritas: isInverse ? 'LB' : 'HB',
+          bobot, nilai, sparkline: [...prevSpark.slice(-11), r2(actual)],
+          commentary: existing?.['commentary'] ?? '', rootCause: existing?.['rootCause'] ?? '', actionPlan: existing?.['actionPlan'] ?? '',
+        };
+      });
 
     // capacityAddition: shift + push monthly values
     const period = await this.prisma.period.findUnique({ where: { id: periodId } });
@@ -206,7 +246,7 @@ export class ExecutiveService {
       efficiency: mergeField('efficiency', pctItem),
       csat:       mergeField('csat', iqcItem),
       safety:     mergeField('safety', kepatuhanItem),
-      capacityAddition, kpis: kpisUpdated, alerts, selfAssessmentAccuracy,
+      capacityAddition, kpis: kpisBuilt, alerts, selfAssessmentAccuracy,
     };
 
     await this.prisma.executiveSnapshot.upsert({

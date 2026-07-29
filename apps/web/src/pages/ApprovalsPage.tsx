@@ -1,12 +1,15 @@
 import { useEffect, useState, Fragment, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { approvals as approvalsApi, inputKontrak, inputRealisasi, meta as metaApi, admin, periodTarget, type PeriodTarget } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { usePeriod } from '../context/PeriodContext';
 import { useNotif } from '../context/NotifContext';
 import type { Report, KontrakManajemen, RealisasiKinerja } from '../lib/types';
-import { CheckCircle, XCircle, Clock, CalendarClock, FileText, UsersRound, FileSignature, ChevronDown, ClipboardCheck, Timer, MessageSquare, Pencil, Layers, Printer, Unlock, Lock } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, CalendarClock, FileText, UsersRound, FileSignature, ChevronDown, ClipboardCheck, Timer, MessageSquare, Pencil, Layers, Printer, Unlock, Lock, PieChart } from 'lucide-react';
 import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
+// Konsolidasi nilai parent KPI lintas-bidang (dulu tab "Review per-KPI" di Manajemen KPI) —
+// GM tak lagi punya akses menu Manajemen KPI (rpcOnly), jadi kartu ini dipindah ke sini.
+import { ReviewPerKpiTab } from './KpiMasterPage';
 
 // Badge SLA approval (Task 6): hari tersisa hingga deadline tahap berjalan.
 function SlaBadge({ days }: { days?: number | null }) {
@@ -25,25 +28,9 @@ function SlaBadge({ days }: { days?: number | null }) {
       ? "var(--color-warning-tint)"
       : "var(--color-success-tint)";
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        fontSize: 14,
-        fontWeight: 700,
-        color,
-        background: bg,
-        padding: "2px 8px",
-        borderRadius: 8,
-        whiteSpace: "nowrap",
-      }}>
-      <Timer size={14} />
-      {overdue
-        ? `Telat ${Math.abs(days)} hari`
-        : days === 0
-          ? "Jatuh tempo hari ini"
-          : `${days} hari lagi`}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color, background: bg, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>
+      <Timer size={11} />
+      {overdue ? `Telat ${Math.abs(days)} hari` : days === 0 ? 'Jatuh tempo hari ini' : `${days} hari lagi`}
     </span>
   );
 }
@@ -227,17 +214,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 function ApprovalTimeline({ history }: { history: unknown }) {
   const entries = Array.isArray(history) ? (history as HistEntry[]) : [];
-  if (entries.length === 0)
-    return (
-      <div
-        style={{
-          fontSize: 14,
-          color: "var(--color-text-muted)",
-          padding: "var(--space-3)",
-        }}>
-        Belum ada riwayat persetujuan.
-      </div>
-    );
+  if (entries.length === 0) return <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: 'var(--space-3)' }}>Belum ada riwayat persetujuan.</div>;
   return (
     <div
       style={{
@@ -247,22 +224,8 @@ function ApprovalTimeline({ history }: { history: unknown }) {
         gap: "var(--space-2)",
       }}>
       {entries.map((e, i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            gap: "var(--space-3)",
-            fontSize: 14,
-            alignItems: "flex-start",
-          }}>
-          <MessageSquare
-            size={14}
-            style={{
-              marginTop: 4,
-              color: "var(--color-text-muted)",
-              flexShrink: 0,
-            }}
-          />
+        <div key={i} style={{ display: 'flex', gap: 'var(--space-3)', fontSize: 13, alignItems: 'flex-start' }}>
+          <MessageSquare size={14} style={{  marginTop: 4, color: 'var(--color-text-muted)', flexShrink: 0 }} />
           <div>
             <div style={{ fontWeight: 600 }}>
               {ACTION_LABEL[e.action ?? ""] ?? e.action ?? "—"} ·{" "}
@@ -366,18 +329,10 @@ const STAGES = ["", "Staff", "Asman", "Manajer", "Sr. Manajer", "GM"];
 // Jenjang persetujuan usulan Kontrak Manajemen: Staff → Asman → Manajer → Sr. Manajer → GM (final)
 
 const DOC_STATUS_LABEL: Record<string, string> = {
-  draft: "Draft",
-  submitted: "Menunggu Review",
-  ready: "Siap Konsolidasi",
-  approved: "Disetujui",
-  rejected: "Dikembalikan",
+  draft: 'Draft', submitted: 'Menunggu Review', ready: 'Siap Konsolidasi', approved: 'Disetujui', rejected: 'Dikembalikan', target_fix: 'Koreksi Target (PIC REN)',
 };
 const DOC_STATUS_PILL: Record<string, string> = {
-  draft: "in-review",
-  submitted: "needs-revision",
-  ready: "at-risk",
-  approved: "completed",
-  rejected: "delayed",
+  draft: 'in-review', submitted: 'needs-revision', ready: 'at-risk', approved: 'completed', rejected: 'delayed', target_fix: 'needs-revision',
 };
 const UNIT_NAMES: Record<string, string> = {
   KP: "Kantor Induk",
@@ -388,12 +343,11 @@ const UNIT_NAMES: Record<string, string> = {
   UPMK5: "UPMK V",
 };
 const BIDANG_ORDER: Record<string, number> = {
-  "Operasi Manajemen Proyek": 0,
-  "QA/QC": 1,
-  "Keuangan, Komunikasi & Umum": 2,
-  "Perencanaan & Project Control": 3,
-  MRO: 4,
-  K3L: 5,
+  'Operasi Manajemen Proyek': 0, 'QA/QC': 1,
+  'Keuangan, Komunikasi & Umum': 2, 'Perencanaan & Project Control': 3,
+  'MRO': 4, 'K3L': 5,
+  // Bagian internal UPMK (taksonomi terpisah dari bidang Kantor Induk di atas)
+  'Bagian Pembangkit': 0, 'Bagian Jaringan': 1, 'Bagian KKU': 2, 'Bagian K3L': 3,
 };
 const sortByBidang = <T extends { bidang: string }>(arr: T[]): T[] =>
   [...arr].sort(
@@ -507,6 +461,7 @@ const WORKFLOW_STATIC = [
 export function ApprovalsPage() {
   const { user } = useAuth();
   const { refresh: refreshNotif } = useNotif();
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -514,9 +469,17 @@ export function ApprovalsPage() {
   // Review usulan Kontrak Manajemen (untuk Asman ke atas)
   // Reviewer = bukan Staff penyusun. PENGECUALIAN: Staff Kinerja Perencanaan (RPC) adalah
   // konsolidator pada workflow (langkah Staff RPC), sehingga butuh fungsi review/teruskan.
-  const canReview = !!user && (user.role !== 'STAFF' || user.bidang === 'Perencanaan & Project Control');
+  const canReview =
+    !!user &&
+    (user.role !== "STAFF" || user.bidang === "Perencanaan & Project Control");
   // PIC REN = Staff Perencanaan (RPC) di Kantor Induk — warden target KM Sementara (living-target).
-  const isPicRen = !!user && ((user.role === 'STAFF' && user.bidang === 'Perencanaan & Project Control' && user.unit === 'KP') || user.role === 'SUPERADMIN' || user.role === 'DEVELOPER');
+  const isPicRen =
+    !!user &&
+    ((user.role === "STAFF" &&
+      user.bidang === "Perencanaan & Project Control" &&
+      user.unit === "KP") ||
+      user.role === "SUPERADMIN" ||
+      user.role === "DEVELOPER");
   const [kmList, setKmList] = useState<KontrakManajemen[]>([]);
   const [kmNote, setKmNote] = useState("");
   const [kmTarget, setKmTarget] = useState<string | null>(null);
@@ -533,15 +496,22 @@ export function ApprovalsPage() {
   const [realExpanded, setRealExpanded] = useState<string | null>(null);
   const [realBusy, setRealBusy] = useState(false);
   const [realBulkBusy, setRealBulkBusy] = useState(false);
-  // B2-5: edit nilai realisasi saat review (per layer)
-  const [realEditId, setRealEditId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  // Modal pasca-keputusan Realisasi: arahkan reviewer ke "Tinjauan Realisasi Bulanan" utk
+  // melihat kembali dokumen yang baru saja diputuskan (lihat riwayat keputusan di sana).
+  const [postReviewModal, setPostReviewModal] = useState<{
+    action: "approve" | "reject";
+    unitCode: string;
+    bidang: string;
+  } | null>(null);
 
   // Living-target: koreksi KM Sementara oleh PIC REN untuk package berstatus 'target_fix'.
-  const [picRenTargets, setPicRenTargets] = useState<PeriodTarget[]>([]);
+  // periodId -> KM Sementara periode tsb (satu package target_fix hanya dikoreksi terhadap periodenya sendiri).
+  const [picRenTargets, setPicRenTargets] = useState<
+    Record<string, PeriodTarget[]>
+  >({});
   const [tfxExpanded, setTfxExpanded] = useState<string | null>(null);
   const [tfxValues, setTfxValues] = useState<Record<string, string>>({}); // masterKpiId -> target baru
-  const [tfxNote, setTfxNote] = useState('');
+  const [tfxNote, setTfxNote] = useState("");
   const [tfxBusy, setTfxBusy] = useState(false);
 
   // Semua dokumen yang diinput manual (KM + Realisasi) — untuk kartu ringkasan & registri
@@ -558,6 +528,13 @@ export function ApprovalsPage() {
   >(null);
   // Task 4: ekspansi riwayat komentar pada kartu "Semua Dokumen Persetujuan".
   const [docExpanded, setDocExpanded] = useState<string | null>(null);
+  // Filter tracker "Semua Dokumen Persetujuan" — jenis dokumen, status, dan periode.
+  const [trackerType, setTrackerType] = useState<"all" | "km" | "real">("all");
+  const [trackerStatus, setTrackerStatus] = useState<string>("all");
+  const [trackerPeriod, setTrackerPeriod] = useState<string>("all");
+  // Monitoring/audit (riwayat dokumen, timeline, RACI) — bukan aksi, disembunyikan default
+  // supaya halaman tetap fokus pada antrean; siapa pun bisa buka bila perlu.
+  const [showMonitoring, setShowMonitoring] = useState(false);
 
   // B4: Bundle konsolidasi realisasi periode (persetujuan GM sekali).
   const { periodId, periods, refreshPeriods } = usePeriod();
@@ -720,53 +697,114 @@ export function ApprovalsPage() {
     loadKmBundle();
   }, [periodId, kmBundleType]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Living-target: muat KM Sementara periode ini untuk pemetaan koreksi target (PIC REN).
-  const loadPicRenTargets = () => {
-    if (!isPicRen || !periodId) { setPicRenTargets([]); return; }
-    periodTarget.list(periodId).then((d) => setPicRenTargets(d)).catch(() => setPicRenTargets([]));
-  };
-  useEffect(() => { loadPicRenTargets(); }, [periodId, isPicRen]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Package berstatus 'target_fix' (menunggu koreksi target PIC REN) untuk periode terpilih.
+  // Package berstatus 'target_fix' (menunggu koreksi target PIC REN) — SEMUA periode, bukan
+  // hanya periode yang sedang dipilih di navbar (finding: koreksi Januari harus tetap tampil
+  // meski navbar sedang di Februari).
   const targetFixList = (allReal as RealisasiKinerja[]).filter(
-    (r) => r.status === 'target_fix' && (!periodId || r.periodId === periodId),
+    (r) => r.status === "target_fix",
   );
-  // Peta masterKpiId -> { assignmentId, livingTarget, frozen } untuk (unit,bidang) tertentu.
-  const assignmentForItem = (unitCode: string, bidang: string, masterKpiId?: string): PeriodTarget | undefined =>
+
+  // Living-target: muat KM Sementara PER PERIODE ASLI tiap package target_fix (bukan periode
+  // navbar) — tiap package dikoreksi terhadap KM Sementara periodenya sendiri.
+  const loadPicRenTargets = () => {
+    if (!isPicRen) {
+      setPicRenTargets({});
+      return;
+    }
+    const periodIds = [...new Set(targetFixList.map((r) => r.periodId))];
+    if (periodIds.length === 0) {
+      setPicRenTargets({});
+      return;
+    }
+    Promise.all(
+      periodIds.map((pid) =>
+        periodTarget.list(pid).then((d) => [pid, d] as const),
+      ),
+    )
+      .then((entries) => setPicRenTargets(Object.fromEntries(entries)))
+      .catch(() => setPicRenTargets({}));
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadPicRenTargets();
+  }, [isPicRen, targetFixList.map((r) => r.periodId).join(",")]);
+
+  // Peta masterKpiId -> { assignmentId, livingTarget, frozen } untuk (periode, unit, bidang) tertentu.
+  const assignmentForItem = (
+    periodId: string,
+    unitCode: string,
+    bidang: string,
+    masterKpiId?: string,
+  ): PeriodTarget | undefined =>
     masterKpiId
-      ? picRenTargets.find((pt) => pt.assignment
-          && pt.assignment.kpiMasterId === masterKpiId
-          && pt.assignment.unitCode === unitCode
-          && pt.assignment.bidang === bidang)
+      ? (picRenTargets[periodId] ?? []).find(
+          (pt) =>
+            pt.assignment &&
+            pt.assignment.kpiMasterId === masterKpiId &&
+            pt.assignment.unitCode === unitCode &&
+            pt.assignment.bidang === bidang,
+        )
       : undefined;
 
   const handleResolveTargetFix = async (rl: RealisasiKinerja) => {
-    if (!tfxNote.trim()) { alert('Catatan koreksi target wajib diisi'); return; }
-    const bidang = (rl as RealisasiKinerja & { bidang?: string }).bidang ?? '';
+    if (!tfxNote.trim()) {
+      alert("Catatan koreksi target wajib diisi");
+      return;
+    }
+    const bidang = (rl as RealisasiKinerja & { bidang?: string }).bidang ?? "";
     const updates: Array<{ kpiAssignmentId: string; target: string }> = [];
-    for (const it of Object.values(rl.values ?? {}) as Record<string, unknown>[]) {
-      const masterKpiId = it['masterKpiId'] as string | undefined;
-      const pt = assignmentForItem(rl.unitCode, bidang, masterKpiId);
-      const newVal = tfxValues[masterKpiId ?? ''];
-      if (pt?.assignment && newVal != null && newVal.trim() !== '' && newVal.trim() !== pt.target) {
-        updates.push({ kpiAssignmentId: pt.assignment.id, target: newVal.trim() });
+    for (const it of Object.values(rl.values ?? {}) as Record<
+      string,
+      unknown
+    >[]) {
+      const masterKpiId = it["masterKpiId"] as string | undefined;
+      const pt = assignmentForItem(
+        rl.periodId,
+        rl.unitCode,
+        bidang,
+        masterKpiId,
+      );
+      const newVal = tfxValues[masterKpiId ?? ""];
+      if (
+        pt?.assignment &&
+        newVal != null &&
+        newVal.trim() !== "" &&
+        newVal.trim() !== pt.target
+      ) {
+        updates.push({
+          kpiAssignmentId: pt.assignment.id,
+          target: newVal.trim(),
+        });
       }
     }
-    if (updates.length === 0) { alert('Ubah minimal satu target KM Sementara sebelum menyimpan koreksi.'); return; }
+    if (updates.length === 0) {
+      alert("Ubah minimal satu target KM Sementara sebelum menyimpan koreksi.");
+      return;
+    }
     setTfxBusy(true);
     try {
       await inputRealisasi.resolveTargetFix(rl.id, updates, tfxNote.trim());
-      setTfxExpanded(null); setTfxValues({}); setTfxNote('');
-      loadDocs(); loadPicRenTargets(); refreshNotif();
+      setTfxExpanded(null);
+      setTfxValues({});
+      setTfxNote("");
+      loadDocs();
+      loadPicRenTargets();
+      refreshNotif();
     } catch (e) {
-      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan koreksi target');
+      alert(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Gagal menyimpan koreksi target",
+      );
     } finally {
       setTfxBusy(false);
     }
   };
 
-  const handleKmBundleKPReview = async (action: 'approve' | 'reject') => {
-    if (!kmBundleKPNote.trim()) { alert('Catatan/komentar wajib diisi'); return; }
+  const handleKmBundleKPReview = async (action: "approve" | "reject") => {
+    if (!kmBundleKPNote.trim()) {
+      alert("Catatan/komentar wajib diisi");
+      return;
+    }
     setKmBundleKPBusy(true);
     try {
       await inputKontrak.reviewBundle(
@@ -843,6 +881,128 @@ export function ApprovalsPage() {
     }
   };
 
+  // Kunci identitas KPI utk gabung fan-out lintas bidang: masterKpiId bila ada, else nama indikator.
+  const kpiKey = (it: Record<string, unknown>) =>
+    String(it["masterKpiId"] ?? it["indikator"] ?? "");
+  const num = (v: unknown): number => {
+    const n = Number(
+      String(v ?? "")
+        .replace(",", ".")
+        .replace(/[^0-9.-]/g, ""),
+    );
+    return Number.isFinite(n) ? n : 0;
+  };
+  const getPersenAgregasi = (
+    it: Record<string, unknown>,
+  ): number | undefined =>
+    typeof it["persenAgregasi"] === "number"
+      ? (it["persenAgregasi"] as number)
+      : undefined;
+  const getSubIndicators = (
+    it: Record<string, unknown>,
+  ): Record<string, unknown>[] =>
+    Array.isArray(it["subIndicators"])
+      ? (it["subIndicators"] as Record<string, unknown>[])
+      : [];
+  const subLetter = (i: number) => String.fromCharCode(97 + i);
+  // Rollup realisasi lintas bidang: tertimbang persenAgregasi bila Σpct>0 (weighted / single
+  // 100%), else jumlah polos (metode SUM / persenAgregasi tak diketahui).
+  const rollupReal = (vals: number[], pcts: number[]): number => {
+    const totalPct = pcts.reduce((s, p) => s + p, 0);
+    const r =
+      totalPct > 0
+        ? vals.reduce((s, v, i) => s + v * (pcts[i] / 100), 0)
+        : vals.reduce((s, v) => s + v, 0);
+    return Math.round(r * 100) / 100;
+  };
+  // Gabung list {it,bidang} lintas bidang/fan-out → satu entri per KPI (urutan = kemunculan
+  // pertama) — cegah KPI yang di-assign ke banyak bidang tercetak berulang di print. Item wakil =
+  // kemunculan pertama (target/sub/formula/satuan diasumsikan identik antar fan-out, dijamin oleh
+  // fanOut() di kpi-master.service.ts). withRealisasi=true (print Realisasi) → realisasi (item
+  // biasa) atau realisasi tiap sub (komposit, per-index) di-rollup dari SELURUH anggota grup;
+  // false (print KM, tak ada realisasi) → item wakil dipakai apa adanya.
+  const dedupFlat = (
+    flat: { it: Record<string, unknown>; bidang: string }[],
+    withRealisasi: boolean,
+  ): { it: Record<string, unknown>; bidang: string }[] => {
+    const order: string[] = [];
+    const groups = new Map<
+      string,
+      { it: Record<string, unknown>; bidang: string }[]
+    >();
+    for (const entry of flat) {
+      const key = kpiKey(entry.it);
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        order.push(key);
+      }
+      groups.get(key)!.push(entry);
+    }
+    return order.map((key) => {
+      const members = groups.get(key)!;
+      const first = members[0];
+      if (!withRealisasi || members.length === 1) return first;
+      const pcts = members.map((m) => getPersenAgregasi(m.it) ?? 0);
+      const subs = getSubIndicators(first.it);
+      if (subs.length > 0) {
+        const rolledSubs = subs.map((si, j) => ({
+          ...si,
+          realisasi: rollupReal(
+            members.map((m) => num(getSubIndicators(m.it)[j]?.["realisasi"])),
+            pcts,
+          ),
+        }));
+        return {
+          it: { ...first.it, subIndicators: rolledSubs },
+          bidang: first.bidang,
+        };
+      }
+      return {
+        it: {
+          ...first.it,
+          realisasi: rollupReal(
+            members.map((m) => num(m.it["realisasi"])),
+            pcts,
+          ),
+        },
+        bidang: first.bidang,
+      };
+    });
+  };
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  // Mirror persis common/capaian.ts (backend) — dipakai print Realisasi utk kolom NILAI.
+  const computeCapaianPct = (
+    target: number,
+    actual: number,
+    isInverse: boolean,
+  ): number => {
+    if (target <= 0 || actual <= 0) return 0;
+    return isInverse
+      ? Math.min((target / actual) * 100, 110)
+      : Math.min((actual / target) * 100, 110);
+  };
+  // Nilai satu baris (item biasa atau satu sub-indikator). Item/sub pengurang (bobot<0):
+  // nilai = -min(realisasi, |bobot|), realisasi = poin pelanggaran, dibatasi plafon Max Penalti.
+  // Item biasa (bobot>0): nilai = capaian% x bobot.
+  const computeNilaiRow = (
+    bobot: number,
+    target: number,
+    actual: number,
+    satuan: string,
+  ): number => {
+    if (bobot < 0)
+      return actual > 0 ? r2(-Math.min(actual, Math.abs(bobot))) : 0;
+    const capaian =
+      bobot > 0 && target > 0 && actual > 0
+        ? computeCapaianPct(
+            target,
+            actual,
+            satuan.toLowerCase() === "hari kerja",
+          )
+        : 0;
+    return r2((capaian / 100) * bobot);
+  };
+
   const handlePrintRealBundle = () => {
     if (!bundle) return;
     const periodLabel = bundle.period?.label ?? "Periode Aktif";
@@ -870,31 +1030,6 @@ export function ApprovalsPage() {
       ".sign{margin-top:24pt;display:flex;justify-content:flex-end}" +
       ".sb{text-align:center;width:170pt}.sl{margin-top:46pt;border-top:0.5pt solid #333;padding-top:3pt;font-size:7.5pt}";
     let n = 1;
-    const buildSection = (c: (typeof bundle.components)[number]): string => {
-      const items =
-        c.values && typeof c.values === "object"
-          ? Object.values(c.values as Record<string, Record<string, unknown>>)
-          : [];
-      let rows = "";
-      if (items.length === 0) {
-        rows += `<tr><td class="num">—</td><td colspan="7" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
-      } else {
-        items.forEach((it) => {
-          rows +=
-            `<tr>` +
-            `<td class="num">${n++}</td>` +
-            `<td>${it["indikator"] ?? "—"}</td>` +
-            `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
-            `<td class="num">${it["satuan"] ?? "—"}</td>` +
-            `<td class="num">${it["bobot"] ?? "—"}</td>` +
-            `<td class="rt">${it["target"] ?? "—"}</td>` +
-            `<td class="rw">${it["realisasi"] ?? "—"}</td>` +
-            `<td class="num" style="font-size:7pt">${c.bidang}</td>` +
-            `</tr>`;
-        });
-      }
-      return rows;
-    };
     const kpComps = bundle.components.filter((c) => c.unitCode === "KP");
     const upmkGroups = Object.entries(
       bundle.components
@@ -917,7 +1052,11 @@ export function ApprovalsPage() {
       const s = ind.toLowerCase();
       if (s.includes("inspection quality") || s.includes("iqc")) return 10;
       if (s.includes("kajian supervisi")) return 20;
-      if (s.includes("evaluasi, analisa") || s.includes("evaluasi analisa"))
+      if (
+        s.includes("evaluasi") &&
+        s.includes("analisa") &&
+        s.includes("rekomendasi")
+      )
         return 30;
       if (s.includes("persentase pelaksanaan")) return 40;
       if (s.includes("kapasitas pembangkit")) return 50;
@@ -930,6 +1069,7 @@ export function ApprovalsPage() {
         return 81;
       if (s.includes("pengendalian nac") || s.includes("non allowable"))
         return 82;
+      if (s.includes("pengendalian") && s.includes("anggaran")) return 80; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
       if (s.includes("evaluasi akurasi data")) return 90;
       if (s.includes("pemenuhan pdn") || s.includes("pdn korporat")) return 100;
       if (
@@ -942,7 +1082,8 @@ export function ApprovalsPage() {
       if (s.includes("tata kelola")) return 123;
       return 999;
     };
-    const kpSorted = [...kpAllFlat].sort(
+    const kpDeduped = dedupFlat(kpAllFlat, true);
+    const kpSorted = [...kpDeduped].sort(
       (a, b) =>
         getKpOrder(String(a.it["indikator"] ?? "")) -
         getKpOrder(String(b.it["indikator"] ?? "")),
@@ -954,17 +1095,64 @@ export function ApprovalsPage() {
       subR12 = 0;
     const subLtrR = (i: number) => String.fromCharCode(97 + i);
     let kpBody = "";
-    for (const { it, bidang } of kpSorted) {
+    let kpTotalNilai = 0;
+    for (const { it } of kpSorted) {
+      const subs = getSubIndicators(it);
+      if (subs.length > 0) {
+        let compositeNilai = 0;
+        const subRows = subs
+          .map((si, j) => {
+            const sBobot = num(si["bobot"]);
+            const sTarget = num(si["target2"] ?? si["target"]);
+            const sActual = num(si["realisasi"]);
+            const sNilai = computeNilaiRow(
+              sBobot,
+              sTarget,
+              sActual,
+              String(si["satuan"] ?? ""),
+            );
+            compositeNilai += sNilai;
+            return (
+              `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
+              `<td style="padding-left:10pt">${si["nama"] ?? "—"}</td>` +
+              `<td style="font-size:7pt;color:#444">${si["formula"] ?? "—"}</td>` +
+              `<td class="num">${si["satuan"] ?? "—"}</td>` +
+              `<td class="num">${sBobot || "—"}</td>` +
+              `<td class="rt">${si["target2"] ?? si["target"] ?? "—"}</td>` +
+              `<td class="rw">${si["realisasi"] ?? "—"}</td>` +
+              `<td class="num">${sNilai || "—"}</td></tr>`
+            );
+          })
+          .join("");
+        compositeNilai = r2(compositeNilai);
+        kpTotalNilai += compositeNilai;
+        kpBody +=
+          `<tr><td class="num">${n++}</td>` +
+          `<td colspan="6" style="font-weight:700">${it["indikator"] ?? "—"} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
+          `<td class="num" style="font-weight:700">${compositeNilai || "—"}</td></tr>` +
+          subRows;
+        continue;
+      }
+      const bobot = num(it["bobot"]);
+      const target = num(it["target"]);
+      const actual = num(it["realisasi"]);
+      const nilai = computeNilaiRow(
+        bobot,
+        target,
+        actual,
+        String(it["satuan"] ?? ""),
+      );
+      kpTotalNilai += nilai;
       const ord = getKpOrder(String(it["indikator"] ?? ""));
       const isG8 = ord === 81 || ord === 82;
       const isG12 = ord === 121 || ord === 122 || ord === 123;
       if (isG8 && !grpR8) {
-        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td></td></tr>`;
         grpR8 = true;
         subR8 = 0;
       }
       if (isG12 && !grpR12) {
-        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+        kpBody += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td></td></tr>`;
         grpR12 = true;
         subR12 = 0;
       }
@@ -978,10 +1166,10 @@ export function ApprovalsPage() {
           `<td style="padding-left:10pt">${subInd}</td>` +
           `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
           `<td class="num">${it["satuan"] ?? "—"}</td>` +
-          `<td class="num">${it["bobot"] ?? "—"}</td>` +
+          `<td class="num">${num(it["bobot"]) || "—"}</td>` +
           `<td class="rt">${it["target"] ?? "—"}</td>` +
           `<td class="rw">${it["realisasi"] ?? "—"}</td>` +
-          `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+          `<td class="num">${nilai || "—"}</td></tr>`;
       } else if (isG12) {
         const subInd = String(it["indikator"] ?? "").replace(
           /^Pengurang\s*[-–]\s*/i,
@@ -992,22 +1180,26 @@ export function ApprovalsPage() {
           `<td style="padding-left:10pt">${subInd}</td>` +
           `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
           `<td class="num">${it["satuan"] ?? "—"}</td>` +
-          `<td class="num">${it["bobot"] ?? "—"}</td>` +
+          `<td class="num">${num(it["bobot"]) || "—"}</td>` +
           `<td class="rt">${it["target"] ?? "—"}</td>` +
           `<td class="rw">${it["realisasi"] ?? "—"}</td>` +
-          `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+          `<td class="num">${nilai || "—"}</td></tr>`;
       } else {
         kpBody +=
           `<tr><td class="num">${n++}</td>` +
           `<td>${it["indikator"] ?? "—"}</td>` +
           `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
           `<td class="num">${it["satuan"] ?? "—"}</td>` +
-          `<td class="num">${it["bobot"] ?? "—"}</td>` +
+          `<td class="num">${num(it["bobot"]) || "—"}</td>` +
           `<td class="rt">${it["target"] ?? "—"}</td>` +
           `<td class="rw">${it["realisasi"] ?? "—"}</td>` +
-          `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+          `<td class="num">${nilai || "—"}</td></tr>`;
       }
     }
+    kpBody +=
+      `<tr class="tot">` +
+      `<td colspan="7" style="text-align:right;padding-right:8pt">TOTAL NILAI KANTOR INDUK</td>` +
+      `<td class="num">${r2(kpTotalNilai) || "—"}</td></tr>`;
     let body = catRow("A. KANTOR INDUK") + kpBody;
     const getUpmkOrdR = (ind: string): number => {
       const s = ind.toLowerCase();
@@ -1020,6 +1212,7 @@ export function ApprovalsPage() {
         return 61;
       if (s.includes("pengendalian") && s.includes("penggunaan anggaran"))
         return 62;
+      if (s.includes("pengendalian") && s.includes("anggaran")) return 60; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
       if (s.includes("pemenuhan pdn") || s.includes("pdn korporat")) return 70;
       if (
         s.includes("evaluasi penyelesaian") ||
@@ -1043,7 +1236,8 @@ export function ApprovalsPage() {
             : [];
         return vals.map((it) => ({ it, bidang: c.bidang }));
       });
-      const uSorted = [...uFlat].sort(
+      const uDeduped = dedupFlat(uFlat, true);
+      const uSorted = [...uDeduped].sort(
         (a, b) =>
           getUpmkOrdR(String(a.it["indikator"] ?? "")) -
           getUpmkOrdR(String(b.it["indikator"] ?? "")),
@@ -1053,17 +1247,62 @@ export function ApprovalsPage() {
         uS6 = 0,
         uS9 = 0;
       const slU = (j: number) => String.fromCharCode(97 + j);
-      for (const { it, bidang } of uSorted) {
+      let uTotalNilai = 0;
+      for (const { it } of uSorted) {
+        const subs = getSubIndicators(it);
+        if (subs.length > 0) {
+          let compositeNilai = 0;
+          const subRows = subs
+            .map((si, j) => {
+              const sBobot = num(si["bobot"]);
+              const sTarget = num(si["target2"] ?? si["target"]);
+              const sActual = num(si["realisasi"]);
+              const sNilai = computeNilaiRow(
+                sBobot,
+                sTarget,
+                sActual,
+                String(si["satuan"] ?? ""),
+              );
+              compositeNilai += sNilai;
+              return (
+                `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
+                `<td style="padding-left:10pt">${si["nama"] ?? "—"}</td>` +
+                `<td style="font-size:7pt;color:#444">${si["formula"] ?? "—"}</td>` +
+                `<td class="num">${si["satuan"] ?? "—"}</td><td class="num">${sBobot || "—"}</td>` +
+                `<td class="rt">${si["target2"] ?? si["target"] ?? "—"}</td><td class="rw">${si["realisasi"] ?? "—"}</td>` +
+                `<td class="num">${sNilai || "—"}</td></tr>`
+              );
+            })
+            .join("");
+          compositeNilai = r2(compositeNilai);
+          uTotalNilai += compositeNilai;
+          body +=
+            `<tr><td class="num">${n++}</td>` +
+            `<td colspan="6" style="font-weight:700">${it["indikator"] ?? "—"} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td>` +
+            `<td class="num" style="font-weight:700">${compositeNilai || "—"}</td></tr>` +
+            subRows;
+          continue;
+        }
+        const bobot = num(it["bobot"]);
+        const target = num(it["target"]);
+        const actual = num(it["realisasi"]);
+        const nilai = computeNilaiRow(
+          bobot,
+          target,
+          actual,
+          String(it["satuan"] ?? ""),
+        );
+        uTotalNilai += nilai;
         const ord = getUpmkOrdR(String(it["indikator"] ?? ""));
         const iG6 = ord === 61 || ord === 62;
         const iG9 = ord === 91 || ord === 92 || ord === 93;
         if (iG6 && !uG6) {
-          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td></td></tr>`;
           uG6 = true;
           uS6 = 0;
         }
         if (iG9 && !uG9) {
-          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+          body += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td></td></tr>`;
           uG9 = true;
           uS9 = 0;
         }
@@ -1075,9 +1314,9 @@ export function ApprovalsPage() {
             `<tr><td class="num" style="font-size:7pt">${slU(uS6++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
-            `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
+            `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${num(it["bobot"]) || "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["realisasi"] ?? "—"}</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td class="num">${nilai || "—"}</td></tr>`;
         } else if (iG9) {
           const si = String(it["indikator"] ?? "")
             .replace(/^Pengurang\s*[-–]\s*/i, "")
@@ -1086,20 +1325,25 @@ export function ApprovalsPage() {
             `<tr><td class="num" style="font-size:7pt">${slU(uS9++)}.</td>` +
             `<td style="padding-left:10pt">${si}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
-            `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
+            `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${num(it["bobot"]) || "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["realisasi"] ?? "—"}</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td class="num">${nilai || "—"}</td></tr>`;
         } else {
           body +=
             `<tr><td class="num">${n++}</td><td>${it["indikator"] ?? "—"}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
-            `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
+            `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${num(it["bobot"]) || "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["realisasi"] ?? "—"}</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td class="num">${nilai || "—"}</td></tr>`;
         }
       }
       if (uSorted.length === 0) {
         body += `<tr><td class="num">—</td><td colspan="7" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
+      } else {
+        body +=
+          `<tr class="tot">` +
+          `<td colspan="7" style="text-align:right;padding-right:8pt">TOTAL NILAI ${(UNIT_NAMES[unitCode] ?? unitCode).toUpperCase()}</td>` +
+          `<td class="num">${r2(uTotalNilai) || "—"}</td></tr>`;
       }
     });
     const html =
@@ -1111,12 +1355,12 @@ export function ApprovalsPage() {
       `<p class="t3">Periode ${periodLabel}</p>` +
       `<p class="meta">Dicetak: ${printDate}</p></div>` +
       `<table><colgroup>` +
-      `<col style="width:3%"><col style="width:22%"><col style="width:18%">` +
-      `<col style="width:6%"><col style="width:5%"><col style="width:12%"><col style="width:12%"><col style="width:12%">` +
+      `<col style="width:3%"><col style="width:30%"><col style="width:25%">` +
+      `<col style="width:6%"><col style="width:5%"><col style="width:11%"><col style="width:11%"><col style="width:9%">` +
       `</colgroup>` +
       `<thead><tr>` +
       `<th>No</th><th>INDIKATOR KINERJA KUNCI</th><th>FORMULA</th>` +
-      `<th>SATUAN</th><th>BOBOT</th><th>TARGET</th><th>REALISASI</th><th>PIC</th>` +
+      `<th>SATUAN</th><th>BOBOT</th><th>TARGET</th><th>REALISASI</th><th>NILAI</th>` +
       `</tr></thead>` +
       `<tbody>${body}</tbody></table>` +
       `<div class="summ">Total komponen: <b>${bundle.total}</b> &nbsp;|&nbsp; ` +
@@ -1170,7 +1414,11 @@ export function ApprovalsPage() {
         const s = ind.toLowerCase();
         if (s.includes("inspection quality") || s.includes("iqc")) return 10;
         if (s.includes("kajian supervisi")) return 20;
-        if (s.includes("evaluasi, analisa") || s.includes("evaluasi analisa"))
+        if (
+          s.includes("evaluasi") &&
+          s.includes("analisa") &&
+          s.includes("rekomendasi")
+        )
           return 30;
         if (s.includes("persentase pelaksanaan")) return 40;
         if (s.includes("kapasitas pembangkit")) return 50;
@@ -1184,6 +1432,7 @@ export function ApprovalsPage() {
           return 81;
         if (s.includes("pengendalian nac") || s.includes("non allowable"))
           return 82;
+        if (s.includes("pengendalian") && s.includes("anggaran")) return 80; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
         if (s.includes("evaluasi akurasi data")) return 90;
         if (s.includes("pemenuhan pdn") || s.includes("pdn korporat"))
           return 100;
@@ -1197,15 +1446,18 @@ export function ApprovalsPage() {
         if (s.includes("tata kelola")) return 123;
         return 999;
       };
-      const sortedFlat = [...allFlat].sort(
+      const dedupedFlat = dedupFlat(allFlat, false);
+      const sortedFlat = [...dedupedFlat].sort(
         (a, b) =>
           getItemOrder(String(a.it["indikator"] ?? "")) -
           getItemOrder(String(b.it["indikator"] ?? "")),
       );
-      const totalBobot = allFlat.reduce(
-        (s, { it }) => s + (Number(it["bobot"]) || 0),
-        0,
-      );
+      // Indikator pengurang/penalti (bobot negatif, mis. "Kepatuhan, Maturity Level dan Tata
+      // Kelola Perusahaan") tidak ikut disumasikan ke TOTAL — hanya bobot positif (target 100%).
+      const totalBobot = dedupedFlat.reduce((s, { it }) => {
+        const b = num(it["bobot"]);
+        return b > 0 ? s + b : s;
+      }, 0);
       let n = 1;
       let grp8Emitted = false;
       let grp12Emitted = false;
@@ -1213,23 +1465,38 @@ export function ApprovalsPage() {
       let sub12 = 0;
       const subLtr = (i: number) => String.fromCharCode(97 + i);
       let body = "";
-      for (const { it, bidang } of sortedFlat) {
+      for (const { it } of sortedFlat) {
+        const subs = getSubIndicators(it);
+        if (subs.length > 0) {
+          body +=
+            `<tr><td class="num">${n++}</td>` +
+            `<td colspan="6" style="font-weight:700">${it["indikator"] ?? "—"} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td></tr>`;
+          subs.forEach((si, j) => {
+            body +=
+              `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
+              `<td style="padding-left:10pt">${si["nama"] ?? "—"}</td>` +
+              `<td style="font-size:7pt;color:#444">${si["formula"] ?? "—"}</td>` +
+              `<td class="num">${si["satuan"] ?? "—"}</td>` +
+              `<td class="num">${num(si["bobot"]) || "—"}</td>` +
+              `<td class="rt">${si["target"] ?? "—"}</td>` +
+              `<td class="rw">${si["target2"] ?? "—"}</td></tr>`;
+          });
+          continue;
+        }
         const ord = getItemOrder(String(it["indikator"] ?? ""));
         const isGrp8 = ord === 81 || ord === 82;
         const isGrp12 = ord === 121 || ord === 122 || ord === 123;
         if (isGrp8 && !grp8Emitted) {
           body +=
             `<tr><td class="num">${n++}</td>` +
-            `<td colspan="6" style="font-weight:700">Pengendalian Anggaran</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td colspan="6" style="font-weight:700">Pengendalian Anggaran</td></tr>`;
           grp8Emitted = true;
           sub8 = 0;
         }
         if (isGrp12 && !grp12Emitted) {
           body +=
             `<tr><td class="num">${n++}</td>` +
-            `<td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td></tr>`;
           grp12Emitted = true;
           sub12 = 0;
         }
@@ -1243,10 +1510,9 @@ export function ApprovalsPage() {
             `<td style="padding-left:10pt">${subInd}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
             `<td class="num">${it["satuan"] ?? "—"}</td>` +
-            `<td class="num">${it["bobot"] ?? "—"}</td>` +
+            `<td class="num">${num(it["bobot"]) || "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td>` +
-            `<td class="rw">${it["target2"] ?? "—"}</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td class="rw">${it["target2"] ?? "—"}</td></tr>`;
         } else if (isGrp12) {
           const subInd = String(it["indikator"] ?? "").replace(
             /^Pengurang\s*[-–]\s*/i,
@@ -1257,26 +1523,24 @@ export function ApprovalsPage() {
             `<td style="padding-left:10pt">${subInd}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
             `<td class="num">${it["satuan"] ?? "—"}</td>` +
-            `<td class="num">${it["bobot"] ?? "—"}</td>` +
+            `<td class="num">${num(it["bobot"]) || "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td>` +
-            `<td class="rw">${it["target2"] ?? "—"}</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td class="rw">${it["target2"] ?? "—"}</td></tr>`;
         } else {
           body +=
             `<tr><td class="num">${n++}</td>` +
             `<td>${it["indikator"] ?? "—"}</td>` +
             `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
             `<td class="num">${it["satuan"] ?? "—"}</td>` +
-            `<td class="num">${it["bobot"] ?? "—"}</td>` +
+            `<td class="num">${num(it["bobot"]) || "—"}</td>` +
             `<td class="rt">${it["target"] ?? "—"}</td>` +
-            `<td class="rw">${it["target2"] ?? "—"}</td>` +
-            `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            `<td class="rw">${it["target2"] ?? "—"}</td></tr>`;
         }
       }
       body +=
         `<tr class="tot">` +
         `<td colspan="4" style="text-align:right;padding-right:8pt">TOTAL</td>` +
-        `<td class="num">${totalBobot || "—"}</td><td colspan="3"></td></tr>`;
+        `<td class="num">${totalBobot || "—"}</td><td colspan="2"></td></tr>`;
       html =
         `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">` +
         `<title>Kontrak Manajemen Tahunan — Kantor Induk ${year}</title><style>${css}</style></head><body>` +
@@ -1285,11 +1549,11 @@ export function ApprovalsPage() {
         `<p class="t3">Kantor Induk &mdash; Tahun ${year}</p>` +
         `<p class="meta">Dicetak: ${printDate}</p></div>` +
         `<table><colgroup>` +
-        `<col style="width:3%"><col style="width:20%"><col style="width:18%">` +
-        `<col style="width:6%"><col style="width:5%"><col style="width:13%"><col style="width:13%"><col style="width:12%">` +
+        `<col style="width:3%"><col style="width:27%"><col style="width:23%">` +
+        `<col style="width:6%"><col style="width:5%"><col style="width:13%"><col style="width:13%">` +
         `</colgroup><thead><tr>` +
         `<th>No</th><th>INDIKATOR KINERJA</th><th>FORMULA</th>` +
-        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th><th>PIC</th>` +
+        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th>` +
         `</tr></thead><tbody>${body}</tbody></table>` +
         `<div class="summ">Total KM: <b>${km.total}</b> &nbsp;|&nbsp; ` +
         `Siap: <b>${km.readyCount}</b> &nbsp;|&nbsp; ` +
@@ -1325,6 +1589,7 @@ export function ApprovalsPage() {
           return 61;
         if (s.includes("pengendalian") && s.includes("penggunaan anggaran"))
           return 62;
+        if (s.includes("pengendalian") && s.includes("anggaran")) return 60; // KPI komposit "Pengendalian Anggaran" (parent, tanpa akhiran investasi/NAC)
         if (s.includes("pemenuhan pdn") || s.includes("pdn korporat"))
           return 70;
         if (
@@ -1341,7 +1606,8 @@ export function ApprovalsPage() {
         const flat = comps.flatMap((c) =>
           (c.kpiItems ?? []).map((it) => ({ it, bidang: c.bidang })),
         );
-        const sorted = [...flat].sort(
+        const deduped = dedupFlat(flat, false);
+        const sorted = [...deduped].sort(
           (a, b) =>
             getUpmkOrd(String(a.it["indikator"] ?? "")) -
             getUpmkOrd(String(b.it["indikator"] ?? "")),
@@ -1352,17 +1618,32 @@ export function ApprovalsPage() {
           s9 = 0;
         const sl = (i: number) => String.fromCharCode(97 + i);
         let rows = "";
-        for (const { it, bidang } of sorted) {
+        for (const { it } of sorted) {
+          const subs = getSubIndicators(it);
+          if (subs.length > 0) {
+            rows +=
+              `<tr><td class="num">${n++}</td>` +
+              `<td colspan="6" style="font-weight:700">${it["indikator"] ?? "—"} <span style="font-weight:400;font-style:italic">(Komposit — ${subs.length} sub-indikator)</span></td></tr>`;
+            subs.forEach((si, j) => {
+              rows +=
+                `<tr><td class="num" style="font-size:7pt">${subLetter(j)}.</td>` +
+                `<td style="padding-left:10pt">${si["nama"] ?? "—"}</td>` +
+                `<td style="font-size:7pt;color:#444">${si["formula"] ?? "—"}</td>` +
+                `<td class="num">${si["satuan"] ?? "—"}</td><td class="num">${num(si["bobot"]) || "—"}</td>` +
+                `<td class="rt">${si["target"] ?? "—"}</td><td class="rw">${si["target2"] ?? "—"}</td></tr>`;
+            });
+            continue;
+          }
           const ord = getUpmkOrd(String(it["indikator"] ?? ""));
           const iG6 = ord === 61 || ord === 62;
           const iG9 = ord === 91 || ord === 92 || ord === 93;
           if (iG6 && !g6) {
-            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Pengendalian Anggaran</td></tr>`;
             g6 = true;
             s6 = 0;
           }
           if (iG9 && !g9) {
-            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td><td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+            rows += `<tr><td class="num">${n++}</td><td colspan="6" style="font-weight:700">Kepatuhan, Maturity Level dan Tata Kelola Perusahaan</td></tr>`;
             g9 = true;
             s9 = 0;
           }
@@ -1374,9 +1655,8 @@ export function ApprovalsPage() {
               `<tr><td class="num" style="font-size:7pt">${sl(s6++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
-              `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
-              `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td>` +
-              `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+              `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${num(it["bobot"]) || "—"}</td>` +
+              `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td></tr>`;
           } else if (iG9) {
             const si = String(it["indikator"] ?? "")
               .replace(/^Pengurang\s*[-–]\s*/i, "")
@@ -1385,20 +1665,18 @@ export function ApprovalsPage() {
               `<tr><td class="num" style="font-size:7pt">${sl(s9++)}.</td>` +
               `<td style="padding-left:10pt">${si}</td>` +
               `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
-              `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
-              `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td>` +
-              `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+              `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${num(it["bobot"]) || "—"}</td>` +
+              `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td></tr>`;
           } else {
             rows +=
               `<tr><td class="num">${n++}</td><td>${it["indikator"] ?? "—"}</td>` +
               `<td style="font-size:7pt;color:#444">${it["formula"] ?? "—"}</td>` +
-              `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${it["bobot"] ?? "—"}</td>` +
-              `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td>` +
-              `<td class="num" style="font-size:7pt">${bidang}</td></tr>`;
+              `<td class="num">${it["satuan"] ?? "—"}</td><td class="num">${num(it["bobot"]) || "—"}</td>` +
+              `<td class="rt">${it["target"] ?? "—"}</td><td class="rw">${it["target2"] ?? "—"}</td></tr>`;
           }
         }
         if (rows === "")
-          rows = `<tr><td class="num">—</td><td colspan="7" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
+          rows = `<tr><td class="num">—</td><td colspan="6" style="color:#999;font-style:italic">Tidak ada data KPI</td></tr>`;
         return rows;
       };
       const groups = Object.entries(
@@ -1411,15 +1689,15 @@ export function ApprovalsPage() {
         .map(([unitCode, comps], gi) => {
           n = 1;
           return (
-            `<tr class="cat"><td colspan="8">${String.fromCharCode(65 + gi)}. ${(UNIT_NAMES[unitCode] ?? unitCode).toUpperCase()}</td></tr>` +
+            `<tr class="cat"><td colspan="7">${String.fromCharCode(65 + gi)}. ${(UNIT_NAMES[unitCode] ?? unitCode).toUpperCase()}</td></tr>` +
             buildUpmkGroupRows(comps)
           );
         })
         .join("");
       const colgroup =
         `<colgroup>` +
-        `<col style="width:3%"><col style="width:22%"><col style="width:18%">` +
-        `<col style="width:6%"><col style="width:5%"><col style="width:12%"><col style="width:12%"><col style="width:12%">` +
+        `<col style="width:3%"><col style="width:29%"><col style="width:23%">` +
+        `<col style="width:6%"><col style="width:5%"><col style="width:12%"><col style="width:12%">` +
         `</colgroup>`;
       html =
         `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">` +
@@ -1430,7 +1708,7 @@ export function ApprovalsPage() {
         `<p class="meta">Dicetak: ${printDate}</p></div>` +
         `<table>${colgroup}<thead><tr>` +
         `<th>No</th><th>INDIKATOR KINERJA</th><th>FORMULA</th>` +
-        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th><th>PIC</th>` +
+        `<th>SATUAN</th><th>BOBOT</th><th>TARGET SEM I</th><th>TARGET ${year}</th>` +
         `</tr></thead><tbody>${body}</tbody></table>` +
         `<div class="summ">Total KM: <b>${km.total}</b> &nbsp;|&nbsp; ` +
         `Siap: <b>${km.readyCount}</b> &nbsp;|&nbsp; ` +
@@ -1474,10 +1752,11 @@ export function ApprovalsPage() {
                   : null;
     if (!target) return;
     setHighlight(target);
+    // 'real' & 'km' kini satu kartu gabungan (antrean tunggal).
     const idMap = {
-      real: "card-realisasi",
-      km: "card-km",
-      kmbundle: "card-km-bundle",
+      real: "card-queue",
+      km: "card-queue",
+      kmbundle: "card-km-bundle-kp",
       realbundle: "card-real-bundle",
     } as const;
     const el = document.getElementById(idMap[target]);
@@ -1486,7 +1765,11 @@ export function ApprovalsPage() {
     return () => clearTimeout(t);
   }, [loading, focusType, focusId, realList, kmList]);
 
-  const handleRealReview = async (id: string, action: 'approve' | 'reject', returnTo?: 'konseptor' | 'previous' | 'target') => {
+  const handleRealReview = async (
+    id: string,
+    action: "approve" | "reject",
+    returnTo?: "konseptor" | "previous" | "target",
+  ) => {
     // Task 3: komentar wajib untuk setiap keputusan (setujui maupun kembalikan).
     if (!realNote.trim()) {
       alert(
@@ -1496,48 +1779,24 @@ export function ApprovalsPage() {
     }
     setRealBusy(true);
     try {
+      const target = realList.find((r) => r.id === id);
       await inputRealisasi.review(id, action, realNote, returnTo);
       setRealTarget(null);
       setRealNote("");
       loadReal();
       refreshNotif();
+      if (target) {
+        setPostReviewModal({
+          action,
+          unitCode: target.unitCode,
+          bidang:
+            (target as RealisasiKinerja & { bidang?: string }).bidang ?? "",
+        });
+      }
     } catch (e) {
       alert(
         (e as { response?: { data?: { message?: string } } })?.response?.data
           ?.message ?? "Gagal memproses review",
-      );
-    } finally {
-      setRealBusy(false);
-    }
-  };
-
-  const startEditReal = (rl: RealisasiKinerja) => {
-    const ev: Record<string, string> = {};
-    Object.entries(rl.values ?? {}).forEach(([key, v]) => {
-      ev[key] = String((v as { realisasi?: unknown })?.realisasi ?? "");
-    });
-    setEditValues(ev);
-    setRealEditId(rl.id);
-    setRealExpanded(rl.id);
-  };
-
-  const saveEditReal = async (rl: RealisasiKinerja) => {
-    const merged: Record<string, unknown> = {};
-    Object.entries(rl.values ?? {}).forEach(([key, v]) => {
-      merged[key] = {
-        ...(v as object),
-        realisasi: editValues[key] ?? (v as { realisasi?: unknown })?.realisasi,
-      };
-    });
-    setRealBusy(true);
-    try {
-      await inputRealisasi.updateValues(rl.id, merged);
-      setRealEditId(null);
-      loadReal();
-    } catch (e) {
-      alert(
-        (e as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Gagal menyimpan perubahan",
       );
     } finally {
       setRealBusy(false);
@@ -1601,17 +1860,27 @@ export function ApprovalsPage() {
 
   // Setujui semua usulan KM yang menunggu di langkah user sekaligus (borongan lintas-dokumen).
   const handleKmBulkApprove = async () => {
-    const note = window.prompt(`Setujui ${kmList.length} usulan KM sekaligus. Catatan (wajib)?`);
+    const note = window.prompt(
+      `Setujui ${kmList.length} usulan KM sekaligus. Catatan (wajib)?`,
+    );
     if (note == null) return; // batal
-    if (!note.trim()) { alert('Catatan/komentar wajib diisi saat menyetujui'); return; }
+    if (!note.trim()) {
+      alert("Catatan/komentar wajib diisi saat menyetujui");
+      return;
+    }
     setKmBulkBusy(true);
     try {
       const r = await inputKontrak.bulkApprove(note.trim());
       loadKm();
       refreshNotif();
-      alert(`${r.approved} dari ${r.total} usulan KM disetujui${r.failed > 0 ? `, ${r.failed} gagal (cek status terbaru)` : ''}.`);
+      alert(
+        `${r.approved} dari ${r.total} usulan KM disetujui${r.failed > 0 ? `, ${r.failed} gagal (cek status terbaru)` : ""}.`,
+      );
     } catch (e) {
-      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal memproses borongan');
+      alert(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Gagal memproses borongan",
+      );
     } finally {
       setKmBulkBusy(false);
     }
@@ -1619,17 +1888,27 @@ export function ApprovalsPage() {
 
   // Setujui semua paket realisasi yang menunggu di langkah user sekaligus.
   const handleRealBulkApprove = async () => {
-    const note = window.prompt(`Setujui ${realList.length} paket realisasi sekaligus. Catatan (wajib)?`);
+    const note = window.prompt(
+      `Setujui ${realList.length} paket realisasi sekaligus. Catatan (wajib)?`,
+    );
     if (note == null) return; // batal
-    if (!note.trim()) { alert('Catatan/komentar wajib diisi saat menyetujui'); return; }
+    if (!note.trim()) {
+      alert("Catatan/komentar wajib diisi saat menyetujui");
+      return;
+    }
     setRealBulkBusy(true);
     try {
       const r = await inputRealisasi.bulkApprove(note.trim());
       loadReal();
       refreshNotif();
-      alert(`${r.approved} dari ${r.total} paket realisasi disetujui${r.failed > 0 ? `, ${r.failed} gagal (cek status terbaru)` : ''}.`);
+      alert(
+        `${r.approved} dari ${r.total} paket realisasi disetujui${r.failed > 0 ? `, ${r.failed} gagal (cek status terbaru)` : ""}.`,
+      );
     } catch (e) {
-      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal memproses borongan');
+      alert(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Gagal memproses borongan",
+      );
     } finally {
       setRealBulkBusy(false);
     }
@@ -1641,19 +1920,11 @@ export function ApprovalsPage() {
         <div className="page-header">
           <h1 className="page-title">Persetujuan</h1>
         </div>
-        <div className="kpi-strip-grid">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="metric-card" style={{ minHeight: 80 }}>
-              <div
-                className="skeleton-line skeleton"
-                style={{ width: "60%", height: 12 }}
-              />
-              <div
-                className="skeleton-line skeleton"
-                style={{ width: "30%", height: 28, marginTop: 8 }}
-              />
-            </div>
-          ))}
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <div
+            className="skeleton-line skeleton"
+            style={{ width: 220, height: 14 }}
+          />
         </div>
         <SkeletonTable rows={5} cols={5} />
       </div>
@@ -1682,11 +1953,6 @@ export function ApprovalsPage() {
           (r as RealisasiKinerja & { bidang?: string }).bidang === myBidang,
       );
 
-  // Ringkasan dari dokumen yang DIINPUT manual ke sistem (Kontrak Manajemen + Realisasi Kinerja)
-  const docs: Array<{ status: string }> = [...scopeKm, ...scopeReal];
-  const totalDoc = docs.length;
-  const approvedDoc = docs.filter((d) => d.status === "approved").length;
-  const pendingDoc = docs.filter((d) => d.status === "submitted").length;
   const myTasks = kmList.length + realList.length;
 
   // Registri semua dokumen persetujuan nyata (KM + Realisasi) lintas unit
@@ -1735,278 +2001,300 @@ export function ApprovalsPage() {
     return "—";
   };
 
+  // Tracker "Semua Dokumen Persetujuan" — hasil docRows disaring oleh jenis/status/periode.
+  const filteredDocRows = docRows.filter((d) => {
+    if (trackerType === "km" && d.jenis !== "Kontrak Manajemen") return false;
+    if (trackerType === "real" && d.jenis !== "Realisasi Kinerja") return false;
+    if (trackerStatus !== "all" && d.status !== trackerStatus) return false;
+    if (trackerPeriod !== "all" && d.periodId !== trackerPeriod) return false;
+    return true;
+  });
+
+  // Antrean tunggal — checker/approver berpikir "apa yang harus saya proses", bukan
+  // "KM atau Realisasi". Digabung & diurutkan dari yang paling mendesak (SLA terkecil/telat
+  // dulu); item tanpa data SLA jatuh ke bawah.
+  type QueueEntry =
+    | { kind: "km"; data: KontrakManajemen }
+    | { kind: "real"; data: RealisasiKinerja };
+  const slaOf = (e: QueueEntry) => {
+    const d = (e.data as { slaRemainingDays?: number | null }).slaRemainingDays;
+    return d === undefined || d === null ? Infinity : d;
+  };
+  const queueEntries: QueueEntry[] = [
+    ...kmList.map((k): QueueEntry => ({ kind: "km", data: k })),
+    ...realList.map((r): QueueEntry => ({ kind: "real", data: r })),
+  ].sort((a, b) => slaOf(a) - slaOf(b));
+
   return (
     <div className="page approvals-page">
-      <div className="kpi-strip-grid">
-        {[
-          {
-            label: "Total Dokumen",
-            value: totalDoc,
-            color: "var(--color-accent)",
-          },
-          {
-            label: "Sudah Disetujui",
-            value: approvedDoc,
-            color: "var(--color-success)",
-          },
-          {
-            label: "Menunggu Review",
-            value: pendingDoc,
-            color: "var(--color-warning)",
-          },
-          { label: "Tugas Saya", value: myTasks, color: "var(--color-info)" },
-        ].map((k, i) => (
-          <div
-            key={i}
-            className="metric-card"
-            style={{ borderTop: `3px solid ${k.color}` }}>
-            <div className="metric-label">{k.label}</div>
-            <div className="metric-value" style={{ color: k.color }}>
-              {k.value}
-            </div>
-          </div>
-        ))}
+      <div style={{ marginBottom: "var(--space-5)" }}>
+        <h1 className="page-title" style={{ margin: 0 }}>
+          Persetujuan
+        </h1>
+        <div
+          style={{
+            fontSize: "var(--text-sm)",
+            color: "var(--color-text-muted)",
+            marginTop: 2,
+          }}>
+          {canReview
+            ? myTasks === 0
+              ? "Tidak ada dokumen menunggu persetujuan Anda"
+              : `${myTasks} dokumen menunggu persetujuan Anda`
+            : "Anda tidak memiliki tahap persetujuan pada alur ini"}
+        </div>
       </div>
 
-      {/* Review Usulan Kontrak Manajemen — hanya untuk Asman ke atas */}
+      {/* Antrean persetujuan — gabungan Usulan KM + Realisasi, urut paling mendesak. Checker
+          berpikir "apa yang harus saya proses", bukan "KM atau Realisasi" — satu daftar saja. */}
       {canReview && (
         <FoldCard
-          id="card-km"
-          highlight={highlight === "km"}
+          id="card-queue"
+          highlight={highlight === "km" || highlight === "real"}
           accent="var(--color-accent)"
-          icon={<FileSignature size={16} />}
-          title="Usulan Kontrak Manajemen Menunggu Review"
+          icon={<ClipboardCheck size={14} />}
+          title="Perlu Persetujuan Anda"
           right={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <span className="status-pill" style={{ background: 'var(--color-accent-tint)', color: 'var(--color-accent)', fontWeight: 'bold' }}>{kmList.length} Usulan</span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+              }}>
+              <span
+                className="status-pill"
+                style={{
+                  background: "var(--color-accent-tint)",
+                  color: "var(--color-accent)",
+                  fontWeight: "bold",
+                }}>
+                {queueEntries.length} dokumen
+              </span>
               {kmList.length > 1 && (
                 <button
                   className="btn btn-sm"
-                  style={{ background: 'var(--color-success)', color: '#fff' }}
+                  style={{ background: "var(--color-success)", color: "#fff" }}
                   disabled={kmBulkBusy}
-                  onClick={(e) => { e.stopPropagation(); handleKmBulkApprove(); }}
-                >
-                  <CheckCircle size={12} /> {kmBulkBusy ? 'Memproses…' : `Setujui Semua (${kmList.length})`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleKmBulkApprove();
+                  }}>
+                  <CheckCircle size={12} />{" "}
+                  {kmBulkBusy
+                    ? "Memproses…"
+                    : `Setujui Semua KM (${kmList.length})`}
+                </button>
+              )}
+              {realList.length > 1 && (
+                <button
+                  className="btn btn-sm"
+                  style={{ background: "var(--color-success)", color: "#fff" }}
+                  disabled={realBulkBusy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRealBulkApprove();
+                  }}>
+                  <CheckCircle size={12} />{" "}
+                  {realBulkBusy
+                    ? "Memproses…"
+                    : `Setujui Semua Realisasi (${realList.length})`}
                 </button>
               )}
             </div>
-          }
-        >
-          {kmList.length === 0 ? (
+          }>
+          {queueEntries.length === 0 ? (
             <div className="card-body">
               <EmptyState
-                title="Tidak ada usulan"
-                message="Belum ada usulan kontrak manajemen yang menunggu review."
+                title="Tidak ada yang menunggu aksi Anda"
+                message="Anda akan diberi tahu saat dokumen masuk ke tahap Anda."
               />
             </div>
           ) : (
-            <div
-              className="table-wrap"
-              style={{ paddingBottom: "var(--space-7)" }}>
-              <div
-                className={`table-scroll ${kmList.length > 0 && "able-scroll"}`}>
-                <table className="data-table compact">
-                  <thead>
-                    <tr>
-                      <th>Unit</th>
-                      <th>Bidang</th>
-                      <th>Pengirim</th>
-                      <th>KPI</th>
-                      <th>Jenjang Persetujuan</th>
-                      <th>SLA</th>
-                      <th>Tanggal</th>
-                      <th style={{ width: 260, textAlign: "center" }}>
-                        Tindakan
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {kmList.map((k) => {
-                      const kk = k as KontrakManajemen & {
-                        steps?: { label: string }[];
-                        currentStepIndex?: number;
-                        stepLabel?: string;
-                      };
-                      const ksteps = kk.steps ?? [];
-                      const kci = kk.currentStepIndex ?? 0;
-                      const kIsLast = kci >= ksteps.length - 1;
-                      const kPrev = ksteps[kci - 1]?.label;
-                      return (
-                        <Fragment key={k.id}>
-                          <tr>
-                            <td style={{ fontWeight: 600 }}>
-                              {UNIT_NAMES[k.unitCode] ?? k.unitCode}
-                            </td>
-                            <td>{k.bidang}</td>
-                            <td style={{ color: "var(--color-text-muted)" }}>
-                              {k.submitter}
-                            </td>
-                            <td>
-                              <button
-                                className="btn btn-ghost btn-md"
-                                onClick={() =>
-                                  setKmExpanded(
-                                    kmExpanded === k.id ? null : k.id,
-                                  )
-                                }>
-                                {k.kpiItems.length} indikator{" "}
-                                <ChevronDown
-                                  size={12}
-                                  style={{
-                                    transform:
-                                      kmExpanded === k.id
-                                        ? "rotate(180deg)"
-                                        : "none",
-                                    transition: "transform .2s",
-                                  }}
-                                />
-                              </button>
-                            </td>
-                            <td style={{ minWidth: 200 }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 4,
-                                  marginBottom: 3,
-                                }}>
-                                {ksteps.map((_, idx) => (
-                                  <div
-                                    key={idx}
-                                    title={ksteps[idx]?.label}
+            <div className="table-wrap">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Jenis</th>
+                    <th>Unit</th>
+                    <th>Bidang</th>
+                    <th>Pengirim</th>
+                    <th>Indikator</th>
+                    <th>Jenjang Persetujuan</th>
+                    <th>SLA</th>
+                    <th>Tanggal</th>
+                    <th style={{ width: 260 }}>Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {queueEntries.map((entry) =>
+                    entry.kind === "km"
+                      ? (() => {
+                          const k = entry.data;
+                          const kk = k as KontrakManajemen & {
+                            steps?: { label: string }[];
+                            currentStepIndex?: number;
+                            stepLabel?: string;
+                          };
+                          const ksteps = kk.steps ?? [];
+                          const kci = kk.currentStepIndex ?? 0;
+                          const kIsLast = kci >= ksteps.length - 1;
+                          const kPrev = ksteps[kci - 1]?.label;
+                          return (
+                            <Fragment key={k.id}>
+                              <tr>
+                                <td>
+                                  <span
+                                    className="status-pill"
                                     style={{
-                                      width: 24,
-                                      height: 24,
-                                      borderRadius: "50%",
-                                      fontSize: 12,
+                                      fontSize: 11,
+                                      background: "var(--color-accent-tint)",
+                                      color: "var(--color-accent)",
                                       fontWeight: 700,
+                                    }}>
+                                    KM Sementara
+                                  </span>
+                                </td>
+                                <td style={{ fontWeight: 600 }}>
+                                  {UNIT_NAMES[k.unitCode] ?? k.unitCode}
+                                </td>
+                                <td>{k.bidang}</td>
+                                <td
+                                  style={{ color: "var(--color-text-muted)" }}>
+                                  {k.submitter}
+                                </td>
+                                <td>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() =>
+                                      setKmExpanded(
+                                        kmExpanded === k.id ? null : k.id,
+                                      )
+                                    }>
+                                    {k.kpiItems.length} indikator{" "}
+                                    <ChevronDown
+                                      size={12}
+                                      style={{
+                                        transform:
+                                          kmExpanded === k.id
+                                            ? "rotate(180deg)"
+                                            : "none",
+                                        transition: "transform .2s",
+                                      }}
+                                    />
+                                  </button>
+                                </td>
+                                <td style={{ minWidth: 200 }}>
+                                  <div
+                                    style={{
                                       display: "flex",
                                       alignItems: "center",
-                                      justifyContent: "center",
-                                      background:
-                                        idx < kci
-                                          ? "var(--color-success)"
-                                          : idx === kci
-                                            ? "var(--color-accent)"
-                                            : "var(--color-surface-2)",
-                                      color:
-                                        idx <= kci
-                                          ? "#fff"
-                                          : "var(--color-text-muted)",
+                                      gap: 4,
+                                      marginBottom: 3,
                                     }}>
-                                    {idx < kci ? "✓" : idx + 1}
+                                    {ksteps.map((_, idx) => (
+                                      <div
+                                        key={idx}
+                                        title={ksteps[idx]?.label}
+                                        style={{
+                                          width: 16,
+                                          height: 16,
+                                          borderRadius: "50%",
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          background:
+                                            idx < kci
+                                              ? "var(--color-success)"
+                                              : idx === kci
+                                                ? "var(--color-accent)"
+                                                : "var(--color-surface-2)",
+                                          color:
+                                            idx <= kci
+                                              ? "#fff"
+                                              : "var(--color-text-muted)",
+                                        }}>
+                                        {idx < kci ? "✓" : idx + 1}
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  color: "var(--color-accent)",
-                                  fontWeight: 600,
-                                  paddingTop: 4,
-                                }}>
-                                Langkah {kci}/{ksteps.length - 1}:{" "}
-                                {kk.stepLabel ?? ksteps[kci]?.label ?? "—"}
-                              </div>
-                            </td>
-                            <td>
-                              <SlaBadge
-                                days={
-                                  (
-                                    k as KontrakManajemen & {
-                                      slaRemainingDays?: number;
-                                    }
-                                  ).slaRemainingDays
-                                }
-                              />
-                            </td>
-                            <td
-                              style={{
-                                color: "var(--color-text-muted)",
-                                whiteSpace: "nowrap",
-                              }}>
-                              {new Date(k.submittedAt).toLocaleDateString(
-                                "id-ID",
-                                { day: "2-digit", month: "short" },
-                              )}
-                            </td>
-                            <td>
-                              {kmTarget === k.id ? (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "var(--space-2)",
-                                  }}>
-                                  <textarea
-                                    className="form-textarea"
-                                    style={{
-                                      fontSize: "var(--text-sm)",
-                                      minHeight: 48,
-                                    }}
-                                    placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
-                                    value={kmNote}
-                                    onChange={(e) => setKmNote(e.target.value)}
-                                  />
                                   <div
                                     style={{
-                                      display: "flex",
-                                      gap: "var(--space-2)",
-                                      flexWrap: "wrap",
+                                      fontSize: 12,
+                                      color: "var(--color-accent)",
+                                      fontWeight: 600,
                                     }}>
+                                    Langkah {kci}/{ksteps.length - 1}:{" "}
+                                    {kk.stepLabel ?? ksteps[kci]?.label ?? "—"}
+                                  </div>
+                                </td>
+                                <td>
+                                  <SlaBadge
+                                    days={
+                                      (
+                                        k as KontrakManajemen & {
+                                          slaRemainingDays?: number;
+                                        }
+                                      ).slaRemainingDays
+                                    }
+                                  />
+                                </td>
+                                <td
+                                  style={{
+                                    color: "var(--color-text-muted)",
+                                    whiteSpace: "nowrap",
+                                  }}>
+                                  {new Date(k.submittedAt).toLocaleDateString(
+                                    "id-ID",
+                                    { day: "2-digit", month: "short" },
+                                  )}
+                                </td>
+                                <td>
+                                  {kmTarget === k.id ? (
                                     <div
                                       style={{
                                         display: "flex",
+                                        flexDirection: "column",
                                         gap: "var(--space-2)",
-                                        width: "100%",
                                       }}>
-                                      <button
-                                        className="btn btn-md"
+                                      <textarea
+                                        className="form-textarea"
                                         style={{
-                                          background: "var(--color-success)",
-                                          color: "#fff",
-                                          width: "100%",
-                                          display: "flex",
-                                          justifyContent: "center",
+                                          fontSize: "var(--text-xs)",
+                                          minHeight: 48,
                                         }}
-                                        disabled={kmBusy}
-                                        onClick={() =>
-                                          handleKmReview(k.id, "approve")
-                                        }>
-                                        <CheckCircle size={12} />{" "}
-                                        {kIsLast
-                                          ? "Setujui (Selesai → Bundle)"
-                                          : "Setujui & Teruskan"}
-                                      </button>
-                                      <button
-                                        className="btn btn-md"
-                                        style={{
-                                          background: "var(--color-danger)",
-                                          color: "#fff",
-                                        }}
-                                        disabled={kmBusy}
-                                        onClick={() =>
-                                          handleKmReview(
-                                            k.id,
-                                            "reject",
-                                            "konseptor",
-                                          )
+                                        placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
+                                        value={kmNote}
+                                        onChange={(e) =>
+                                          setKmNote(e.target.value)
                                         }
-                                        title="Kembalikan ke konseptor untuk revisi">
-                                        <XCircle size={12} /> Kembalikan ke
-                                        Konseptor
-                                      </button>
-                                    </div>
-                                    {kci >= 2 ? (
+                                      />
                                       <div
                                         style={{
                                           display: "flex",
                                           gap: "var(--space-2)",
+                                          flexWrap: "wrap",
                                         }}>
                                         <button
-                                          className="btn btn-md"
+                                          className="btn btn-sm"
                                           style={{
-                                            background: "var(--color-warning)",
+                                            background: "var(--color-success)",
+                                            color: "#fff",
+                                          }}
+                                          disabled={kmBusy}
+                                          onClick={() =>
+                                            handleKmReview(k.id, "approve")
+                                          }>
+                                          <CheckCircle size={12} />{" "}
+                                          {kIsLast
+                                            ? "Setujui (Selesai → Bundle)"
+                                            : "Setujui & Teruskan"}
+                                        </button>
+                                        <button
+                                          className="btn btn-sm"
+                                          style={{
+                                            background: "var(--color-danger)",
                                             color: "#fff",
                                           }}
                                           disabled={kmBusy}
@@ -2014,14 +2302,35 @@ export function ApprovalsPage() {
                                             handleKmReview(
                                               k.id,
                                               "reject",
-                                              "previous",
+                                              "konseptor",
                                             )
-                                          }>
-                                          <XCircle size={12} /> Kembalikan ke{" "}
-                                          {kPrev ?? "langkah sebelumnya"}
+                                          }
+                                          title="Kembalikan ke konseptor untuk revisi">
+                                          <XCircle size={12} /> Kembalikan ke
+                                          Konseptor
                                         </button>
+                                        {kci >= 2 && (
+                                          <button
+                                            className="btn btn-sm"
+                                            style={{
+                                              background:
+                                                "var(--color-warning)",
+                                              color: "#fff",
+                                            }}
+                                            disabled={kmBusy}
+                                            onClick={() =>
+                                              handleKmReview(
+                                                k.id,
+                                                "reject",
+                                                "previous",
+                                              )
+                                            }>
+                                            <XCircle size={12} /> Kembalikan ke{" "}
+                                            {kPrev ?? "langkah sebelumnya"}
+                                          </button>
+                                        )}
                                         <button
-                                          className="btn btn-ghost btn-md"
+                                          className="btn btn-ghost btn-sm"
                                           onClick={() => {
                                             setKmTarget(null);
                                             setKmNote("");
@@ -2029,230 +2338,851 @@ export function ApprovalsPage() {
                                           Batal
                                         </button>
                                       </div>
-                                    ) : (
+                                    </div>
+                                  ) : (
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: "var(--space-2)",
+                                        flexWrap: "wrap",
+                                      }}>
                                       <button
-                                        className="btn btn-ghost btn-md"
+                                        className="btn btn-secondary btn-sm"
                                         onClick={() => {
-                                          setKmTarget(null);
+                                          setKmTarget(k.id);
                                           setKmNote("");
                                         }}>
-                                        Batal
+                                        <Clock size={12} /> Tinjau
                                       </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    gap: "var(--space-2)",
-                                    flexWrap: "wrap",
-                                  }}>
-                                  <button
-                                    className="btn btn-secondary btn-md"
-                                    onClick={() => {
-                                      setKmTarget(k.id);
-                                      setKmNote("");
+                                      <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => startEditKm(k)}
+                                        title="Edit KPI items pada tahap Anda">
+                                        <Pencil size={12} /> Edit
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                              {kmExpanded === k.id && (
+                                <tr>
+                                  <td
+                                    colSpan={9}
+                                    style={{
+                                      background: "var(--color-surface-2)",
+                                      padding: 0,
                                     }}>
-                                    <Clock size={12} /> Tinjau
-                                  </button>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "flex-end",
+                                        gap: "var(--space-2)",
+                                        padding:
+                                          "var(--space-2) var(--space-3)",
+                                      }}>
+                                      {kmEditId === k.id ? (
+                                        <>
+                                          <button
+                                            className="btn btn-sm"
+                                            style={{
+                                              background:
+                                                "var(--color-success)",
+                                              color: "#fff",
+                                            }}
+                                            disabled={kmBusy}
+                                            onClick={() => saveEditKm(k)}>
+                                            <CheckCircle size={12} /> Simpan KPI
+                                          </button>
+                                          <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => setKmEditId(null)}>
+                                            Batal Edit
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          className="btn btn-secondary btn-sm"
+                                          onClick={() => startEditKm(k)}>
+                                          <Pencil size={12} /> Edit
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        color: "var(--color-accent)",
+                                        fontWeight: 600,
+                                        paddingTop: 4,
+                                      }}>
+                                      Langkah {kci}/{ksteps.length - 1}:{" "}
+                                      {kk.stepLabel ??
+                                        ksteps[kci]?.label ??
+                                        "—"}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <SlaBadge
+                                      days={
+                                        (
+                                          k as KontrakManajemen & {
+                                            slaRemainingDays?: number;
+                                          }
+                                        ).slaRemainingDays
+                                      }
+                                    />
+                                  </td>
+                                  <td
+                                    style={{
+                                      color: "var(--color-text-muted)",
+                                      whiteSpace: "nowrap",
+                                    }}>
+                                    {new Date(k.submittedAt).toLocaleDateString(
+                                      "id-ID",
+                                      { day: "2-digit", month: "short" },
+                                    )}
+                                  </td>
+                                  <td>
+                                    {kmTarget === k.id ? (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          gap: "var(--space-2)",
+                                        }}>
+                                        <textarea
+                                          className="form-textarea"
+                                          style={{
+                                            fontSize: "var(--text-sm)",
+                                            minHeight: 48,
+                                          }}
+                                          placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
+                                          value={kmNote}
+                                          onChange={(e) =>
+                                            setKmNote(e.target.value)
+                                          }
+                                        />
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "var(--space-2)",
+                                            flexWrap: "wrap",
+                                          }}>
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: "var(--space-2)",
+                                              width: "100%",
+                                            }}>
+                                            <button
+                                              className="btn btn-md"
+                                              style={{
+                                                background:
+                                                  "var(--color-success)",
+                                                color: "#fff",
+                                                width: "100%",
+                                                display: "flex",
+                                                justifyContent: "center",
+                                              }}
+                                              disabled={kmBusy}
+                                              onClick={() =>
+                                                handleKmReview(k.id, "approve")
+                                              }>
+                                              <CheckCircle size={12} />{" "}
+                                              {kIsLast
+                                                ? "Setujui (Selesai → Bundle)"
+                                                : "Setujui & Teruskan"}
+                                            </button>
+                                            <button
+                                              className="btn btn-md"
+                                              style={{
+                                                background:
+                                                  "var(--color-danger)",
+                                                color: "#fff",
+                                              }}
+                                              disabled={kmBusy}
+                                              onClick={() =>
+                                                handleKmReview(
+                                                  k.id,
+                                                  "reject",
+                                                  "konseptor",
+                                                )
+                                              }
+                                              title="Kembalikan ke konseptor untuk revisi">
+                                              <XCircle size={12} /> Kembalikan
+                                              ke Konseptor
+                                            </button>
+                                          </div>
+                                          {kci >= 2 ? (
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                gap: "var(--space-2)",
+                                              }}>
+                                              <button
+                                                className="btn btn-md"
+                                                style={{
+                                                  background:
+                                                    "var(--color-warning)",
+                                                  color: "#fff",
+                                                }}
+                                                disabled={kmBusy}
+                                                onClick={() =>
+                                                  handleKmReview(
+                                                    k.id,
+                                                    "reject",
+                                                    "previous",
+                                                  )
+                                                }>
+                                                <XCircle size={12} /> Kembalikan
+                                                ke{" "}
+                                                {kPrev ?? "langkah sebelumnya"}
+                                              </button>
+                                              <button
+                                                className="btn btn-ghost btn-md"
+                                                onClick={() => {
+                                                  setKmTarget(null);
+                                                  setKmNote("");
+                                                }}>
+                                                Batal
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              className="btn btn-ghost btn-md"
+                                              onClick={() => {
+                                                setKmTarget(null);
+                                                setKmNote("");
+                                              }}>
+                                              Batal
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                          flexWrap: "wrap",
+                                        }}>
+                                        <button
+                                          className="btn btn-secondary btn-md"
+                                          onClick={() => {
+                                            setKmTarget(k.id);
+                                            setKmNote("");
+                                          }}>
+                                          <Clock size={12} /> Tinjau
+                                        </button>
 
-                                  <button
-                                    className="btn btn-ghost btn-md"
-                                    onClick={() =>
-                                      kmExpanded && kmEditId
-                                        ? setKmEditId(null)
-                                        : startEditKm(k)
-                                    }
-                                    title="Edit KPI items pada tahap Anda">
-                                    <Pencil size={12} />{" "}
-                                    {kmExpanded && kmEditId
-                                      ? "Batal Edit"
-                                      : "Edit"}
-                                  </button>
-                                </div>
+                                        <button
+                                          className="btn btn-ghost btn-md"
+                                          onClick={() =>
+                                            kmExpanded && kmEditId
+                                              ? setKmEditId(null)
+                                              : startEditKm(k)
+                                          }
+                                          title="Edit KPI items pada tahap Anda">
+                                          <Pencil size={12} />{" "}
+                                          {kmExpanded && kmEditId
+                                            ? "Batal Edit"
+                                            : "Edit"}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
                               )}
-                            </td>
-                          </tr>
-                          {kmExpanded === k.id && (
-                            <tr>
-                              <td
-                                colSpan={8}
-                                style={{
-                                  background: "var(--color-surface-2)",
-                                  padding: 0,
-                                }}>
-                                {kmEditId && (
+                            </Fragment>
+                          );
+                        })()
+                      : (() => {
+                          const rl = entry.data;
+                          const entries = Object.values(rl.values ?? {});
+                          const rr = rl as RealisasiKinerja & {
+                            steps?: { label: string }[];
+                            currentStepIndex?: number;
+                            stepLabel?: string;
+                          };
+                          const steps = rr.steps ?? [];
+                          const ci = rr.currentStepIndex ?? 0;
+                          const stepCount = steps.length;
+                          const isLastStep = ci >= stepCount - 1;
+                          const prevLabel = steps[ci - 1]?.label;
+                          return (
+                            <Fragment key={rl.id}>
+                              <tr>
+                                <td>
+                                  <span
+                                    className="status-pill"
+                                    style={{
+                                      fontSize: 11,
+                                      background: "var(--color-info-tint)",
+                                      color: "var(--color-info)",
+                                      fontWeight: 700,
+                                    }}>
+                                    Realisasi
+                                  </span>
+                                </td>
+                                <td style={{ fontWeight: 600 }}>
+                                  {UNIT_NAMES[rl.unitCode] ?? rl.unitCode}
+                                </td>
+                                <td
+                                  style={{
+                                    fontSize: 13,
+                                    color: "var(--color-text-muted)",
+                                  }}>
+                                  {(
+                                    rl as RealisasiKinerja & { bidang?: string }
+                                  ).bidang ?? "—"}
+                                </td>
+                                <td
+                                  style={{ color: "var(--color-text-muted)" }}>
+                                  {rl.submitter}
+                                </td>
+                                <td>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() =>
+                                      setRealExpanded(
+                                        realExpanded === rl.id ? null : rl.id,
+                                      )
+                                    }>
+                                    {entries.length} indikator{" "}
+                                    <ChevronDown
+                                      size={12}
+                                      style={{
+                                        transform:
+                                          realExpanded === rl.id
+                                            ? "rotate(180deg)"
+                                            : "none",
+                                        transition: "transform .2s",
+                                      }}
+                                    />
+                                  </button>
+                                </td>
+                                <td style={{ minWidth: 200 }}>
                                   <div
                                     style={{
                                       display: "flex",
-                                      justifyContent: "flex-end",
-                                      gap: "var(--space-2)",
-                                      padding: "var(--space-2) var(--space-3)",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      marginBottom: 3,
                                     }}>
-                                    {kmEditId === k.id && (
-                                      <>
+                                    {steps.map((_, idx) => (
+                                      <div
+                                        key={idx}
+                                        title={steps[idx]?.label}
+                                        style={{
+                                          width: 16,
+                                          height: 16,
+                                          borderRadius: "50%",
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          background:
+                                            idx < ci
+                                              ? "var(--color-success)"
+                                              : idx === ci
+                                                ? "var(--color-info)"
+                                                : "var(--color-surface-2)",
+                                          color:
+                                            idx <= ci
+                                              ? "#fff"
+                                              : "var(--color-text-muted)",
+                                        }}>
+                                        {idx < ci ? "✓" : idx + 1}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: 12,
+                                      color: "var(--color-info)",
+                                      fontWeight: 600,
+                                    }}>
+                                    Langkah {ci}/{stepCount - 1}:{" "}
+                                    {rr.stepLabel ?? steps[ci]?.label ?? "—"}
+                                  </div>
+                                </td>
+                                <td>
+                                  <SlaBadge
+                                    days={
+                                      (
+                                        rl as RealisasiKinerja & {
+                                          slaRemainingDays?: number;
+                                        }
+                                      ).slaRemainingDays
+                                    }
+                                  />
+                                </td>
+                                <td
+                                  style={{
+                                    color: "var(--color-text-muted)",
+                                    whiteSpace: "nowrap",
+                                  }}>
+                                  {new Date(rl.submittedAt).toLocaleDateString(
+                                    "id-ID",
+                                    { day: "2-digit", month: "short" },
+                                  )}
+                                </td>
+                                <td>
+                                  {realTarget === rl.id ? (
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "var(--space-2)",
+                                      }}>
+                                      <textarea
+                                        className="form-textarea"
+                                        style={{
+                                          fontSize: "var(--text-xs)",
+                                          minHeight: 48,
+                                        }}
+                                        placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
+                                        value={realNote}
+                                        onChange={(e) =>
+                                          setRealNote(e.target.value)
+                                        }
+                                      />
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                          flexWrap: "wrap",
+                                        }}>
                                         <button
-                                          className="btn btn-md"
+                                          className="btn btn-sm"
                                           style={{
                                             background: "var(--color-success)",
                                             color: "#fff",
                                           }}
-                                          disabled={kmBusy}
-                                          onClick={() => saveEditKm(k)}>
-                                          <CheckCircle size={12} /> Simpan KPI
+                                          disabled={realBusy}
+                                          onClick={() =>
+                                            handleRealReview(rl.id, "approve")
+                                          }>
+                                          <CheckCircle size={12} />{" "}
+                                          {isLastStep
+                                            ? "Setujui (Selesai → Bundle)"
+                                            : "Setujui & Teruskan"}
                                         </button>
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-
-                                <table
-                                  className="data-table table-expanded"
-                                  style={{ margin: 0 }}>
-                                  <thead>
-                                    <tr>
-                                      <th>No</th>
-                                      <th>Indikator Kinerja</th>
-                                      <th>Formula</th>
-                                      <th>Satuan</th>
-                                      <th className="num">Bobot</th>
-                                      <th className="num">Target Sem I</th>
-                                      <th className="num">{`Target Tahun ${new Date().getFullYear()}`}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {(kmEditId === k.id
-                                      ? kmEditItems
-                                      : (k.kpiItems as Record<
-                                          string,
-                                          unknown
-                                        >[])
-                                    ).map((it, idx) => {
-                                      const editing = kmEditId === k.id;
-                                      const itStr = it as Record<
-                                        string,
-                                        string
-                                      >;
-                                      return (
-                                        <tr key={idx}>
-                                          <td>{idx + 1}</td>
-                                          <td>{itStr.indikator}</td>
-                                          <td>{itStr.formula}</td>
-                                          <td>{itStr.satuan}</td>
-                                          <td className="num">{itStr.bobot}</td>
-                                          <td
+                                        <button
+                                          className="btn btn-sm"
+                                          style={{
+                                            background: "var(--color-danger)",
+                                            color: "#fff",
+                                          }}
+                                          disabled={realBusy}
+                                          onClick={() =>
+                                            handleRealReview(
+                                              rl.id,
+                                              "reject",
+                                              "konseptor",
+                                            )
+                                          }
+                                          title="Masalah pada REALISASI → kembali ke penyusun (PIC)">
+                                          <XCircle size={12} /> Masalah
+                                          Realisasi → Konseptor
+                                        </button>
+                                        <button
+                                          className="btn btn-sm"
+                                          style={{
+                                            background: "var(--color-accent)",
+                                            color: "#fff",
+                                          }}
+                                          disabled={realBusy}
+                                          onClick={() =>
+                                            handleRealReview(
+                                              rl.id,
+                                              "reject",
+                                              "target",
+                                            )
+                                          }
+                                          title="Masalah pada TARGET (KM Sementara) → routing ke PIC REN untuk koreksi target">
+                                          <XCircle size={12} /> Masalah Target →
+                                          PIC REN
+                                        </button>
+                                        {ci >= 2 && (
+                                          <button
+                                            className="btn btn-sm"
                                             style={{
-                                              fontWeight: editing
-                                                ? 600
-                                                : undefined,
-                                              fontSize: 14,
+                                              background:
+                                                "var(--color-warning)",
+                                              color: "#fff",
                                             }}
-                                            className="num">
-                                            {editing ? (
-                                              <input
-                                                type="text"
-                                                className="form-input form-input-sm var(--text-base)"
-                                                style={{ width: 90 }}
-                                                value={String(
-                                                  kmEditItems[idx]?.target ??
-                                                    "",
-                                                )}
-                                                onChange={(e) =>
-                                                  setKmEditItems((items) =>
-                                                    items.map((item, i) =>
-                                                      i === idx
-                                                        ? {
-                                                            ...item,
-                                                            target:
-                                                              e.target.value,
-                                                          }
-                                                        : item,
-                                                    ),
-                                                  )
-                                                }
-                                              />
-                                            ) : (
-                                              itStr.target
-                                            )}
-                                          </td>
-                                          <td
-                                            style={{
-                                              fontWeight: editing
-                                                ? 600
-                                                : undefined,
-                                            }}
-                                            className="num">
-                                            {editing ? (
-                                              <input
-                                                type="text"
-                                                className="form-input form-input-sm"
-                                                style={{ width: 90 }}
-                                                value={String(
-                                                  kmEditItems[idx]?.target2 ??
-                                                    "",
-                                                )}
-                                                onChange={(e) =>
-                                                  setKmEditItems((items) =>
-                                                    items.map((item, i) =>
-                                                      i === idx
-                                                        ? {
-                                                            ...item,
-                                                            target2:
-                                                              e.target.value,
-                                                          }
-                                                        : item,
-                                                    ),
-                                                  )
-                                                }
-                                              />
-                                            ) : (
-                                              itStr.target2
-                                            )}
-                                          </td>
+                                            disabled={realBusy}
+                                            onClick={() =>
+                                              handleRealReview(
+                                                rl.id,
+                                                "reject",
+                                                "previous",
+                                              )
+                                            }>
+                                            <XCircle size={12} /> Kembalikan ke{" "}
+                                            {prevLabel ?? "langkah sebelumnya"}
+                                          </button>
+                                        )}
+                                        <button
+                                          className="btn btn-ghost btn-sm"
+                                          onClick={() => {
+                                            setRealTarget(null);
+                                            setRealNote("");
+                                          }}>
+                                          Batal
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: "var(--space-2)",
+                                        flexWrap: "wrap",
+                                      }}>
+                                      <button
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => {
+                                          setRealTarget(rl.id);
+                                          setRealNote("");
+                                        }}>
+                                        <Clock size={12} /> Tinjau
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                              {realExpanded === rl.id && (
+                                <tr>
+                                  <td
+                                    colSpan={9}
+                                    style={{
+                                      background: "var(--color-surface-2)",
+                                      padding: 0,
+                                    }}>
+                                    <table
+                                      className="data-table compact"
+                                      style={{ margin: 0 }}>
+                                      <thead>
+                                        <tr>
+                                          <th>No</th>
+                                          <th>Indikator</th>
+                                          <th>Satuan</th>
+                                          <th className="num">Bobot</th>
+                                          <th className="num">Target</th>
+                                          <th className="num">Realisasi</th>
                                         </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                      </thead>
+                                      <tbody>
+                                        {Object.entries(rl.values ?? {}).map(
+                                          ([key, vRaw], idx) => {
+                                            const it = vRaw as {
+                                              indikator?: string;
+                                              satuan?: string;
+                                              bobot?: unknown;
+                                              target?: unknown;
+                                              realisasi?: unknown;
+                                            };
+                                            return (
+                                              <tr key={key}>
+                                                <td>{idx + 1}</td>
+                                                <td>{it.indikator ?? "—"}</td>
+                                                <td>{it.satuan ?? "—"}</td>
+                                                <td className="num">
+                                                  {String(it.bobot ?? "—")}
+                                                </td>
+                                                <td className="num">
+                                                  {String(it.target ?? "—")}
+                                                </td>
+                                                <td
+                                                  className="num"
+                                                  style={{ fontWeight: 700 }}>
+                                                  {String(it.realisasi ?? "—")}
+                                                </td>
+                                              </tr>
+                                            );
+                                          },
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })(),
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </FoldCard>
       )}
 
-      {/* Bundle Konsolidasi KM Tahunan — persetujuan akhir GM */}
-      {/* Tab KM Draft / KM Final — bundle & konsolidasi terpisah untuk masing-masing tipe */}
-      {canReview && (
-        <div
-          style={{
-            display: "flex",
-            gap: "var(--space-2)",
-            marginBottom: "var(--space-3)",
-            alignItems: "center",
-          }}>
-          <button
-            className={`btn btn-sm ${kmBundleType === "draft" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => setKmBundleType("draft")}>
-            Bundle KM Draft
-          </button>
-          <button
-            className={`btn btn-sm ${kmBundleType === "final" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => setKmBundleType("final")}>
-            Bundle KM Final
-          </button>
-        </div>
+      {/* Living-target: Koreksi Target KM Sementara — hanya PIC REN (warden target) */}
+      {isPicRen && (
+        <FoldCard
+          id="card-target-fix"
+          accent="var(--color-accent)"
+          icon={<Pencil size={14} />}
+          title="Koreksi Target KM Sementara (PIC REN)"
+          right={
+            <span
+              className="status-pill"
+              style={{
+                background: "var(--color-accent-tint)",
+                color: "var(--color-accent)",
+                fontWeight: "bold",
+              }}>
+              {targetFixList.length} package
+            </span>
+          }>
+          {targetFixList.length === 0 ? (
+            <div className="card-body">
+              <EmptyState
+                title="Tidak ada koreksi target tertunda"
+                message="Package akan muncul di sini saat reviewer mengembalikannya dengan alasan 'Masalah Target'."
+              />
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {targetFixList.map((rl) => {
+                const bidang =
+                  (rl as RealisasiKinerja & { bidang?: string }).bidang ?? "";
+                const items = Object.values(rl.values ?? {}) as Record<
+                  string,
+                  unknown
+                >[];
+                const open = tfxExpanded === rl.id;
+                return (
+                  <div
+                    key={rl.id}
+                    style={{ borderBottom: "1px solid var(--color-border)" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "var(--space-2) var(--space-4)",
+                      }}>
+                      <div style={{ fontSize: "var(--text-sm)" }}>
+                        <span
+                          className="status-pill"
+                          style={{
+                            fontSize: 11,
+                            marginRight: 6,
+                            background: "var(--color-surface-2)",
+                          }}>
+                          {periods.find((p) => p.id === rl.periodId)?.label ??
+                            rl.periodId}
+                        </span>
+                        <b>{UNIT_NAMES[rl.unitCode] ?? rl.unitCode}</b> —{" "}
+                        {bidang}{" "}
+                        <span style={{ color: "var(--color-text-muted)" }}>
+                          · {rl.submitter}
+                        </span>
+                        {rl.reviewNote && (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-danger)",
+                              marginTop: 2,
+                            }}>
+                            Alasan reviewer: {rl.reviewNote}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setTfxExpanded(open ? null : rl.id);
+                          setTfxValues({});
+                          setTfxNote("");
+                        }}>
+                        {open ? "Tutup" : "Koreksi Target"}{" "}
+                        <ChevronDown
+                          size={12}
+                          style={{
+                            transform: open ? "rotate(180deg)" : "none",
+                            transition: "transform .2s",
+                          }}
+                        />
+                      </button>
+                    </div>
+                    {open && (
+                      <div
+                        style={{ padding: "0 var(--space-4) var(--space-3)" }}>
+                        <table
+                          className="data-table compact"
+                          style={{ margin: 0 }}>
+                          <thead>
+                            <tr>
+                              <th>Indikator</th>
+                              <th className="num">KM Sementara Skrg</th>
+                              <th className="num">Realisasi</th>
+                              <th className="num">Target Baru</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((it, idx) => {
+                              const masterKpiId = it["masterKpiId"] as
+                                | string
+                                | undefined;
+                              const pt = assignmentForItem(
+                                rl.periodId,
+                                rl.unitCode,
+                                bidang,
+                                masterKpiId,
+                              );
+                              const editable = !!pt?.assignment && !pt.frozen;
+                              return (
+                                <tr key={idx}>
+                                  <td style={{ maxWidth: 240 }}>
+                                    {String(it["indikator"] ?? "—")}
+                                  </td>
+                                  <td className="num">
+                                    {pt ? (
+                                      pt.target
+                                    ) : (
+                                      <span
+                                        style={{
+                                          color: "var(--color-text-subtle)",
+                                        }}
+                                        title="KPI tanpa assignment KM Sementara (legacy)">
+                                        —
+                                      </span>
+                                    )}
+                                    {pt?.frozen && (
+                                      <span
+                                        style={{
+                                          marginLeft: 4,
+                                          fontSize: 11,
+                                          color: "var(--color-text-muted)",
+                                        }}>
+                                        (beku)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="num">
+                                    {String(it["realisasi"] ?? "—")}
+                                  </td>
+                                  <td className="num">
+                                    {editable ? (
+                                      <input
+                                        className="form-input form-input-sm"
+                                        style={{
+                                          width: 90,
+                                          textAlign: "right",
+                                        }}
+                                        value={
+                                          tfxValues[masterKpiId!] ?? pt!.target
+                                        }
+                                        onChange={(e) =>
+                                          setTfxValues((v) => ({
+                                            ...v,
+                                            [masterKpiId!]: e.target.value,
+                                          }))
+                                        }
+                                      />
+                                    ) : (
+                                      <span
+                                        style={{
+                                          color: "var(--color-text-subtle)",
+                                        }}>
+                                        —
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <textarea
+                          className="form-textarea"
+                          style={{
+                            marginTop: "var(--space-2)",
+                            fontSize: "var(--text-xs)",
+                            minHeight: 44,
+                            width: "100%",
+                          }}
+                          placeholder="Catatan koreksi target (wajib) — akan dikirim ke penyusun untuk resubmit"
+                          value={tfxNote}
+                          onChange={(e) => setTfxNote(e.target.value)}
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "var(--space-2)",
+                            marginTop: "var(--space-2)",
+                          }}>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            disabled={tfxBusy}
+                            onClick={() => handleResolveTargetFix(rl)}>
+                            <CheckCircle size={12} /> Simpan Koreksi &
+                            Kembalikan ke PIC
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => {
+                              setTfxExpanded(null);
+                              setTfxValues({});
+                              setTfxNote("");
+                            }}>
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </FoldCard>
+      )}
+
+      {/* Bundle Konsolidasi KM Tahunan — persetujuan akhir GM. Card ini hanya berisi aksi GM
+          (Checker/Approver biasa tak punya tombol di sini), jadi disembunyikan dari mereka
+          sepenuhnya — bukan hanya tombolnya — supaya tak jadi info yang tak bisa diapa-apakan. */}
+      {isGM && (
+        <>
+          <div
+            style={{
+              marginTop: "var(--space-6)",
+              marginBottom: "var(--space-2)",
+              fontSize: "var(--text-xs)",
+              fontWeight: 700,
+              color: "var(--color-text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}>
+            Konsolidasi & Kontrol (GM)
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "var(--space-2)",
+              marginBottom: "var(--space-3)",
+              alignItems: "center",
+            }}>
+            <button
+              className={`btn btn-sm ${kmBundleType === "draft" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setKmBundleType("draft")}>
+              Bundle KM Draft
+            </button>
+            <button
+              className={`btn btn-sm ${kmBundleType === "final" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setKmBundleType("final")}>
+              Bundle KM Final
+            </button>
+          </div>
+        </>
       )}
       {/* === Card 1: Bundle KM Kantor Induk === */}
-      {canReview && kmBundleKP && (
+      {isGM && kmBundleKP && (
         <FoldCard
           id="card-km-bundle-kp"
           highlight={highlight === "kmbundle"}
@@ -2272,128 +3202,131 @@ export function ApprovalsPage() {
               </span>
             )
           }>
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
-            <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Bidang</th>
+                  <th>Penyusun</th>
+                  <th>Status</th>
+                  <th>Review</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kmBundleKP.components.length === 0 && (
                   <tr>
-                    <th>Bidang</th>
-                    <th>Penyusun</th>
-                    <th>Status</th>
-                    <th>Review</th>
+                    <td colSpan={4}>
+                      <EmptyState
+                        title="Belum ada KM"
+                        message="Belum ada KM Kantor Induk yang masuk konsolidasi tahun ini."
+                      />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {kmBundleKP.components.length === 0 && (
+                )}
+                {kmBundleKP.components.map((c) => (
+                  <Fragment key={c.id}>
                     <tr>
-                      <td colSpan={4}>
-                        <EmptyState
-                          title="Belum ada KM"
-                          message="Belum ada KM Kantor Induk yang masuk konsolidasi tahun ini."
-                        />
+                      <td
+                        style={{
+                          fontSize: 13,
+                          color: "var(--color-text-muted)",
+                        }}>
+                        {c.bidang}
+                      </td>
+                      <td style={{ color: "var(--color-text-muted)" }}>
+                        {c.submitter}
+                      </td>
+                      <td>
+                        <span
+                          className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                          style={{ fontSize: 12 }}>
+                          {c.status === "ready"
+                            ? "Siap (lolos SM RPC)"
+                            : c.status === "approved"
+                              ? "Disahkan GM"
+                              : c.status === "submitted"
+                                ? "Dalam proses review"
+                                : c.status}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            setKmBundleExpanded(
+                              kmBundleExpanded === c.id ? null : c.id,
+                            )
+                          }
+                          title="Tinjau detail KPI & riwayat">
+                          <ClipboardCheck size={12} /> {c.kpiItems?.length ?? 0}{" "}
+                          KPI
+                          <ChevronDown
+                            size={12}
+                            style={{
+                              transform:
+                                kmBundleExpanded === c.id
+                                  ? "rotate(180deg)"
+                                  : "none",
+                              transition: "transform .2s",
+                            }}
+                          />
+                        </button>
                       </td>
                     </tr>
-                  )}
-                  {kmBundleKP.components.map((c) => (
-                    <Fragment key={c.id}>
+                    {kmBundleExpanded === c.id && (
                       <tr>
-                        <td>{c.bidang}</td>
-                        <td style={{ color: "var(--color-text-muted)" }}>
-                          {c.submitter}
-                        </td>
-                        <td>
-                          <span
-                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
-                            {c.status === "ready"
-                              ? "Siap (lolos SM RPC)"
-                              : c.status === "approved"
-                                ? "Disahkan GM"
-                                : c.status === "submitted"
-                                  ? "Dalam proses review"
-                                  : c.status}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            className="btn btn-ghost btn-md"
-                            onClick={() =>
-                              setKmBundleExpanded(
-                                kmBundleExpanded === c.id ? null : c.id,
-                              )
-                            }
-                            title="Tinjau detail KPI & riwayat">
-                            <ClipboardCheck size={12} />{" "}
-                            {c.kpiItems?.length ?? 0} KPI
-                            <ChevronDown
-                              size={12}
-                              style={{
-                                transform:
-                                  kmBundleExpanded === c.id
-                                    ? "rotate(180deg)"
-                                    : "none",
-                                transition: "transform .2s",
-                              }}
-                            />
-                          </button>
+                        <td
+                          colSpan={4}
+                          style={{
+                            background: "var(--color-surface-2)",
+                            padding: 0,
+                          }}>
+                          <div
+                            style={{
+                              padding: "var(--space-2) var(--space-3)",
+                              fontSize: 13,
+                              color: "var(--color-text-muted)",
+                            }}>
+                            Penanggung Jawab:{" "}
+                            <strong style={{ color: "var(--color-text)" }}>
+                              {c.holder ?? "—"}
+                            </strong>
+                          </div>
+                          <table
+                            className="data-table compact"
+                            style={{ margin: 0 }}>
+                            <thead>
+                              <tr>
+                                <th>No</th>
+                                <th>Indikator Kinerja</th>
+                                <th>Formula</th>
+                                <th>Satuan</th>
+                                <th className="num">Bobot</th>
+                                <th>Target Sem I</th>
+                                <th>{`Target ${new Date().getFullYear()}`}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(c.kpiItems ?? []).map((it, idx) => (
+                                <tr key={idx}>
+                                  <td>{idx + 1}</td>
+                                  <td>{it.indikator}</td>
+                                  <td>{it.formula}</td>
+                                  <td>{it.satuan}</td>
+                                  <td className="num">{it.bobot}</td>
+                                  <td>{it.target}</td>
+                                  <td>{it.target2}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </td>
                       </tr>
-                      {kmBundleExpanded === c.id && (
-                        <tr>
-                          <td
-                            colSpan={4}
-                            style={{
-                              background: "var(--color-surface-2)",
-                              padding: 0,
-                            }}>
-                            <div
-                              style={{
-                                padding: "var(--space-2) var(--space-3)",
-                                fontSize: 14,
-                                color: "var(--color-text-muted)",
-                              }}>
-                              Penanggung Jawab:{" "}
-                              <strong style={{ color: "var(--color-text)" }}>
-                                {c.holder ?? "—"}
-                              </strong>
-                            </div>
-                            <table
-                              className="data-table table-expanded"
-                              style={{ margin: 0 }}>
-                              <thead>
-                                <tr>
-                                  <th>No</th>
-                                  <th>Indikator Kinerja</th>
-                                  <th>Formula</th>
-                                  <th>Satuan</th>
-                                  <th className="num">Bobot</th>
-                                  <th className="num">Target Sem I</th>
-                                  <th className="num">{`Target ${new Date().getFullYear()}`}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(c.kpiItems ?? []).map((it, idx) => (
-                                  <tr key={idx}>
-                                    <td>{idx + 1}</td>
-                                    <td>{it.indikator}</td>
-                                    <td>{it.formula}</td>
-                                    <td>{it.satuan}</td>
-                                    <td className="num">{it.bobot}</td>
-                                    <td className="num">{it.target}</td>
-                                    <td className="num">{it.target2}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
           </div>
           {user?.role === "GM" && kmBundleKP.components.length > 0 && (
             <div
@@ -2403,7 +3336,7 @@ export function ApprovalsPage() {
                 padding: "var(--space-1) var(--space-3)",
               }}>
               <button
-                className="btn btn-ghost btn-md"
+                className="btn btn-ghost btn-sm"
                 onClick={() => handlePrintKmBundle("KP")}
                 title="Cetak / Print Preview KM Kantor Induk">
                 <Printer size={12} /> Cetak Preview
@@ -2416,13 +3349,12 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-4)",
-                padding: "0 var(--space-7) var(--space-7)",
+                gap: "var(--space-2)",
               }}>
               {kmBundleKP.components.some((c) => c.status === "submitted") && (
                 <div
                   style={{
-                    fontSize: "var(--text-sm)",
+                    fontSize: "var(--text-xs)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua KM Kantor Induk "siap" — GM dapat mengesahkan
@@ -2431,7 +3363,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM Kantor Induk (wajib)"
                 value={kmBundleKPNote}
                 onChange={(e) => setKmBundleKPNote(e.target.value)}
@@ -2458,9 +3390,8 @@ export function ApprovalsPage() {
             <div
               className="card-body"
               style={{
-                fontSize: "var(--text-sm)",
+                fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
-                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle KM Kantor Induk tahun ini telah disahkan oleh General
               Manager.
@@ -2470,7 +3401,7 @@ export function ApprovalsPage() {
       )}
 
       {/* === Card 2: Bundle KM UPMK (gabungan UPMK I–V) === */}
-      {canReview && kmBundleUPMK && (
+      {isGM && kmBundleUPMK && (
         <FoldCard
           id="card-km-bundle-upmk"
           accent="var(--color-accent)"
@@ -2489,219 +3420,209 @@ export function ApprovalsPage() {
               </span>
             )
           }>
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
-            <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Unit</th>
+                  <th>Bidang / Penyusun</th>
+                  <th>Status</th>
+                  <th>Review</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kmBundleUPMK.components.length === 0 && (
                   <tr>
-                    <th>Unit</th>
-                    <th>Bidang / Penyusun</th>
-                    <th>Status</th>
-                    <th>Review</th>
+                    <td colSpan={4}>
+                      <EmptyState
+                        title="Belum ada KM UPMK"
+                        message="Belum ada KM UPMK yang masuk konsolidasi tahun ini."
+                      />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {kmBundleUPMK.components.length === 0 && (
-                    <tr>
-                      <td colSpan={4}>
-                        <EmptyState
-                          title="Belum ada KM UPMK"
-                          message="Belum ada KM UPMK yang masuk konsolidasi tahun ini."
-                        />
-                      </td>
-                    </tr>
-                  )}
-                  {Object.entries(
-                    kmBundleUPMK.components.reduce<
-                      Record<string, KmBundleComp[]>
-                    >((acc, c) => {
-                      (acc[c.unitCode] ??= []).push(c);
-                      return acc;
-                    }, {}),
-                  )
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([unitCode, items]) => {
-                      const allApproved = items.every(
-                        (c) => c.status === "approved",
-                      );
-                      const allReady = items.every(
-                        (c) => c.status === "ready" || c.status === "approved",
-                      );
-                      const anySubmitted = items.some(
-                        (c) => c.status === "submitted",
-                      );
-                      const readyCount = items.filter(
-                        (c) => c.status === "ready" || c.status === "approved",
-                      ).length;
-                      const isOpen = upmkGroupExpanded === unitCode;
-                      const aggregateLabel = allApproved
-                        ? "Disahkan GM"
-                        : allReady
-                          ? "Siap"
-                          : anySubmitted
-                            ? "Dalam review"
-                            : `${readyCount}/${items.length} siap`;
-                      const aggregateCls = allApproved
-                        ? "completed"
-                        : allReady
-                          ? "at-risk"
-                          : anySubmitted
-                            ? "in-review"
-                            : "";
-                      return (
-                        <Fragment key={unitCode}>
-                          <tr style={{ background: "var(--color-surface-2)" }}>
-                            <td colSpan={2} style={{ fontWeight: 700 }}>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ gap: "var(--space-1)" }}
-                                onClick={() =>
-                                  setUpmkGroupExpanded(isOpen ? null : unitCode)
-                                }>
-                                <ChevronDown
-                                  size={12}
+                )}
+                {Object.entries(
+                  kmBundleUPMK.components.reduce<
+                    Record<string, KmBundleComp[]>
+                  >((acc, c) => {
+                    (acc[c.unitCode] ??= []).push(c);
+                    return acc;
+                  }, {}),
+                )
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([unitCode, items]) => {
+                    const allApproved = items.every(
+                      (c) => c.status === "approved",
+                    );
+                    const allReady = items.every(
+                      (c) => c.status === "ready" || c.status === "approved",
+                    );
+                    const anySubmitted = items.some(
+                      (c) => c.status === "submitted",
+                    );
+                    const readyCount = items.filter(
+                      (c) => c.status === "ready" || c.status === "approved",
+                    ).length;
+                    const isOpen = upmkGroupExpanded === unitCode;
+                    const aggregateLabel = allApproved
+                      ? "Disahkan GM"
+                      : allReady
+                        ? "Siap"
+                        : anySubmitted
+                          ? "Dalam review"
+                          : `${readyCount}/${items.length} siap`;
+                    const aggregateCls = allApproved
+                      ? "completed"
+                      : allReady
+                        ? "at-risk"
+                        : anySubmitted
+                          ? "in-review"
+                          : "";
+                    return (
+                      <Fragment key={unitCode}>
+                        <tr style={{ background: "var(--color-surface-2)" }}>
+                          <td colSpan={2} style={{ fontWeight: 700 }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              style={{ gap: "var(--space-1)" }}
+                              onClick={() =>
+                                setUpmkGroupExpanded(isOpen ? null : unitCode)
+                              }>
+                              <ChevronDown
+                                size={12}
+                                style={{
+                                  transform: isOpen ? "rotate(180deg)" : "none",
+                                  transition: "transform .2s",
+                                  flexShrink: 0,
+                                }}
+                              />
+                              {UNIT_NAMES[unitCode] ?? unitCode}
+                            </button>
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${aggregateCls}`}
+                              style={{ fontSize: 12 }}>
+                              {aggregateLabel}
+                            </span>
+                          </td>
+                          <td
+                            style={{
+                              color: "var(--color-text-muted)",
+                              fontSize: 13,
+                            }}>
+                            {items.length} bidang
+                          </td>
+                        </tr>
+                        {isOpen &&
+                          sortByBidang(items).map((c) => (
+                            <Fragment key={c.id}>
+                              <tr
+                                style={{
+                                  background: "var(--color-surface-2)",
+                                }}>
+                                <td style={{ paddingLeft: "var(--space-5)" }} />
+                                <td
                                   style={{
-                                    transform: isOpen
-                                      ? "rotate(180deg)"
-                                      : "none",
-                                    transition: "transform .2s",
-                                    flexShrink: 0,
-                                  }}
-                                />
-                                {UNIT_NAMES[unitCode] ?? unitCode}
-                              </button>
-                            </td>
-                            <td>
-                              <span className={`status-pill ${aggregateCls}`}>
-                                {aggregateLabel}
-                              </span>
-                            </td>
-                            <td
-                              style={{
-                                color: "var(--color-text-muted)",
-                              }}>
-                              {items.length} bidang
-                            </td>
-                          </tr>
-                          {isOpen &&
-                            sortByBidang(items).map((c) => (
-                              <Fragment key={c.id}>
-                                <tr
-                                  style={{
-                                    background: "var(--color-surface-2)",
+                                    fontSize: 13,
+                                    color: "var(--color-text-muted)",
                                   }}>
-                                  <td
-                                    style={{ paddingLeft: "var(--space-5)" }}
-                                  />
-                                  <td
-                                    style={{
-                                      fontSize: 14,
-                                      color: "var(--color-text-muted)",
-                                    }}>
-                                    {c.bidang} · {c.submitter}
-                                  </td>
-                                  <td>
-                                    <span
-                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
-                                      {c.status === "ready"
-                                        ? "Siap"
-                                        : c.status === "approved"
-                                          ? "Disahkan GM"
-                                          : "Dalam review"}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <button
-                                      className="btn btn-ghost btn-sm"
-                                      onClick={() =>
-                                        setKmBundleExpanded(
+                                  {c.bidang} · {c.submitter}
+                                </td>
+                                <td>
+                                  <span
+                                    className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                                    style={{ fontSize: 12 }}>
+                                    {c.status === "ready"
+                                      ? "Siap"
+                                      : c.status === "approved"
+                                        ? "Disahkan GM"
+                                        : "Dalam review"}
+                                  </span>
+                                </td>
+                                <td>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() =>
+                                      setKmBundleExpanded(
+                                        kmBundleExpanded === c.id ? null : c.id,
+                                      )
+                                    }
+                                    title="Tinjau detail KPI">
+                                    <ClipboardCheck size={12} />{" "}
+                                    {c.kpiItems?.length ?? 0} KPI
+                                    <ChevronDown
+                                      size={12}
+                                      style={{
+                                        transform:
                                           kmBundleExpanded === c.id
-                                            ? null
-                                            : c.id,
-                                        )
-                                      }
-                                      title="Tinjau detail KPI">
-                                      <ClipboardCheck size={12} />{" "}
-                                      {c.kpiItems?.length ?? 0} KPI
-                                      <ChevronDown
-                                        size={12}
-                                        style={{
-                                          transform:
-                                            kmBundleExpanded === c.id
-                                              ? "rotate(180deg)"
-                                              : "none",
-                                          transition: "transform .2s",
-                                        }}
-                                      />
-                                    </button>
+                                            ? "rotate(180deg)"
+                                            : "none",
+                                        transition: "transform .2s",
+                                      }}
+                                    />
+                                  </button>
+                                </td>
+                              </tr>
+                              {kmBundleExpanded === c.id && (
+                                <tr>
+                                  <td
+                                    colSpan={4}
+                                    style={{
+                                      background: "var(--color-surface-2)",
+                                      padding: 0,
+                                    }}>
+                                    <div
+                                      style={{
+                                        padding:
+                                          "var(--space-2) var(--space-3)",
+                                        fontSize: 13,
+                                        color: "var(--color-text-muted)",
+                                      }}>
+                                      Penanggung Jawab:{" "}
+                                      <strong
+                                        style={{ color: "var(--color-text)" }}>
+                                        {c.holder ?? "—"}
+                                      </strong>
+                                    </div>
+                                    <table
+                                      className="data-table compact"
+                                      style={{ margin: 0 }}>
+                                      <thead>
+                                        <tr>
+                                          <th>No</th>
+                                          <th>Indikator Kinerja</th>
+                                          <th>Formula</th>
+                                          <th>Satuan</th>
+                                          <th className="num">Bobot</th>
+                                          <th>Target Sem I</th>
+                                          <th>{`Target ${new Date().getFullYear()}`}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {(c.kpiItems ?? []).map((it, idx) => (
+                                          <tr key={idx}>
+                                            <td>{idx + 1}</td>
+                                            <td>{it.indikator}</td>
+                                            <td>{it.formula}</td>
+                                            <td>{it.satuan}</td>
+                                            <td className="num">{it.bobot}</td>
+                                            <td>{it.target}</td>
+                                            <td>{it.target2}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
                                   </td>
                                 </tr>
-                                {kmBundleExpanded === c.id && (
-                                  <tr>
-                                    <td
-                                      colSpan={4}
-                                      style={{
-                                        background: "var(--color-surface-2)",
-                                        padding: 0,
-                                      }}>
-                                      <div
-                                        style={{
-                                          padding:
-                                            "var(--space-2) var(--space-3)",
-                                          fontSize: 14,
-                                          color: "var(--color-text-muted)",
-                                        }}>
-                                        Penanggung Jawab:{" "}
-                                        <strong
-                                          style={{
-                                            color: "var(--color-text)",
-                                          }}>
-                                          {c.holder ?? "—"}
-                                        </strong>
-                                      </div>
-                                      <table
-                                        className="data-table table-expanded"
-                                        style={{ margin: 0 }}>
-                                        <thead>
-                                          <tr>
-                                            <th>No</th>
-                                            <th>Indikator Kinerja</th>
-                                            <th>Formula</th>
-                                            <th>Satuan</th>
-                                            <th className="num">Bobot</th>
-                                            <th>Target Sem I</th>
-                                            <th>{`Target ${new Date().getFullYear()}`}</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {(c.kpiItems ?? []).map((it, idx) => (
-                                            <tr key={idx}>
-                                              <td>{idx + 1}</td>
-                                              <td>{it.indikator}</td>
-                                              <td>{it.formula}</td>
-                                              <td>{it.satuan}</td>
-                                              <td className="num">
-                                                {it.bobot}
-                                              </td>
-                                              <td>{it.target}</td>
-                                              <td>{it.target2}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </td>
-                                  </tr>
-                                )}
-                              </Fragment>
-                            ))}
-                        </Fragment>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
+                              )}
+                            </Fragment>
+                          ))}
+                      </Fragment>
+                    );
+                  })}
+              </tbody>
+            </table>
           </div>
           {user?.role === "GM" && kmBundleUPMK.components.length > 0 && (
             <div
@@ -2724,7 +3645,6 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                padding: "0 var(--space-7) var(--space-7)",
                 gap: "var(--space-2)",
               }}>
               {kmBundleUPMK.components.some(
@@ -2741,7 +3661,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM UPMK (wajib)"
                 value={kmBundleUPMKNote}
                 onChange={(e) => setKmBundleUPMKNote(e.target.value)}
@@ -2770,7 +3690,6 @@ export function ApprovalsPage() {
               style={{
                 fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
-                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle KM UPMK tahun ini telah disahkan oleh General Manager.
             </div>
@@ -2778,498 +3697,16 @@ export function ApprovalsPage() {
         </FoldCard>
       )}
 
-      {/* Review Realisasi Kinerja Bulanan — hanya untuk Asman ke atas */}
-      {canReview && (
+      {/* Konsolidasi nilai parent KPI lintas-bidang — GM (Manajemen KPI di-hide utk role selain PIC RPC) */}
+      {isGM && (
         <FoldCard
-          id="card-realisasi"
-          highlight={highlight === "real"}
-          accent="var(--color-info)"
-          icon={<ClipboardCheck size={16} />}
-          title="Realisasi Kinerja Bulanan Menunggu Review"
-          right={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <span className="status-pill" style={{ background: 'var(--color-info-tint)', color: 'var(--color-info)', fontWeight: 'bold' }}>{realList.length} Realisasi</span>
-              {realList.length > 1 && (
-                <button
-                  className="btn btn-sm"
-                  style={{ background: 'var(--color-success)', color: '#fff' }}
-                  disabled={realBulkBusy}
-                  onClick={(e) => { e.stopPropagation(); handleRealBulkApprove(); }}
-                >
-                  <CheckCircle size={12} /> {realBulkBusy ? 'Memproses…' : `Setujui Semua (${realList.length})`}
-                </button>
-              )}
-            </div>
-          }
-        >
-          {realList.length === 0 ? (
-            <div className="card-body">
-              <EmptyState
-                title="Tidak ada realisasi"
-                message="Belum ada realisasi kinerja yang menunggu review Anda."
-              />
-            </div>
-          ) : (
-            <div
-              className="table-wrap"
-              style={{ paddingBottom: "var(--space-7)" }}>
-              <div
-                className={`table-scroll ${realList.length > 0 && "able-scroll"}`}>
-                <table className="data-table compact">
-                  <thead>
-                    <tr>
-                      <th>Unit</th>
-                      <th>Bidang</th>
-                      <th>Pengirim</th>
-                      <th>Indikator</th>
-                      <th>Jenjang Persetujuan</th>
-                      <th>SLA</th>
-                      <th>Tanggal</th>
-                      <th style={{ width: 260, textAlign: "center" }}>
-                        Tindakan
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {realList.map((rl) => {
-                      const entries = Object.values(rl.values ?? {});
-                      const rr = rl as RealisasiKinerja & {
-                        steps?: { label: string }[];
-                        currentStepIndex?: number;
-                        stepLabel?: string;
-                      };
-                      const steps = rr.steps ?? [];
-                      const ci = rr.currentStepIndex ?? 0;
-                      const stepCount = steps.length;
-                      const isLastStep = ci >= stepCount - 1;
-                      const prevLabel = steps[ci - 1]?.label;
-                      return (
-                        <Fragment key={rl.id}>
-                          <tr>
-                            <td style={{ fontWeight: 600 }}>
-                              {UNIT_NAMES[rl.unitCode] ?? rl.unitCode}
-                            </td>
-                            <td>
-                              {(rl as RealisasiKinerja & { bidang?: string })
-                                .bidang ?? "—"}
-                            </td>
-                            <td style={{ color: "var(--color-text-muted)" }}>
-                              {rl.submitter}
-                            </td>
-                            <td>
-                              <button
-                                className="btn btn-ghost btn-md"
-                                onClick={() =>
-                                  setRealExpanded(
-                                    realExpanded === rl.id ? null : rl.id,
-                                  )
-                                }>
-                                {entries.length} indikator{" "}
-                                <ChevronDown
-                                  size={12}
-                                  style={{
-                                    transform:
-                                      realExpanded === rl.id
-                                        ? "rotate(180deg)"
-                                        : "none",
-                                    transition: "transform .2s",
-                                  }}
-                                />
-                              </button>
-                            </td>
-                            <td style={{ minWidth: 200 }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 4,
-                                  marginBottom: 3,
-                                }}>
-                                {steps.map((_, idx) => (
-                                  <div
-                                    key={idx}
-                                    title={steps[idx]?.label}
-                                    style={{
-                                      width: 24,
-                                      height: 24,
-                                      borderRadius: "50%",
-                                      fontSize: 12,
-                                      fontWeight: 700,
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      background:
-                                        idx < ci
-                                          ? "var(--color-success)"
-                                          : idx === ci
-                                            ? "var(--color-info)"
-                                            : "var(--color-surface-2)",
-                                      color:
-                                        idx <= ci
-                                          ? "#fff"
-                                          : "var(--color-text-muted)",
-                                    }}>
-                                    {idx < ci ? "✓" : idx + 1}
-                                  </div>
-                                ))}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: 12,
-                                  color: "var(--color-info)",
-                                  fontWeight: 600,
-                                  paddingTop: 4,
-                                }}>
-                                Langkah {ci}/{stepCount - 1}:{" "}
-                                {rr.stepLabel ?? steps[ci]?.label ?? "—"}
-                              </div>
-                            </td>
-                            <td>
-                              <SlaBadge
-                                days={
-                                  (
-                                    rl as RealisasiKinerja & {
-                                      slaRemainingDays?: number;
-                                    }
-                                  ).slaRemainingDays
-                                }
-                              />
-                            </td>
-                            <td
-                              style={{
-                                color: "var(--color-text-muted)",
-                                whiteSpace: "nowrap",
-                              }}>
-                              {new Date(rl.submittedAt).toLocaleDateString(
-                                "id-ID",
-                                { day: "2-digit", month: "short" },
-                              )}
-                            </td>
-                            <td>
-                              {realTarget === rl.id ? (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "var(--space-2)",
-                                  }}>
-                                  <textarea
-                                    className="form-textarea"
-                                    style={{
-                                      fontSize: "var(--text-sm)",
-                                      minHeight: 48,
-                                    }}
-                                    placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
-                                    value={realNote}
-                                    onChange={(e) =>
-                                      setRealNote(e.target.value)
-                                    }
-                                  />
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      gap: "var(--space-2)",
-                                      flexWrap: "wrap",
-                                    }}>
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        gap: "var(--space-2)",
-                                        width: "100%",
-                                      }}>
-                                      <button
-                                        className="btn btn-md"
-                                        style={{
-                                          background: "var(--color-success)",
-                                          color: "#fff",
-                                        }}
-                                        disabled={realBusy}
-                                        onClick={() =>
-                                          handleRealReview(rl.id, "approve")
-                                        }>
-                                        <CheckCircle size={12} />{" "}
-                                        {isLastStep
-                                          ? "Setujui (Selesai → Bundle)"
-                                          : "Setujui & Teruskan"}
-                                      </button>
-                                      <button
-                                        className="btn btn-md"
-                                        style={{
-                                          background: "var(--color-danger)",
-                                          color: "#fff",
-                                        }}
-                                        disabled={realBusy}
-                                        onClick={() =>
-                                          handleRealReview(
-                                            rl.id,
-                                            "reject",
-                                            "konseptor",
-                                          )
-                                        }>
-                                        <XCircle size={12} /> Kembalikan ke
-                                        Konseptor
-                                      </button>
-                                    </div>
-
-                                    {ci >= 2 ? (
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          gap: "var(--space-2)",
-                                        }}>
-                                        <button
-                                          className="btn btn-md"
-                                          style={{
-                                            background: "var(--color-warning)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={realBusy}
-                                          onClick={() =>
-                                            handleRealReview(
-                                              rl.id,
-                                              "reject",
-                                              "previous",
-                                            )
-                                          }>
-                                          <XCircle size={12} /> Kembalikan ke{" "}
-                                          {prevLabel ?? "langkah sebelumnya"}
-                                        </button>
-                                        <button
-                                          className="btn btn-ghost btn-md"
-                                          onClick={() => {
-                                            setRealTarget(null);
-                                            setRealNote("");
-                                          }}>
-                                          Batal
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <button
-                                        className="btn btn-ghost btn-md"
-                                        onClick={() => {
-                                          setRealTarget(null);
-                                          setRealNote("");
-                                        }}>
-                                        Batal
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    gap: "var(--space-2)",
-                                    flexWrap: "wrap",
-                                  }}>
-                                  <button
-                                    className="btn btn-secondary btn-md"
-                                    onClick={() => {
-                                      setRealTarget(rl.id);
-                                      setRealNote("");
-                                    }}>
-                                    <Clock size={12} /> Tinjau
-                                  </button>
-                                  <button
-                                    className="btn btn-ghost btn-md"
-                                    onClick={() =>
-                                      realExpanded && realEditId
-                                        ? setRealEditId(null)
-                                        : startEditReal(rl)
-                                    }
-                                    title="Edit nilai realisasi pada tahap Anda">
-                                    <Pencil size={12} />{" "}
-                                    {realExpanded && realEditId
-                                      ? "Batal Edit"
-                                      : "Edit Nilai"}
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                          {realExpanded === rl.id && (
-                            <tr>
-                              <td
-                                colSpan={8}
-                                style={{
-                                  background: "var(--color-surface-2)",
-                                  padding: 0,
-                                }}>
-                                {realEditId === rl.id && (
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      justifyContent: "flex-end",
-                                      gap: "var(--space-2)",
-                                      padding: "var(--space-2) var(--space-3)",
-                                    }}>
-                                    <button
-                                      className="btn btn-md"
-                                      style={{
-                                        background: "var(--color-success)",
-                                        color: "#fff",
-                                      }}
-                                      disabled={realBusy}
-                                      onClick={() => saveEditReal(rl)}>
-                                      <CheckCircle size={12} /> Simpan Nilai
-                                    </button>
-                                  </div>
-                                )}
-
-                                <table
-                                  className="data-table table-expanded"
-                                  style={{ margin: 0 }}>
-                                  <thead>
-                                    <tr>
-                                      <th>No</th>
-                                      <th>Indikator</th>
-                                      <th>Satuan</th>
-                                      <th className="num">Bobot</th>
-                                      <th className="num">Target</th>
-                                      <th className="num">Realisasi</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {Object.entries(rl.values ?? {}).map(
-                                      ([key, vRaw], idx) => {
-                                        const it = vRaw as {
-                                          indikator?: string;
-                                          satuan?: string;
-                                          bobot?: unknown;
-                                          target?: unknown;
-                                          realisasi?: unknown;
-                                        };
-                                        const editing = realEditId === rl.id;
-                                        return (
-                                          <tr key={key}>
-                                            <td>{idx + 1}</td>
-                                            <td>{it.indikator ?? "—"}</td>
-                                            <td>{it.satuan ?? "—"}</td>
-                                            <td className="num">
-                                              {String(it.bobot ?? "—")}
-                                            </td>
-                                            <td className="num">
-                                              {String(it.target ?? "—")}
-                                            </td>
-                                            <td
-                                              className="num"
-                                              style={{ fontWeight: 700 }}>
-                                              {editing ? (
-                                                <input
-                                                  type="text"
-                                                  className="form-input form-input-sm"
-                                                  style={{
-                                                    width: 90,
-                                                    textAlign: "right",
-                                                  }}
-                                                  value={editValues[key] ?? ""}
-                                                  onChange={(e) =>
-                                                    setEditValues((v) => ({
-                                                      ...v,
-                                                      [key]: e.target.value,
-                                                    }))
-                                                  }
-                                                />
-                                              ) : (
-                                                String(it.realisasi ?? "—")
-                                              )}
-                                            </td>
-                                          </tr>
-                                        );
-                                      },
-                                    )}
-                                  </tbody>
-                                </table>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </FoldCard>
-      )}
-
-      {/* Living-target: Koreksi Target KM Sementara — hanya PIC REN (warden target) */}
-      {isPicRen && (
-        <FoldCard
-          id="card-target-fix"
+          id="card-kpi-consolidation"
           accent="var(--color-accent)"
-          icon={<Pencil size={14} />}
-          title="Koreksi Target KM Sementara (PIC REN)"
-          right={<span className="status-pill" style={{ background: 'var(--color-accent-tint)', color: 'var(--color-accent)', fontWeight: 'bold' }}>{targetFixList.length} package</span>}
-        >
-          {targetFixList.length === 0 ? (
-            <div className="card-body"><EmptyState title="Tidak ada koreksi target tertunda" message="Package akan muncul di sini saat reviewer mengembalikannya dengan alasan 'Masalah Target'." /></div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {targetFixList.map((rl) => {
-                const bidang = (rl as RealisasiKinerja & { bidang?: string }).bidang ?? '';
-                const items = Object.values(rl.values ?? {}) as Record<string, unknown>[];
-                const open = tfxExpanded === rl.id;
-                return (
-                  <div key={rl.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-2) var(--space-4)' }}>
-                      <div style={{ fontSize: 'var(--text-sm)' }}>
-                        <b>{UNIT_NAMES[rl.unitCode] ?? rl.unitCode}</b> — {bidang} <span style={{ color: 'var(--color-text-muted)' }}>· {rl.submitter}</span>
-                        {rl.reviewNote && <div style={{ fontSize: 10, color: 'var(--color-danger)', marginTop: 2 }}>Alasan reviewer: {rl.reviewNote}</div>}
-                      </div>
-                      <button className="btn btn-ghost btn-sm" onClick={() => { setTfxExpanded(open ? null : rl.id); setTfxValues({}); setTfxNote(''); }}>
-                        {open ? 'Tutup' : 'Koreksi Target'} <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
-                      </button>
-                    </div>
-                    {open && (
-                      <div style={{ padding: '0 var(--space-4) var(--space-3)' }}>
-                        <table className="data-table compact" style={{ margin: 0 }}>
-                          <thead>
-                            <tr><th>Indikator</th><th className="num">KM Sementara Skrg</th><th className="num">Realisasi</th><th className="num">Target Baru</th></tr>
-                          </thead>
-                          <tbody>
-                            {items.map((it, idx) => {
-                              const masterKpiId = it['masterKpiId'] as string | undefined;
-                              const pt = assignmentForItem(rl.unitCode, bidang, masterKpiId);
-                              const editable = !!pt?.assignment && !pt.frozen;
-                              return (
-                                <tr key={idx}>
-                                  <td style={{ maxWidth: 240 }}>{String(it['indikator'] ?? '—')}</td>
-                                  <td className="num">{pt ? pt.target : <span style={{ color: 'var(--color-text-subtle)' }} title="KPI tanpa assignment KM Sementara (legacy)">—</span>}{pt?.frozen && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--color-text-muted)' }}>(beku)</span>}</td>
-                                  <td className="num">{String(it['realisasi'] ?? '—')}</td>
-                                  <td className="num">
-                                    {editable ? (
-                                      <input
-                                        className="form-input form-input-sm" style={{ width: 90, textAlign: 'right' }}
-                                        value={tfxValues[masterKpiId!] ?? pt!.target}
-                                        onChange={(e) => setTfxValues((v) => ({ ...v, [masterKpiId!]: e.target.value }))}
-                                      />
-                                    ) : <span style={{ color: 'var(--color-text-subtle)' }}>—</span>}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                        <textarea
-                          className="form-textarea" style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-xs)', minHeight: 44, width: '100%' }}
-                          placeholder="Catatan koreksi target (wajib) — akan dikirim ke penyusun untuk resubmit"
-                          value={tfxNote} onChange={(e) => setTfxNote(e.target.value)}
-                        />
-                        <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-                          <button className="btn btn-sm btn-primary" disabled={tfxBusy} onClick={() => handleResolveTargetFix(rl)}>
-                            <CheckCircle size={12} /> Simpan Koreksi & Kembalikan ke PIC
-                          </button>
-                          <button className="btn btn-ghost btn-sm" onClick={() => { setTfxExpanded(null); setTfxValues({}); setTfxNote(''); }}>Batal</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          icon={<PieChart size={14} />}
+          title="Konsolidasi Nilai Parent KPI (Lintas Bidang)">
+          <div className="card-body" style={{ paddingBottom: 0 }}>
+            <ReviewPerKpiTab />
+          </div>
         </FoldCard>
       )}
 
@@ -3367,6 +3804,7 @@ export function ApprovalsPage() {
       )}
 
       {/* Kontrol Acuan Aktif KM — GM menentukan KM Draft atau KM Final yang jadi acuan realisasi periode ini */}
+      {/* Kontrol Acuan Aktif KM — GM menentukan KM Draft atau KM Final yang jadi acuan realisasi periode ini */}
       {isGM && selectedPeriodForWindow && (
         <FoldCard
           id="card-km-reference-control"
@@ -3387,7 +3825,6 @@ export function ApprovalsPage() {
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-3)",
-              padding: "0 var(--space-7) var(--space-7)",
             }}>
             <p
               style={{
@@ -3424,7 +3861,7 @@ export function ApprovalsPage() {
       )}
 
       {/* Bundle Konsolidasi Realisasi — persetujuan akhir GM (sekali untuk seluruh periode) */}
-      {canReview && bundle && (
+      {isGM && bundle && (
         <FoldCard
           id="card-real-bundle"
           highlight={highlight === "realbundle"}
@@ -3436,178 +3873,177 @@ export function ApprovalsPage() {
               {bundle.readyCount}/{bundle.total} siap
             </span>
           }>
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
-            <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Unit</th>
+                  <th>Bidang</th>
+                  <th>Penyusun</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bundle.components.length === 0 && (
                   <tr>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>Penyusun</th>
-                    <th>Status</th>
+                    <td colSpan={4}>
+                      <EmptyState
+                        title="Belum ada realisasi"
+                        message="Belum ada realisasi yang masuk konsolidasi periode ini."
+                      />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {bundle.components.length === 0 && (
-                    <tr>
-                      <td colSpan={4}>
-                        <EmptyState
-                          title="Belum ada realisasi"
-                          message="Belum ada realisasi yang masuk konsolidasi periode ini."
-                        />
+                )}
+                {/* KP — flat per bidang */}
+                {bundle.components
+                  .filter((c) => c.unitCode === "KP")
+                  .map((c) => (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 600 }}>
+                        {UNIT_NAMES[c.unitCode] ?? c.unitCode}
+                      </td>
+                      <td
+                        style={{
+                          fontSize: 13,
+                          color: "var(--color-text-muted)",
+                        }}>
+                        {c.bidang}
+                      </td>
+                      <td style={{ color: "var(--color-text-muted)" }}>
+                        {c.submitter}
+                      </td>
+                      <td>
+                        <span
+                          className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                          style={{ fontSize: 12 }}>
+                          {c.status === "ready"
+                            ? "Siap (lolos SM RPC)"
+                            : c.status === "approved"
+                              ? "Disetujui GM"
+                              : c.status === "submitted"
+                                ? "Dalam proses review"
+                                : c.status}
+                        </span>
                       </td>
                     </tr>
-                  )}
-                  {/* KP — flat per bidang */}
-                  {bundle.components
-                    .filter((c) => c.unitCode === "KP")
-                    .map((c) => (
-                      <tr key={c.id}>
-                        <td style={{ fontWeight: 600 }}>
-                          {UNIT_NAMES[c.unitCode] ?? c.unitCode}
-                        </td>
-                        <td
-                          style={{
-                            color: "var(--color-text-muted)",
-                          }}>
-                          {c.bidang}
-                        </td>
-                        <td style={{ color: "var(--color-text-muted)" }}>
-                          {c.submitter}
-                        </td>
-                        <td>
-                          <span
-                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
-                            {c.status === "ready"
-                              ? "Siap (lolos SM RPC)"
-                              : c.status === "approved"
-                                ? "Disetujui GM"
-                                : c.status === "submitted"
-                                  ? "Dalam proses review"
-                                  : c.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  {/* UPMK — satu baris grup per unit, expand ke sub-rows per bidang (urut BIDANG_ORDER) */}
-                  {Object.entries(
-                    bundle.components
-                      .filter((c) => c.unitCode !== "KP")
-                      .reduce<Record<string, typeof bundle.components>>(
-                        (acc, c) => {
-                          (acc[c.unitCode] ??= []).push(c);
-                          return acc;
-                        },
-                        {},
-                      ),
-                  )
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([unitCode, items]) => {
-                      const allApproved = items.every(
-                        (c) => c.status === "approved",
-                      );
-                      const allReady = items.every(
-                        (c) => c.status === "ready" || c.status === "approved",
-                      );
-                      const anySubmitted = items.some(
-                        (c) => c.status === "submitted",
-                      );
-                      const readyCount = items.filter(
-                        (c) => c.status === "ready" || c.status === "approved",
-                      ).length;
-                      const isOpen = upmkRealGroupExpanded === unitCode;
-                      const aggrLabel = allApproved
-                        ? "Disetujui GM"
-                        : allReady
-                          ? "Siap"
-                          : anySubmitted
-                            ? "Dalam review"
-                            : `${readyCount}/${items.length} siap`;
-                      const aggrCls = allApproved
-                        ? "completed"
-                        : allReady
-                          ? "at-risk"
-                          : anySubmitted
-                            ? "in-review"
-                            : "";
-                      return (
-                        <Fragment key={unitCode}>
-                          <tr style={{ background: "var(--color-surface-2)" }}>
-                            <td colSpan={2} style={{ fontWeight: 700 }}>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ gap: "var(--space-1)" }}
-                                onClick={() =>
-                                  setUpmkRealGroupExpanded(
-                                    isOpen ? null : unitCode,
-                                  )
-                                }>
-                                <ChevronDown
-                                  size={12}
-                                  style={{
-                                    transform: isOpen
-                                      ? "rotate(180deg)"
-                                      : "none",
-                                    transition: "transform .2s",
-                                    flexShrink: 0,
-                                  }}
-                                />
-                                {UNIT_NAMES[unitCode] ?? unitCode}
-                              </button>
-                            </td>
-                            <td
-                              style={{
-                                color: "var(--color-text-muted)",
-                              }}>
-                              {items.length} bidang
-                            </td>
-                            <td>
-                              <span className={`status-pill ${aggrCls}`}>
-                                {aggrLabel}
-                              </span>
-                            </td>
-                          </tr>
-                          {isOpen &&
-                            sortByBidang(items).map((c) => (
-                              <tr
-                                key={c.id}
+                  ))}
+                {/* UPMK — satu baris grup per unit, expand ke sub-rows per bidang (urut BIDANG_ORDER) */}
+                {Object.entries(
+                  bundle.components
+                    .filter((c) => c.unitCode !== "KP")
+                    .reduce<Record<string, typeof bundle.components>>(
+                      (acc, c) => {
+                        (acc[c.unitCode] ??= []).push(c);
+                        return acc;
+                      },
+                      {},
+                    ),
+                )
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([unitCode, items]) => {
+                    const allApproved = items.every(
+                      (c) => c.status === "approved",
+                    );
+                    const allReady = items.every(
+                      (c) => c.status === "ready" || c.status === "approved",
+                    );
+                    const anySubmitted = items.some(
+                      (c) => c.status === "submitted",
+                    );
+                    const readyCount = items.filter(
+                      (c) => c.status === "ready" || c.status === "approved",
+                    ).length;
+                    const isOpen = upmkRealGroupExpanded === unitCode;
+                    const aggrLabel = allApproved
+                      ? "Disetujui GM"
+                      : allReady
+                        ? "Siap"
+                        : anySubmitted
+                          ? "Dalam review"
+                          : `${readyCount}/${items.length} siap`;
+                    const aggrCls = allApproved
+                      ? "completed"
+                      : allReady
+                        ? "at-risk"
+                        : anySubmitted
+                          ? "in-review"
+                          : "";
+                    return (
+                      <Fragment key={unitCode}>
+                        <tr style={{ background: "var(--color-surface-2)" }}>
+                          <td colSpan={2} style={{ fontWeight: 700 }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              style={{ gap: "var(--space-1)" }}
+                              onClick={() =>
+                                setUpmkRealGroupExpanded(
+                                  isOpen ? null : unitCode,
+                                )
+                              }>
+                              <ChevronDown
+                                size={12}
                                 style={{
-                                  background: "var(--color-surface-2)",
+                                  transform: isOpen ? "rotate(180deg)" : "none",
+                                  transition: "transform .2s",
+                                  flexShrink: 0,
+                                }}
+                              />
+                              {UNIT_NAMES[unitCode] ?? unitCode}
+                            </button>
+                          </td>
+                          <td
+                            style={{
+                              color: "var(--color-text-muted)",
+                              fontSize: 13,
+                            }}>
+                            {items.length} bidang
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${aggrCls}`}
+                              style={{ fontSize: 12 }}>
+                              {aggrLabel}
+                            </span>
+                          </td>
+                        </tr>
+                        {isOpen &&
+                          sortByBidang(items).map((c) => (
+                            <tr
+                              key={c.id}
+                              style={{ background: "var(--color-surface-2)" }}>
+                              <td style={{ paddingLeft: "var(--space-5)" }} />
+                              <td
+                                style={{
+                                  fontSize: 13,
+                                  color: "var(--color-text-muted)",
                                 }}>
-                                <td style={{ paddingLeft: "var(--space-5)" }} />
-                                <td
-                                  style={{
-                                    fontSize: 14,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  {c.bidang}
-                                </td>
-                                <td
-                                  style={{
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  {c.submitter}
-                                </td>
-                                <td>
-                                  <span
-                                    className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
-                                    {c.status === "ready"
-                                      ? "Siap"
-                                      : c.status === "approved"
-                                        ? "Disetujui GM"
-                                        : "Dalam review"}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                        </Fragment>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
+                                {c.bidang}
+                              </td>
+                              <td
+                                style={{
+                                  color: "var(--color-text-muted)",
+                                  fontSize: 13,
+                                }}>
+                                {c.submitter}
+                              </td>
+                              <td>
+                                <span
+                                  className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                                  style={{ fontSize: 12 }}>
+                                  {c.status === "ready"
+                                    ? "Siap"
+                                    : c.status === "approved"
+                                      ? "Disetujui GM"
+                                      : "Dalam review"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                      </Fragment>
+                    );
+                  })}
+              </tbody>
+            </table>
           </div>
           {user?.role === "GM" && bundle.components.length > 0 && (
             <div
@@ -3631,7 +4067,6 @@ export function ApprovalsPage() {
                 display: "flex",
                 flexDirection: "column",
                 gap: "var(--space-2)",
-                padding: "0 var(--space-7) var(--space-7)",
               }}>
               {!bundle.canApprove && bundle.total > 0 && (
                 <div
@@ -3645,7 +4080,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
                 placeholder="Catatan persetujuan/penolakan bundle (wajib)"
                 value={bundleNote}
                 onChange={(e) => setBundleNote(e.target.value)}
@@ -3674,7 +4109,6 @@ export function ApprovalsPage() {
               style={{
                 fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
-                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle periode ini telah disetujui penuh oleh General Manager.
             </div>
@@ -3682,585 +4116,772 @@ export function ApprovalsPage() {
         </FoldCard>
       )}
 
-      {/* Workflow Timeline Card */}
+      {/* Semua Dokumen Persetujuan — data nyata dari dokumen yang diinput. Selalu tampil
+          (bukan di balik toggle) agar checker/approver bisa langsung menelusuri tanpa membuka accordion. */}
       <FoldCard
-        icon={<CalendarClock size={16} />}
-        title="Timeline Pelaporan Bulanan"
-        right={<span className="card-meta">5 Fase siklus bulanan</span>}
-        defaultOpen={false}>
+        icon={<FileText size={14} />}
+        title="Semua Dokumen Persetujuan"
+        right={
+          <span className="card-meta">{filteredDocRows.length} dokumen</span>
+        }>
         <div
           className="card-body"
-          style={{ padding: "var(--space-4) var(--space-7) var(--space-7)" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0,
-              marginBottom: "var(--space-5)",
-              overflowX: "auto",
-              paddingBottom: 4,
-            }}>
-            {WORKFLOW_STATIC.map((w, i) => (
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "var(--space-2)",
+            alignItems: "center",
+            paddingBottom: "var(--space-3)",
+          }}>
+          <button
+            className={`btn btn-sm ${trackerType === "all" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setTrackerType("all")}>
+            Semua
+          </button>
+          <button
+            className={`btn btn-sm ${trackerType === "km" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setTrackerType("km")}>
+            KM
+          </button>
+          <button
+            className={`btn btn-sm ${trackerType === "real" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setTrackerType("real")}>
+            Realisasi
+          </button>
+          <select
+            className="form-input form-input-sm"
+            value={trackerStatus}
+            onChange={(e) => setTrackerStatus(e.target.value)}>
+            <option value="all">Semua status</option>
+            {Object.entries(DOC_STATUS_LABEL).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="form-input form-input-sm"
+            value={trackerPeriod}
+            onChange={(e) => setTrackerPeriod(e.target.value)}>
+            <option value="all">Semua periode</option>
+            {periods.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div
+          className="kpi-strip-grid"
+          style={{ padding: "0 var(--space-4) var(--space-4)" }}>
+          <div className="metric-card" style={{ maxWidth: "none" }}>
+            <div className="metric-label">Total</div>
+            <div className="metric-value">{filteredDocRows.length}</div>
+          </div>
+          <div className="metric-card" style={{ maxWidth: "none" }}>
+            <div className="metric-label">Disetujui</div>
+            <div
+              className="metric-value"
+              style={{ color: "var(--color-success)" }}>
+              {filteredDocRows.filter((d) => d.status === "approved").length}
+            </div>
+          </div>
+          <div className="metric-card" style={{ maxWidth: "none" }}>
+            <div className="metric-label">Dalam Review</div>
+            <div
+              className="metric-value"
+              style={{ color: "var(--color-warning)" }}>
+              {filteredDocRows.filter((d) => d.status === "submitted").length}
+            </div>
+          </div>
+          <div className="metric-card" style={{ maxWidth: "none" }}>
+            <div className="metric-label">Dikembalikan</div>
+            <div
+              className="metric-value"
+              style={{ color: "var(--color-danger)" }}>
+              {filteredDocRows.filter((d) => d.status === "rejected").length}
+            </div>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="data-table compact">
+            <thead>
+              <tr>
+                <th>Unit</th>
+                <th>Jenis Dokumen</th>
+                <th>Periode</th>
+                <th>Jenjang</th>
+                <th>Status</th>
+                <th>Menunggu Review</th>
+                <th>Komentar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDocRows.map((d) => (
+                <Fragment key={d.id}>
+                  <tr>
+                    <td style={{ fontWeight: 600 }}>
+                      {UNIT_NAMES[d.unitCode] ?? d.unitCode}
+                    </td>
+                    <td>
+                      {d.jenis}
+                      {d.detail ? (
+                        <span style={{ color: "var(--color-text-muted)" }}>
+                          {" "}
+                          · {d.detail}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td
+                      style={{
+                        color: "var(--color-text-muted)",
+                        whiteSpace: "nowrap",
+                      }}>
+                      {periodMap[d.periodId] ?? "—"}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {d.status === "approved" ? (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--color-success)",
+                            fontWeight: 600,
+                          }}>
+                          ✓ Selesai ({d.stepCount}/{d.stepCount})
+                        </span>
+                      ) : d.status === "ready" ? (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--color-warning)",
+                            fontWeight: 600,
+                          }}>
+                          Lolos rantai → bundle
+                        </span>
+                      ) : d.status === "rejected" ? (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--color-danger)",
+                          }}>
+                          Dikembalikan
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--color-accent)",
+                            fontWeight: 600,
+                          }}>
+                          Langkah {d.stepIndex}/{Math.max(0, d.stepCount - 1)}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}
+                        style={{ fontSize: 12 }}>
+                        {DOC_STATUS_LABEL[d.status] ?? d.status}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        color:
+                          d.status === "approved"
+                            ? "var(--color-success)"
+                            : "var(--color-text-muted)",
+                        fontSize: 13,
+                      }}>
+                      {nextApproverLabel(d.status, d.stepLabel)}
+                    </td>
+                    <td>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() =>
+                          setDocExpanded(docExpanded === d.id ? null : d.id)
+                        }
+                        title="Lihat riwayat persetujuan & komentar">
+                        <MessageSquare size={12} />{" "}
+                        {Array.isArray(d.history)
+                          ? (d.history as unknown[]).length
+                          : 0}
+                        <ChevronDown
+                          size={12}
+                          style={{
+                            transform:
+                              docExpanded === d.id ? "rotate(180deg)" : "none",
+                            transition: "transform .2s",
+                          }}
+                        />
+                      </button>
+                    </td>
+                  </tr>
+                  {docExpanded === d.id && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          background: "var(--color-surface-2)",
+                          padding: 0,
+                        }}>
+                        <ApprovalTimeline history={d.history} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+              {filteredDocRows.length === 0 && (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState
+                      title={
+                        docRows.length === 0
+                          ? "Belum ada dokumen"
+                          : "Tidak ada dokumen yang cocok"
+                      }
+                      message={
+                        docRows.length === 0
+                          ? "Belum ada Kontrak Manajemen atau Realisasi yang diinput."
+                          : "Coba ubah filter jenis, status, atau periode."
+                      }
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </FoldCard>
+
+      {/* Monitoring/audit — bukan aksi, disembunyikan di balik toggle agar halaman tetap ringkas */}
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => setShowMonitoring((v) => !v)}
+        style={{
+          marginTop: "var(--space-6)",
+          color: "var(--color-text-muted)",
+        }}>
+        <ChevronDown
+          size={14}
+          style={{
+            transform: showMonitoring ? "rotate(180deg)" : "none",
+            transition: "transform .2s",
+          }}
+        />
+        Pantau semua — riwayat dokumen, timeline, RACI
+      </button>
+
+      {showMonitoring && (
+        <div style={{ marginTop: "var(--space-4)" }}>
+          {/* Workflow Timeline Card */}
+          <FoldCard
+            icon={<CalendarClock size={14} />}
+            title="Timeline Pelaporan Bulanan"
+            right={<span className="card-meta">5 Fase siklus bulanan</span>}
+            defaultOpen={false}>
+            <div className="card-body" style={{ padding: "var(--space-4)" }}>
               <div
-                key={i}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  flex: 1,
-                  minWidth: 0,
+                  gap: 0,
+                  marginBottom: "var(--space-5)",
+                  overflowX: "auto",
+                  paddingBottom: 4,
                 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    flex: 1,
-                    minWidth: 80,
-                  }}>
+                {WORKFLOW_STATIC.map((w, i) => (
                   <div
+                    key={i}
                     style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: "50%",
-                      background: FASE_ACCENT[i],
-                      color: "#fff",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      flexShrink: 0,
-                    }}>
-                    {w.stage}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: FASE_ACCENT[i],
-                      marginTop: 6,
-                      textAlign: "center",
-                      whiteSpace: "nowrap",
-                    }}>
-                    {w.fase}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--color-text-muted)",
-                      textAlign: "center",
-                      whiteSpace: "nowrap",
-                    }}>
-                    {w.deadline}
-                  </div>
-                </div>
-                {i < WORKFLOW_STATIC.length - 1 && (
-                  <div
-                    style={{
                       flex: 1,
-                      height: 2,
-                      background: `linear-gradient(to right, ${FASE_ACCENT[i]}, ${FASE_ACCENT[i + 1]})`,
-                      minWidth: 16,
-                    }}
-                  />
-                )}
+                      minWidth: 0,
+                    }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        flex: 1,
+                        minWidth: 80,
+                      }}>
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: "50%",
+                          background: FASE_ACCENT[i],
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 700,
+                          fontSize: 14,
+                          flexShrink: 0,
+                        }}>
+                        {w.stage}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: FASE_ACCENT[i],
+                          marginTop: 6,
+                          textAlign: "center",
+                          whiteSpace: "nowrap",
+                        }}>
+                        {w.fase}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--color-text-muted)",
+                          textAlign: "center",
+                          whiteSpace: "nowrap",
+                        }}>
+                        {w.deadline}
+                      </div>
+                    </div>
+                    {i < WORKFLOW_STATIC.length - 1 && (
+                      <div
+                        style={{
+                          flex: 1,
+                          height: 2,
+                          background: `linear-gradient(to right, ${FASE_ACCENT[i]}, ${FASE_ACCENT[i + 1]})`,
+                          minWidth: 16,
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <div className="three-col-grid" style={{ marginBottom: 0 }}>
-            {WORKFLOW_STATIC.map((w, i) => (
-              <div
-                key={i}
-                style={{
-                  border: "1px solid var(--color-border)",
-                  borderTop: `3px solid ${FASE_ACCENT[i]}`,
-                  borderRadius: "var(--radius-md)",
-                  padding: "var(--space-3) var(--space-4)",
-                  background: "var(--color-surface)",
-                }}>
+              <div className="three-col-grid" style={{ marginBottom: 0 }}>
+                {WORKFLOW_STATIC.map((w, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      border: "1px solid var(--color-border)",
+                      borderTop: `3px solid ${FASE_ACCENT[i]}`,
+                      borderRadius: "var(--radius-md)",
+                      padding: "var(--space-3) var(--space-4)",
+                      background: "var(--color-surface)",
+                    }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: "var(--space-2)",
+                      }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: FASE_ACCENT[i],
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                        }}>
+                        {w.fase} · {w.deadline}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          background: "var(--color-surface-2)",
+                          color: "var(--color-text-muted)",
+                          padding: "1px 7px",
+                          borderRadius: 8,
+                        }}>
+                        SLA {w.slaHours}j
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: "var(--text-sm)",
+                        marginBottom: "var(--space-1)",
+                      }}>
+                      {w.action}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "var(--color-accent)",
+                        marginBottom: "var(--space-2)",
+                      }}>
+                      {STAGES[w.stage]}
+                    </div>
+                    <ul
+                      style={{
+                        margin: 0,
+                        paddingLeft: 14,
+                        fontSize: 12,
+                        color: "var(--color-text-muted)",
+                        lineHeight: 1.75,
+                      }}>
+                      {w.checklist.map((c, ci) => (
+                        <li key={ci}>{c}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </FoldCard>
+
+          {/* RACI Matrix — dinamis per role */}
+          {(() => {
+            const myCol = getUserRaciCol(user);
+            return (
+              <FoldCard
+                icon={<UsersRound size={14} />}
+                title="Matriks RACI"
+                right={
+                  <span className="card-meta">
+                    R=Responsible · A=Accountable · C=Consulted · I=Informed
+                  </span>
+                }
+                defaultOpen={false}>
+                {myCol && (
+                  <div
+                    style={{
+                      margin: "var(--space-4) var(--space-4) 0",
+                      padding: "var(--space-3) var(--space-4)",
+                      borderRadius: "var(--radius-md)",
+                      background: "var(--color-accent-tint)",
+                      borderLeft: "4px solid var(--color-accent)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                    }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "var(--color-accent)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}>
+                      Peran Anda dalam Workflow
+                    </div>
+                    <div
+                      style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
+                      {RACI_COL_LABEL[myCol]}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "var(--text-xs)",
+                        color: "var(--color-text-muted)",
+                      }}>
+                      {RACI_COL_TANGGUNG[myCol]}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "var(--color-text-subtle)",
+                        marginTop: 2,
+                      }}>
+                      Kolom yang disorot (🔵) pada tabel di bawah menunjukkan
+                      posisi Anda dalam matriks.
+                    </div>
+                  </div>
+                )}
                 <div
                   style={{
                     display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: "var(--space-2)",
-                  }}>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: FASE_ACCENT[i],
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}>
-                    {w.fase} · {w.deadline}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      background: "var(--color-surface-2)",
-                      color: "var(--color-text-muted)",
-                      padding: "1px 7px",
-                      borderRadius: 8,
-                    }}>
-                    SLA {w.slaHours}j
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontWeight: 600,
-                    fontSize: "var(--text-sm)",
-                    marginBottom: "var(--space-1)",
-                  }}>
-                  {w.action}
-                </div>
-                <div
-                  style={{
+                    gap: "var(--space-3)",
+                    flexWrap: "wrap",
+                    padding: "var(--space-3) var(--space-4)",
                     fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--color-accent)",
-                    marginBottom: "var(--space-2)",
                   }}>
-                  {STAGES[w.stage]}
-                </div>
-                <ul
-                  style={{
-                    margin: 0,
-                    paddingLeft: 14,
-                    fontSize: 12,
-                    color: "var(--color-text-muted)",
-                    lineHeight: 1.75,
-                  }}>
-                  {w.checklist.map((c, ci) => (
-                    <li key={ci}>{c}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      </FoldCard>
-
-      {/* Semua Dokumen Persetujuan — data nyata dari dokumen yang diinput */}
-      <FoldCard
-        icon={<FileText size={16} />}
-        title="Semua Dokumen Persetujuan"
-        right={
-          <span className="card-meta">
-            {docRows.length} dokumen · KM + Realisasi
-          </span>
-        }>
-        <div className="table-wrap" style={{ paddingBottom: "var(--space-7)" }}>
-          <div className="table-scroll">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Unit</th>
-                  <th>Jenis Dokumen</th>
-                  <th>Periode</th>
-                  <th>Jenjang</th>
-                  <th>Status</th>
-                  <th>Menunggu Review</th>
-                  <th>Komentar</th>
-                </tr>
-              </thead>
-              <tbody>
-                {docRows.map((d) => (
-                  <Fragment key={d.id}>
-                    <tr>
-                      <td style={{ fontWeight: 600 }}>
-                        {UNIT_NAMES[d.unitCode] ?? d.unitCode}
-                      </td>
-                      <td>
-                        {d.jenis}
-                        {d.detail ? (
-                          <span style={{ color: "var(--color-text-muted)" }}>
-                            {" "}
-                            · {d.detail}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td
+                  {[
+                    [
+                      "R",
+                      "var(--color-accent-tint)",
+                      "var(--color-accent)",
+                      "Responsible — pelaksana utama",
+                    ],
+                    [
+                      "A",
+                      "rgba(16,185,129,0.12)",
+                      "var(--color-success)",
+                      "Accountable — pemegang tanggung jawab akhir",
+                    ],
+                    [
+                      "C",
+                      "rgba(59,130,246,0.12)",
+                      "var(--color-info)",
+                      "Consulted — diminta masukan/persetujuan",
+                    ],
+                    [
+                      "I",
+                      "var(--color-surface-2)",
+                      "var(--color-text-subtle)",
+                      "Informed — diinformasikan",
+                    ],
+                    [
+                      "—",
+                      "var(--color-surface-2)",
+                      "var(--color-text-subtle)",
+                      "Tidak terlibat pada alur ini",
+                    ],
+                  ].map(([lbl, bg, clr, desc]) => (
+                    <div
+                      key={lbl}
+                      style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span
                         style={{
-                          color: "var(--color-text-muted)",
-                          whiteSpace: "nowrap",
-                        }}>
-                        {periodMap[d.periodId] ?? "—"}
-                      </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        {d.status === "approved" ? (
-                          <span
-                            style={{
-                              fontSize: 14,
-                              color: "var(--color-success)",
-                              fontWeight: 600,
-                            }}>
-                            ✓ Selesai ({d.stepCount}/{d.stepCount})
-                          </span>
-                        ) : d.status === "ready" ? (
-                          <span
-                            style={{
-                              fontSize: 14,
-                              color: "var(--color-warning)",
-                              fontWeight: 600,
-                            }}>
-                            Lolos rantai → bundle
-                          </span>
-                        ) : d.status === "rejected" ? (
-                          <span
-                            style={{
-                              fontSize: 14,
-                              color: "var(--color-danger)",
-                            }}>
-                            Dikembalikan
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              fontSize: 14,
-                              color: "var(--color-accent)",
-                              fontWeight: 600,
-                            }}>
-                            Langkah {d.stepIndex}/{Math.max(0, d.stepCount - 1)}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}>
-                          {DOC_STATUS_LABEL[d.status] ?? d.status}
-                        </span>
-                      </td>
-                      <td
-                        style={{
-                          color:
-                            d.status === "approved"
-                              ? "var(--color-success)"
-                              : "var(--color-text-muted)",
-                          fontSize: 14,
-                          fontWeight: 500,
-                        }}>
-                        {nextApproverLabel(d.status, d.stepLabel)}
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-ghost btn-md"
-                          onClick={() =>
-                            setDocExpanded(docExpanded === d.id ? null : d.id)
-                          }
-                          title="Lihat riwayat persetujuan & komentar">
-                          <MessageSquare size={12} />{" "}
-                          {Array.isArray(d.history)
-                            ? (d.history as unknown[]).length
-                            : 0}
-                          <ChevronDown
-                            size={12}
-                            style={{
-                              transform:
-                                docExpanded === d.id
-                                  ? "rotate(180deg)"
-                                  : "none",
-                              transition: "transform .2s",
-                            }}
-                          />
-                        </button>
-                      </td>
-                    </tr>
-                    {docExpanded === d.id && (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          style={{
-                            background: "var(--color-surface-2)",
-                            padding: 0,
-                          }}>
-                          <ApprovalTimeline history={d.history} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-                {docRows.length === 0 && (
-                  <tr>
-                    <td colSpan={7}>
-                      <EmptyState
-                        title="Belum ada dokumen"
-                        message="Belum ada Kontrak Manajemen atau Realisasi yang diinput."
-                      />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </FoldCard>
-
-      {/* RACI Matrix — dinamis per role */}
-      {(() => {
-        const myCol = getUserRaciCol(user);
-        return (
-          <FoldCard
-            icon={<UsersRound size={16} />}
-            title="Matriks RACI"
-            right={
-              <span className="card-meta">
-                R=Responsible · A=Accountable · C=Consulted · I=Informed
-              </span>
-            }
-            defaultOpen={false}>
-            {myCol && (
-              <div
-                style={{
-                  margin: "var(--space-4) var(--space-7) 0",
-                  padding: "var(--space-3) var(--space-4)",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--color-accent-tint)",
-                  borderLeft: "4px solid var(--color-accent)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "var(--color-accent)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                  }}>
-                  Peran Anda dalam Workflow
-                </div>
-                <div style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>
-                  {RACI_COL_LABEL[myCol]}
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    color: "var(--color-text-muted)",
-                  }}>
-                  {RACI_COL_TANGGUNG[myCol]}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--color-text-subtle)",
-                    marginTop: 6,
-                  }}>
-                  Kolom yang disorot (🔵) pada tabel di bawah menunjukkan posisi
-                  Anda dalam matriks.
-                </div>
-              </div>
-            )}
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--space-3)",
-                flexWrap: "wrap",
-                padding: "var(--space-3) var(--space-7)",
-                fontSize: 12,
-              }}>
-              {[
-                [
-                  "R",
-                  "var(--color-accent-tint)",
-                  "var(--color-accent)",
-                  "Responsible — pelaksana utama",
-                ],
-                [
-                  "A",
-                  "rgba(16,185,129,0.12)",
-                  "var(--color-success)",
-                  "Accountable — pemegang tanggung jawab akhir",
-                ],
-                [
-                  "C",
-                  "rgba(59,130,246,0.12)",
-                  "var(--color-info)",
-                  "Consulted — diminta masukan/persetujuan",
-                ],
-                [
-                  "I",
-                  "var(--color-surface-2)",
-                  "var(--color-text-subtle)",
-                  "Informed — diinformasikan",
-                ],
-                [
-                  "—",
-                  "var(--color-surface-2)",
-                  "var(--color-text-subtle)",
-                  "Tidak terlibat pada alur ini",
-                ],
-              ].map(([lbl, bg, clr, desc]) => (
-                <div
-                  key={lbl}
-                  style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 22,
-                      height: 18,
-                      borderRadius: 3,
-                      lineHeight: "18px",
-                      textAlign: "center",
-                      fontWeight: 700,
-                      background: bg as string,
-                      color: clr as string,
-                      fontSize: 10,
-                    }}>
-                    {lbl}
-                  </span>
-                  <span style={{ color: "var(--color-text-muted)" }}>
-                    {desc}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div
-              className="table-wrap"
-              style={{ paddingBottom: "var(--space-2)" }}>
-              <div className="table-scroll">
-                <table className="data-table compact">
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 220 }}>Aktivitas</th>
-                      <th
-                        style={{
-                          fontSize: 14,
-                          color: "#e5e7eb",
-                          fontWeight: 600,
-                          whiteSpace: "nowrap",
+                          display: "inline-block",
+                          width: 22,
+                          height: 18,
+                          borderRadius: 3,
+                          lineHeight: "18px",
                           textAlign: "center",
+                          fontWeight: 700,
+                          background: bg as string,
+                          color: clr as string,
+                          fontSize: 12,
                         }}>
-                        Ruang Lingkup
-                      </th>
-                      {RACI_COLS.map((col) => (
+                        {lbl}
+                      </span>
+                      <span style={{ color: "var(--color-text-muted)" }}>
+                        {desc}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="table-wrap">
+                  <table className="data-table compact">
+                    <thead>
+                      <tr>
+                        <th style={{ minWidth: 220 }}>Aktivitas</th>
                         <th
-                          key={col.key}
                           style={{
+                            fontSize: 11,
+                            color: "var(--color-text-muted)",
+                            fontWeight: 500,
+                            whiteSpace: "nowrap",
                             textAlign: "center",
-                            minWidth: 110,
-                            background:
-                              myCol === col.key
-                                ? "var(--color-accent-tint)"
-                                : undefined,
-                            color:
-                              myCol === col.key
-                                ? "var(--color-accent)"
-                                : undefined,
-                            borderBottom:
-                              myCol === col.key
-                                ? "2px solid var(--color-accent)"
-                                : undefined,
                           }}>
-                          <div style={{ fontWeight: 700, fontSize: 14 }}>
-                            {myCol === col.key ? "🔵 " : ""}
-                            {col.label}
-                          </div>
-                          <div
+                          Ruang Lingkup
+                        </th>
+                        {RACI_COLS.map((col) => (
+                          <th
+                            key={col.key}
                             style={{
-                              fontSize: 12,
-                              fontWeight: 500,
+                              textAlign: "center",
+                              minWidth: 110,
+                              background:
+                                myCol === col.key
+                                  ? "var(--color-accent-tint)"
+                                  : undefined,
                               color:
                                 myCol === col.key
                                   ? "var(--color-accent)"
-                                  : "var(--color-text-sidebar-muted)",
-                              marginTop: 2,
-                              whiteSpace: "normal",
-                              lineHeight: 1.3,
-                            }}>
-                            {col.sublabel}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {RACI_ROWS.map((row, i) => (
-                      <tr key={i}>
-                        <td
-                          style={{
-                            fontWeight: 500,
-                            fontSize: "var(--text-sm)",
-                          }}>
-                          {row.activity}
-                        </td>
-                        <td
-                          style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                          <span
-                            style={{
-                              fontSize: 12,
-                              background: "var(--color-surface-2)",
-                              color: "var(--color-text-muted)",
-                              padding: "2px 6px",
-                              borderRadius: 8,
-                            }}>
-                            {row.scope}
-                          </span>
-                        </td>
-                        {RACI_COLS.map((col) => {
-                          const v = row.values[col.key];
-                          const isMyCol = myCol === col.key;
-                          return (
-                            <td
-                              key={col.key}
-                              style={{
-                                textAlign: "center",
-                                background: isMyCol
-                                  ? "rgba(var(--color-accent-rgb, 14,116,144),0.04)"
                                   : undefined,
+                              borderBottom:
+                                myCol === col.key
+                                  ? "2px solid var(--color-accent)"
+                                  : undefined,
+                            }}>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>
+                              {myCol === col.key ? "🔵 " : ""}
+                              {col.label}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 400,
+                                color:
+                                  myCol === col.key
+                                    ? "var(--color-accent)"
+                                    : "var(--color-text-subtle)",
+                                marginTop: 2,
+                                whiteSpace: "normal",
+                                lineHeight: 1.3,
                               }}>
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  minWidth: 32,
-                                  height: 22,
-                                  borderRadius: 4,
-                                  fontSize: "var(--text-xs)",
-                                  fontWeight: 700,
-                                  outline:
-                                    isMyCol && v !== "—"
-                                      ? "2px solid var(--color-accent)"
-                                      : undefined,
-                                  outlineOffset: 1,
-                                  ...RACI_VALUE_STYLE(v),
-                                }}>
-                                {v}
-                              </span>
-                            </td>
-                          );
-                        })}
+                              {col.sublabel}
+                            </div>
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    </thead>
+                    <tbody>
+                      {RACI_ROWS.map((row, i) => (
+                        <tr key={i}>
+                          <td
+                            style={{
+                              fontWeight: 500,
+                              fontSize: "var(--text-xs)",
+                            }}>
+                            {row.activity}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: "center",
+                              whiteSpace: "nowrap",
+                            }}>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                background: "var(--color-surface-2)",
+                                color: "var(--color-text-muted)",
+                                padding: "1px 6px",
+                                borderRadius: 8,
+                              }}>
+                              {row.scope}
+                            </span>
+                          </td>
+                          {RACI_COLS.map((col) => {
+                            const v = row.values[col.key];
+                            const isMyCol = myCol === col.key;
+                            return (
+                              <td
+                                key={col.key}
+                                style={{
+                                  textAlign: "center",
+                                  background: isMyCol
+                                    ? "rgba(var(--color-accent-rgb, 14,116,144),0.04)"
+                                    : undefined,
+                                }}>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    minWidth: 32,
+                                    height: 22,
+                                    borderRadius: 4,
+                                    fontSize: "var(--text-xs)",
+                                    fontWeight: 700,
+                                    outline:
+                                      isMyCol && v !== "—"
+                                        ? "2px solid var(--color-accent)"
+                                        : undefined,
+                                    outlineOffset: 1,
+                                    ...RACI_VALUE_STYLE(v),
+                                  }}>
+                                  {v}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div
+                  style={{
+                    padding: "var(--space-3) var(--space-4)",
+                    fontSize: 12,
+                    color: "var(--color-text-subtle)",
+                    borderTop: "1px solid var(--color-border)",
+                    lineHeight: 1.7,
+                  }}>
+                  <strong style={{ color: "var(--color-text-muted)" }}>
+                    Catatan alur:
+                  </strong>{" "}
+                  Dokumen dari <strong>UPMK</strong> melewati review internal
+                  (ASMAN + MUP) sebelum masuk rantai Kantor Induk. Dokumen dari{" "}
+                  <strong>Kantor Induk</strong> langsung ke rantai bidang KI.{" "}
+                  Semua dokumen (kecuali bidang RPC sendiri) wajib melalui{" "}
+                  <strong>konsolidasi RPC</strong> sebelum masuk bundle GM. GM
+                  menyetujui <strong>sekali untuk seluruh dokumen</strong> dalam
+                  satu bundle (KM: tahunan; Realisasi: per periode).
+                </div>
+              </FoldCard>
+            );
+          })()}
+        </div>
+      )}
+
+      {postReviewModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}>
+          <div
+            style={{
+              background: "var(--color-surface)",
+              borderRadius: "var(--radius-lg)",
+              padding: "var(--space-5)",
+              maxWidth: 420,
+              width: "90%",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
+            }}>
             <div
               style={{
-                padding: "var(--space-3) var(--space-7)",
-                fontSize: 12,
-                color: "var(--color-text-subtle)",
-                borderTop: "1px solid var(--color-border)",
-                lineHeight: 1.7,
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                marginBottom: "var(--space-3)",
               }}>
-              <strong style={{ color: "var(--color-text-muted)" }}>
-                Catatan alur:
-              </strong>{" "}
-              Dokumen dari <strong>UPMK</strong> melewati review internal (ASMAN
-              + MUP) sebelum masuk rantai Kantor Induk. Dokumen dari{" "}
-              <strong>Kantor Induk</strong> langsung ke rantai bidang KI. Semua
-              dokumen (kecuali bidang RPC sendiri) wajib melalui{" "}
-              <strong>konsolidasi RPC</strong> sebelum masuk bundle GM. GM
-              menyetujui <strong>sekali untuk seluruh dokumen</strong> dalam
-              satu bundle (KM: tahunan; Realisasi: per periode).
+              <CheckCircle
+                size={20}
+                color={
+                  postReviewModal.action === "approve"
+                    ? "var(--color-success)"
+                    : "var(--color-danger)"
+                }
+              />
+              <div style={{ fontSize: "var(--text-md)", fontWeight: 700 }}>
+                Keputusan Tersimpan
+              </div>
             </div>
-          </FoldCard>
-        );
-      })()}
+            <p
+              style={{
+                fontSize: "var(--text-sm)",
+                color: "var(--color-text-muted)",
+                marginBottom: "var(--space-4)",
+              }}>
+              Dokumen Realisasi{" "}
+              {UNIT_NAMES[postReviewModal.unitCode] ?? postReviewModal.unitCode}
+              {postReviewModal.bidang
+                ? ` — ${postReviewModal.bidang}`
+                : ""}{" "}
+              telah{" "}
+              <strong>
+                {postReviewModal.action === "approve" ? "disetujui" : "ditolak"}
+              </strong>
+              . Anda dapat meninjau kembali dokumen ini kapan saja di halaman{" "}
+              <strong>Tinjauan Realisasi Bulanan</strong>.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                gap: "var(--space-2)",
+                justifyContent: "flex-end",
+              }}>
+              <button
+                className="btn btn-sm"
+                onClick={() => setPostReviewModal(null)}>
+                Tutup
+              </button>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => {
+                  setPostReviewModal(null);
+                  navigate("/input-realisasi");
+                }}>
+                Buka Tinjauan Realisasi Bulanan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

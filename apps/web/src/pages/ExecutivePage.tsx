@@ -1,109 +1,22 @@
+import { useEffect, useState, Fragment, type ReactNode } from 'react';
+import { executive, kinerja, operational } from '../lib/api';
+import { usePeriod } from '../context/PeriodContext';
+import { useAuth } from '../context/AuthContext';
 import {
-  BarChart3, LineChart, Trophy, Layers, TrendingUp, ShieldCheck,
-  Compass, Cpu, Leaf, Users, GitBranch, ClipboardList, HardHat, CheckCircle2,
+  BarChart3, LineChart, Trophy, Layers, ShieldCheck,
   ChevronDown, Target, ShieldAlert, ClipboardCheck, GitCompare,
 } from 'lucide-react';
 import { UnitTrendChart } from '../components/UnitTrendChart';
 import { SkeletonKpiCards, SkeletonChart, SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
 import { PhaseControls, type SnapshotPhase } from '../components/PhaseControls';
 import type { ExecutiveData } from '../lib/types';
-import { ComponentType, CSSProperties, ReactNode, useEffect, useState } from 'react';
-import { usePeriod } from '@/context/PeriodContext';
-import { executive, kinerja, operational } from '@/lib/api';
-
-const PILLARS: Array<{
-  id: "growth" | "digital" | "nze" | "enabler";
-  name: string;
-  tag: string;
-  icon: ComponentType<{ size?: number }>;
-  value: number;
-  target: string;
-}> = [
-  {
-    id: "growth",
-    name: "Growth",
-    tag: "Pertumbuhan Layanan",
-    icon: TrendingUp,
-    value: 78,
-    target: "Target 2026 · 100%",
-  },
-  {
-    id: "digital",
-    name: "Digital",
-    tag: "BIM & Digitalisasi",
-    icon: Cpu,
-    value: 92,
-    target: "Target 2026 · 100%",
-  },
-  {
-    id: "nze",
-    name: "Net Zero Emission",
-    tag: "Proyek Hijau & ESG",
-    icon: Leaf,
-    value: 64,
-    target: "Roadmap NZE 2060",
-  },
-  {
-    id: "enabler",
-    name: "Enabler",
-    tag: "SDM, GCG & K3L",
-    icon: Users,
-    value: 85,
-    target: "Target 2026 · 100%",
-  },
-];
-
-const LIFECYCLE_ICON: Record<string, ComponentType<{ size?: number }>> = {
-  "clipboard-list": ClipboardList,
-  "hard-hat": HardHat,
-  "check-circle-2": CheckCircle2,
-  trophy: Trophy,
-};
-
-interface LifecycleStage {
-  stage: string;
-  code: string;
-  count: number;
-  icon: string;
-  color: string;
-  desc: string;
-}
 
 // Operational types (merged from OperationalPage)
-type OpKpi = {
-  id: string;
-  no?: string;
-  label?: string;
-  name?: string;
-  formula?: string;
-  target: number;
-  actual?: number;
-  realisasi?: number;
-  bobot: number;
-  achievement?: number;
-  nilai?: number;
-  status: string;
-  satuan?: string;
-  unit?: string;
-  commentary?: string;
-};
-type OpSummary = {
-  kpiNilai: number;
-  kpiBobot: number;
-  piNilai: number;
-  piBobot: number;
-  kepatuhanPenalty: number;
-  totalNilai: number;
-  totalBobot: number;
-  status: string;
-};
-type Kepatuhan = {
-  name: string;
-  maxPenalty: number;
-  applied: number;
-  target: string;
-  status: string;
-};
+// Sub-indikator KPI komposit (opt-in, generik) — lihat common/capaian.ts breakdownComposite.
+type SubBreakdownItem = { nama: string; satuan: string; bobot: number; target: number; actual: number; capaian: number; nilai: number; formula?: string };
+type OpKpi = { id: string; no?: string; label?: string; name?: string; formula?: string; target: number; actual?: number; realisasi?: number; bobot: number; achievement?: number; nilai?: number; status: string; satuan?: string; unit?: string; commentary?: string; subBreakdown?: SubBreakdownItem[]; };
+type OpSummary = { kpiNilai: number; kpiBobot: number; piNilai: number; piBobot: number; kepatuhanPenalty: number; totalNilai: number; totalBobot: number; status: string; };
+type Kepatuhan = { name: string; maxPenalty: number; applied: number; target: string; status: string };
 
 function fmt(v: unknown, d = 2) {
   if (typeof v !== "number") return String(v ?? "—");
@@ -112,31 +25,18 @@ function fmt(v: unknown, d = 2) {
     maximumFractionDigits: d,
   });
 }
-function fmtPct(v: number, d = 1) {
-  return (v ?? 0).toFixed(d) + "%";
-}
+
+function fmtPct(v: number, d = 1) { return (v ?? 0).toFixed(d) + '%'; }
+// Status dari backend (operational.service.ts) bernilai 'success'/'warning'/'danger' — sebelumnya
+// fungsi ini hanya mencocokkan string lama ('on-track'/'at-risk'/'delayed'/'completed') sehingga
+// SEMUA status jatuh ke warna default yang sama (tak ada beda visual sukses/waspada/bahaya).
 function opStatusPill(s: string) {
-  const cls =
-    s === "on-track" || s === "completed"
-      ? "completed"
-      : s === "at-risk"
-        ? "at-risk"
-        : s === "delayed"
-          ? "delayed"
-          : "needs-revision";
-  return (
-    <span className={`status-pill ${cls}`}>
-      {s === "on-track"
-        ? "On Track"
-        : s === "at-risk"
-          ? "At Risk"
-          : s === "delayed"
-            ? "Tertinggal"
-            : s === "completed"
-              ? "Tercapai"
-              : s}
-    </span>
-  );
+  const cls = s === 'success' || s === 'on-track' || s === 'completed' ? 'success'
+    : s === 'warning' || s === 'at-risk' || s === 'needs-revision' ? 'warning'
+    : s === 'danger' || s === 'delayed' ? 'danger'
+    : 'info';
+  const label = s === 'success' || s === 'on-track' ? 'Tercapai' : s === 'warning' || s === 'at-risk' ? 'Waspada' : s === 'danger' || s === 'delayed' ? 'Tertinggal' : s === 'completed' ? 'Selesai' : s;
+  return <span className={`status-pill ${cls}`}>{label}</span>;
 }
 
 // FoldCard — kartu lipat (klik header untuk buka/tutup)
@@ -198,14 +98,10 @@ function FoldCard({
 }
 
 function StatusPill({ status }: { status?: string }) {
-  const cls =
-    status === "Baik" || status === "on-track" || status === "completed"
-      ? "completed"
-      : status === "at-risk" || status === "Hati-hati"
-        ? "at-risk"
-        : status === "delayed" || status === "Tertinggal"
-          ? "delayed"
-          : "completed";
+  const cls = status === 'Baik' || status === 'success' || status === 'on-track' ? 'success'
+    : status === 'Hati-hati' || status === 'warning' || status === 'at-risk' ? 'warning'
+    : status === 'Tertinggal' || status === 'danger' || status === 'delayed' ? 'danger'
+    : 'success';
   return <span className={`status-pill ${cls}`}>{status}</span>;
 }
 
@@ -234,7 +130,15 @@ export function ExecutivePage() {
   // Living-target: fase snapshot yang diminta (undefined = otomatis; default backend = final bila ada).
   const [phaseReq, setPhaseReq] = useState<SnapshotPhase | undefined>(undefined);
 
-  const { periodId, mode } = usePeriod();
+  const { periodId, mode, label: periodLabel } = usePeriod();
+  const { user } = useAuth();
+  // devOnly: sejumlah field snapshot masih peninggalan data prototipe (belum ada sumber data
+  // asli di backend, tak berubah per bulan) — sembunyikan dari user biasa, tetap tampil untuk
+  // Super Admin/Developer sebagai referensi. Pola sama dengan AppShell.tsx isPrivileged (pakai
+  // role akun asli, BUKAN role simulasi "View As", supaya demo-mode tak bisa membuka ini).
+  const isPrivileged = user?.role === 'SUPERADMIN' || user?.role === 'DEVELOPER';
+  // KPI tanpa sumber data asli — nilainya statis dari seed, tak pernah berubah per bulan/realisasi.
+  const PROTOTYPE_KPI_IDS = new Set(['totalprojects', 'capacity', 'bim']);
 
   useEffect(() => {
     setLoading(true);
@@ -294,7 +198,7 @@ export function ExecutivePage() {
 
   const d = data.data;
   const hs = d.healthScore ?? {};
-  const kpis = d.kpis ?? [];
+  const kpis = (d.kpis ?? []).filter((k) => isPrivileged || !PROTOTYPE_KPI_IDS.has(String(k.id)));
   const selectedKpi = kpis[activeKpi];
   const selectedPeriod = opData?.period?.label;
 
@@ -338,20 +242,17 @@ export function ExecutivePage() {
   const od = (opData?.data ?? {}) as Record<string, unknown>;
   const sm = (od.summary ?? {}) as OpSummary;
   const opKpis = (od.kpis ?? []) as OpKpi[];
-  const opPis = (od.pis ?? od.pi ?? []) as OpKpi[];
   const kepatuhan = (od.kepatuhan ?? []) as Kepatuhan[];
-  const kpiRows = opKpis.filter((k) => !k.id?.startsWith("pi"));
-  const piRows =
-    opPis.length > 0 ? opPis : opKpis.filter((k) => k.id?.startsWith("pi"));
-  const allKpiRows = [...kpiRows, ...piRows];
-
-  const totalMaxPenalty = kepatuhan.reduce(
-    (sum, item) => sum + item.maxPenalty,
-    0,
-  );
+  // Backend (operational.service.ts) sudah mengirim `kpis` sebagai satu daftar penuh, terurut
+  // sesuai dokumen spesimen — tak perlu dipecah KPI/PI lalu digabung lagi (pemecahan via
+  // id?.startsWith('pi') memakai id legacy yang tak konsisten & merusak urutan spesimen).
+  const allKpiRows = opKpis;
   const kpiNilai = (sm.kpiNilai ?? 0) + (sm.piNilai ?? 0);
   const kpiBobot = (sm.kpiBobot ?? 0) + (sm.piBobot ?? 0);
   const penalty = sm.kepatuhanPenalty ?? 0;
+  // Plafon maksimum pengurang = Σ maxPenalty seluruh sub-indikator pengurang live (bukan
+  // angka statis) — mengikuti bobotKm KPI Master "Kepatuhan..." yang bisa berubah sewaktu-waktu.
+  const maxPenaltyTotal = kepatuhan.reduce((s, k) => s + (k.maxPenalty ?? 0), 0);
   const totalNilai = kpiNilai + penalty;
   const totalBobot = kpiBobot;
   const totalStatus =
@@ -362,75 +263,57 @@ export function ExecutivePage() {
     if (!rows.length) return <EmptyState title="Tidak ada data" />;
     return (
       <div className="table-wrap">
-        <div className="table-scroll">
-          <table className="data-table compact">
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Indikator</th>
-                <th>Satuan</th>
-                <th className="num">Target</th>
-                <th className="num">Realisasi</th>
-                <th className="num">Bobot</th>
-                <th className="num">Achv</th>
-                <th className="num">Nilai</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((k, i) => {
-                const actual = k.actual ?? k.realisasi ?? 0;
-                const ach =
-                  k.achievement ?? (k.target ? (actual / k.target) * 100 : 0);
-                return (
-                  <tr key={i}>
-                    <td style={{ color: "var(--color-text-muted)" }}>{i +1}</td>
-                    <td>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          fontSize: "var(--text-base)",
-                        }}>
-                        {k.name ?? k.label}
-                      </div>
-                      {(k.formula ?? k.commentary) && (
-                        <div
-                          style={{
-                            fontSize: "var(--text-sm)",
-                            color: "var(--color-text-subtle)",
-                            marginTop: 2,
-                          }}>
-                          {k.formula ?? k.commentary}
-                        </div>
+        <table className="data-table compact">
+          <thead><tr><th>No</th><th>Indikator</th><th>Satuan</th><th className="num">Target</th><th className="num">Realisasi</th><th className="num">Bobot</th><th className="num">Achv</th><th className="num">Nilai</th><th>Status</th></tr></thead>
+          <tbody>
+            {rows.map((k, i) => {
+              const actual = k.actual ?? k.realisasi ?? 0;
+              const ach = k.achievement ?? (k.target ? (actual / k.target) * 100 : 0);
+              const isComposite = !!k.subBreakdown && k.subBreakdown.length > 0;
+              return (
+                <Fragment key={i}>
+                <tr>
+                  <td style={{ color: 'var(--color-text-muted)' }}>{k.no ?? k.id}</td>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 'var(--text-xs)' }}>
+                      {k.name ?? k.label}
+                      {isComposite && (
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 4, padding: '1px 4px' }} title={`Komposit — ${k.subBreakdown!.length} sub-indikator`}>
+                          Komposit
+                        </span>
                       )}
+                    </div>
+                    {(k.formula ?? k.commentary) && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginTop: 2 }}>{k.formula ?? k.commentary}</div>}
+                  </td>
+                  <td style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{k.satuan ?? k.unit ?? '—'}</td>
+                  <td className="num">{isComposite ? '—' : fmt(k.target, 1)}</td>
+                  <td className="num" style={{ fontWeight: 700 }}>{isComposite ? '—' : fmt(actual, 2)}</td>
+                  <td className="num">{k.bobot}</td>
+                  <td className={`num ${ach >= 100 ? 'delta-positive' : ach >= 90 ? '' : 'delta-negative'}`} style={{ fontWeight: 700 }}>{fmtPct(ach)}</td>
+                  <td className="num" style={{ fontWeight: 700 }}>{fmt(k.nilai ?? 0, 2)}</td>
+                  <td>{opStatusPill(k.status)}</td>
+                </tr>
+                {isComposite && k.subBreakdown!.map((si, j) => (
+                  <tr key={`${i}.${j}`} style={{ background: 'var(--color-surface-2)' }}>
+                    <td />
+                    <td style={{ paddingLeft: 'var(--space-4)' }}>
+                      <span style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>↳ {si.nama}</span>
+                      {si.formula && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginTop: 2, paddingLeft: 12 }}>{si.formula}</div>}
                     </td>
-                    <td
-                      style={{
-                        color: "var(--color-text-muted)",
-                        whiteSpace: "nowrap",
-                      }}>
-                      {k.satuan ?? k.unit ?? "—"}
-                    </td>
-                    <td className="num">{fmt(k.target, 1)}</td>
-                    <td className="num" style={{ fontWeight: 700 }}>
-                      {fmt(actual, 2)}
-                    </td>
-                    <td className="num">{k.bobot}</td>
-                    <td
-                      className={`num ${ach >= 100 ? "delta-positive" : ach >= 90 ? "" : "delta-negative"}`}
-                      style={{ fontWeight: 700 }}>
-                      {fmtPct(ach)}
-                    </td>
-                    <td className="num" style={{ fontWeight: 700 }}>
-                      {fmt(k.nilai ?? 0, 2)}
-                    </td>
-                    <td>{opStatusPill(k.status)}</td>
+                    <td style={{ color: 'var(--color-text-muted)' }}>{si.satuan || '—'}</td>
+                    <td className="num">{fmt(si.target, 1)}</td>
+                    <td className="num">{fmt(si.actual, 2)}</td>
+                    <td className="num">{si.bobot}</td>
+                    <td className={`num ${si.capaian >= 100 ? 'delta-positive' : si.capaian >= 90 ? '' : 'delta-negative'}`}>{fmtPct(si.capaian)}</td>
+                    <td className="num">{fmt(si.nilai, 2)}</td>
+                    <td />
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     );
   }
@@ -442,8 +325,7 @@ export function ExecutivePage() {
         <div>
           <h1 className="page-title">Executive Summary</h1>
           <p className="page-subtitle">
-            Dashboard Kinerja PUSMANPRO —{" "}
-            {String(selectedPeriod) ?? "Periode tidak tersedia"}
+            Dashboard Kinerja PUSMANPRO{periodLabel ? ` — ${periodLabel}` : ""}
           </p>
         </div>
         <div
@@ -553,39 +435,103 @@ export function ExecutivePage() {
           }}>
           <div>
             <div
-              className="hero-health-title">
+              className="hero-health-title"
+              style={{ fontSize: "var(--text-lg)" }}>
               {String(hs.label ?? "Total Nilai Kinerja PUSMANPRO")}
             </div>
             <div
               className="hero-health-subtitle"
-              style={{ marginTop: 8, fontSize: "var(--text-sm)" }}>
-              Agregat 14 indikator RKM 2026 — Kantor Induk + 5 UPMK bulan {" "} 
-              {String(selectedPeriod)}
+              style={{ marginTop: 4, fontSize: "var(--text-xs)" }}>
+              Agregat {kpis.length} indikator RKM {currentYear} — Kantor Induk +
+              5 UPMK{periodLabel ? ` bulan ${periodLabel}` : ""}
             </div>
           </div>
 
           {/* Living-target dua-track: KI Adjusted vs UPMK Version, sisi-bersisi */}
           {upmkTrack && (
-            <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'center', flexWrap: 'wrap', padding: 'var(--space-2) var(--space-3)', background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)' }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "var(--space-4)",
+                alignItems: "center",
+                flexWrap: "wrap",
+                padding: "var(--space-2) var(--space-3)",
+                background: "var(--color-surface-2)",
+                borderRadius: "var(--radius-md)",
+              }}>
               <div>
-                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>KI Adjusted <span title="Otoritatif — hasil evaluasi berjenjang (values)">ⓘ</span></div>
-                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--color-accent)' }}>{fmt(kiOverall)}</div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--color-text-muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.3,
+                  }}>
+                  KI Adjusted{" "}
+                  <span title="Otoritatif — hasil evaluasi berjenjang (values)">
+                    ⓘ
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: "var(--text-xl)",
+                    fontWeight: 800,
+                    color: "var(--color-accent)",
+                  }}>
+                  {fmt(kiOverall)}
+                </div>
               </div>
-              <div style={{ fontSize: 'var(--text-md)', color: 'var(--color-text-muted)' }}>vs</div>
+              <div
+                style={{
+                  fontSize: "var(--text-md)",
+                  color: "var(--color-text-muted)",
+                }}>
+                vs
+              </div>
               <div>
-                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>UPMK Version <span title="Self-report unit (self-assessment)">ⓘ</span></div>
-                <div style={{ fontSize: 'var(--text-xl)', fontWeight: 800 }}>{fmt(upmkTrack.overall)}</div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--color-text-muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.3,
+                  }}>
+                  UPMK Version{" "}
+                  <span title="Self-report unit (self-assessment)">ⓘ</span>
+                </div>
+                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800 }}>
+                  {fmt(upmkTrack.overall)}
+                </div>
               </div>
-              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Selisih (adjustment REN PIC)</div>
-                <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: Math.abs(divergence) <= 2 ? 'var(--color-success)' : Math.abs(divergence) <= 5 ? 'var(--color-warning)' : 'var(--color-danger)' }}>
-                  {divergence > 0 ? '+' : ''}{fmt(divergence)}
+              <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                  Selisih (adjustment REN PIC)
+                </div>
+                <div
+                  style={{
+                    fontSize: "var(--text-md)",
+                    fontWeight: 700,
+                    color:
+                      Math.abs(divergence) <= 2
+                        ? "var(--color-success)"
+                        : Math.abs(divergence) <= 5
+                          ? "var(--color-warning)"
+                          : "var(--color-danger)",
+                  }}>
+                  {divergence > 0 ? "+" : ""}
+                  {fmt(divergence)}
                 </div>
               </div>
             </div>
           )}
 
-          <div className="hero-health-stats" style={{ marginTop: 0, paddingTop: 'var(--space-3)', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          <div
+            className="hero-health-stats"
+            style={{
+              marginTop: 0,
+              paddingTop: "var(--space-3)",
+              gridTemplateColumns: "repeat(4, 1fr)",
+            }}>
             <div className="hero-stat">
               <div className="hero-stat-label">Target</div>
               <div className="hero-stat-value">{String(hs.target ?? 100)}</div>
@@ -610,22 +556,42 @@ export function ExecutivePage() {
         </div>
       </div>
 
-      {/* Status banner */}
-      <div className="status-banner success">
-        <ShieldCheck
-          size={18}
-          style={{ color: "var(--color-success)", flexShrink: 0 }}
-        />
-        <div>
-          <strong>Tidak ada pengurang aktif</strong> — Semua Pengurang
-          (Keterlambatan COD, Temuan BPK, Fatality) dalam kondisi aman.
-        </div>
-      </div>
+      {/* Status banner — mencerminkan data kepatuhan sebenarnya (bukan teks statis) */}
+      {hasOpData &&
+        (penalty === 0 ? (
+          <div className="status-banner success">
+            <ShieldCheck
+              size={18}
+              style={{ color: "var(--color-success)", flexShrink: 0 }}
+            />
+            <div>
+              <strong>Tidak ada pengurang aktif</strong>
+              {kepatuhan.length > 0
+                ? ` — Semua Pengurang (${kepatuhan.map((k) => k.name).join(", ")}) dalam kondisi aman.`
+                : "."}
+            </div>
+          </div>
+        ) : (
+          <div className="status-banner danger">
+            <ShieldAlert
+              size={18}
+              style={{ color: "var(--color-danger)", flexShrink: 0 }}
+            />
+            <div>
+              <strong>Ada pengurang aktif ({penalty} poin)</strong> —{" "}
+              {kepatuhan
+                .filter((k) => k.applied < 0)
+                .map((k) => k.name)
+                .join(", ") || "lihat rincian di tabel Pengurang Kepatuhan"}
+              .
+            </div>
+          </div>
+        ))}
 
       {/* ── OPERATIONAL KPIs (merged) ── */}
       {hasOpData && (
         <FoldCard
-          title="Operational KPIs — Rangkuman Kinerja"
+          title="Rangkuman Kinerja"
           icon={<Target size={14} />}
           accent="var(--color-accent)"
           right={
@@ -683,10 +649,27 @@ export function ExecutivePage() {
               <div className="summary-hero-label">Pengurang Kepatuhan</div>
               <div className="summary-hero-value">
                 {penalty}
-                <span className="of">(max {totalMaxPenalty})</span>
+                <span className="of">(max {maxPenaltyTotal})</span>
               </div>
               <div className="summary-hero-meta delta-positive">
                 {penalty === 0 ? "Tidak ada pengurang" : `${penalty} poin`}
+              </div>
+            </div>
+            <div className="summary-hero-card total">
+              <div
+                className="summary-hero-label"
+                style={{ color: "var(--color-accent)" }}>
+                TOTAL NILAI KINERJA
+              </div>
+              <div className="summary-hero-value">
+                {fmt(totalNilai)}
+                <span className="of">/ {totalBobot}</span>
+              </div>
+              <div className="summary-hero-meta">
+                <span
+                  className={`status-pill ${totalNilai >= 100 ? "completed" : totalNilai >= 95 ? "at-risk" : "delayed"}`}>
+                  {totalStatus}
+                </span>
               </div>
             </div>
             {/* <div className="summary-hero-card total">
@@ -709,10 +692,10 @@ export function ExecutivePage() {
           </div>
           <KpiTable rows={allKpiRows} />
           {kepatuhan.length > 0 && (
-            <>
+            <div style={{ borderTop: "1px solid var(--color-border)" }}>
               <div
                 style={{
-                  padding: "0 var(--space-7)",
+                  padding: "var(--space-2) var(--space-4)",
                   display: "flex",
                   alignItems: "center",
                   gap: "var(--space-2)",
@@ -727,151 +710,61 @@ export function ExecutivePage() {
                     fontWeight: 700,
                     color: "var(--color-danger)",
                   }}>
-                  Pengurang Kepatuhan — Maks {totalMaxPenalty} poin
+                  Pengurang Kepatuhan — Maks {maxPenaltyTotal} poin
                 </span>
               </div>
-              <div
-                className="table-wrap"
-                style={{ paddingBottom: "var(--space-7)" }}>
-                <div className="table-scroll">
-                  <table className="data-table compact">
-                    <thead>
-                      <tr>
-                        <th>Sub-Indikator</th>
-                        <th className="num">Maks</th>
-                        <th className="num">Aktual</th>
-                        <th>Target</th>
-                        <th>Status</th>
+              <div className="table-wrap">
+                <table className="data-table compact">
+                  <thead>
+                    <tr>
+                      <th>Sub-Indikator</th>
+                      <th className="num">Maks</th>
+                      <th className="num">Aktual</th>
+                      <th>Target</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kepatuhan.map((k, i) => (
+                      <tr key={i}>
+                        <td>{k.name}</td>
+                        <td
+                          className="num"
+                          style={{
+                            color: "var(--color-danger)",
+                            fontWeight: 700,
+                          }}>
+                          {k.maxPenalty}
+                        </td>
+                        <td
+                          className="num"
+                          style={{
+                            fontWeight: 700,
+                            color:
+                              k.applied < 0
+                                ? "var(--color-danger)"
+                                : "var(--color-success)",
+                          }}>
+                          {k.applied < 0 ? k.applied : "—"}
+                        </td>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {k.target}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${k.status === "success" ? "success" : "danger"}`}>
+                            {k.status === "success" ? "✓ Aman" : "⚠ Perhatian"}
+                          </span>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {kepatuhan.map((k, i) => (
-                        <tr key={i}>
-                          <td>{k.name}</td>
-                          <td
-                            className="num"
-                            style={{
-                              color: "var(--color-danger)",
-                              fontWeight: 700,
-                            }}>
-                            {k.maxPenalty}
-                          </td>
-                          <td
-                            className="num"
-                            style={{
-                              fontWeight: 700,
-                              color:
-                                k.applied < 0
-                                  ? "var(--color-danger)"
-                                  : "var(--color-success)",
-                            }}>
-                            {k.applied < 0 ? k.applied : "—"}
-                          </td>
-                          <td style={{ color: "var(--color-text-muted)" }}>
-                            {k.target}
-                          </td>
-                          <td>
-                            <span
-                              className={`status-pill ${k.status === "success" ? "completed" : "needs-revision"}`}>
-                              {k.status === "success"
-                                ? "✓ Aman"
-                                : "⚠ Perhatian"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </>
+            </div>
           )}
         </FoldCard>
       )}
-
-      {/* 4 Pilar Strategis */}
-      <FoldCard
-        title="4 Pilar Strategis — Next Chapter of Transformation"
-        icon={<Compass size={14} />}
-        right={
-          <span className="card-meta">Sumber: Profil Organisasi PUSMANPRO</span>
-        }>
-        <div
-          className="pillars-strip"
-          style={{ padding: "var(--space-4) var(--space-7) var(--space-2)" }}>
-          {PILLARS.map((p) => {
-            const Icon = p.icon;
-            return (
-              <div key={p.id} className={`pillar-card ${p.id}`}>
-                <div className="pillar-head">
-                  <span className="pillar-icon">
-                    <Icon size={16} />
-                  </span>
-                  <div>
-                    <div className="pillar-name">{p.name}</div>
-                    <div className="pillar-tag">{p.tag}</div>
-                  </div>
-                </div>
-                <div className="pillar-progress-row">
-                  <span className="pillar-progress-val">{p.value}%</span>
-                  <span className="pillar-progress-target">{p.target}</span>
-                </div>
-                <div className="pillar-bar">
-                  <span style={{ width: `${p.value}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </FoldCard>
-
-      {/* Project Lifecycle Funnel */}
-      {(() => {
-        const lifecycle =
-          (d as unknown as { projectLifecycle?: LifecycleStage[] })
-            .projectLifecycle ?? [];
-        const total = lifecycle.reduce((s, x) => s + (x.count ?? 0), 0);
-        if (!lifecycle.length) return null;
-        return (
-          <FoldCard
-            title={`Project Lifecycle — ${total} Proyek Aktif PUSMANPRO`}
-            icon={<GitBranch size={14} />}
-            right={
-              <span className="card-meta">
-                Pra-Pelaksanaan → Pelaksanaan → TOC → FAC
-              </span>
-            }>
-            <div
-              className="lifecycle-funnel"
-              style={{ padding: "var(--space-4)" }}>
-              {lifecycle.map((s) => {
-                const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
-                const Icon = LIFECYCLE_ICON[s.icon] ?? ClipboardList;
-                return (
-                  <div
-                    key={s.code}
-                    className="lifecycle-stage"
-                    style={
-                      { ["--stage-color" as string]: s.color } as CSSProperties
-                    }>
-                    <div className="lifecycle-pct">{pct}%</div>
-                    <div className="lifecycle-head">
-                      <Icon size={14} />
-                      {s.code.toUpperCase()}
-                    </div>
-                    <div>
-                      <span className="lifecycle-count">{s.count}</span>
-                      <span className="lifecycle-count-unit">proyek</span>
-                    </div>
-                    <div className="lifecycle-stage-name">{s.stage}</div>
-                    <div className="lifecycle-stage-desc">{s.desc}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </FoldCard>
-        );
-      })()}
 
       {/* KPI Master-Detail */}
       {/* <FoldCard
@@ -999,16 +892,7 @@ export function ExecutivePage() {
                 </div>
               </div>
               <div className="kpi-md-meta-row">
-                <div>
-                  <span className="label">Polarity</span>{" "}
-                  <span>
-                    {String(selectedKpi.polarity ?? "higher-is-better")}
-                  </span>
-                </div>
-                <div>
-                  <span className="label">ID</span>{" "}
-                  <code>{String(selectedKpi.id ?? "")}</code>
-                </div>
+                <div><span className="label">Polarity</span> <span>{String(selectedKpi.polarity ?? 'higher-is-better')}</span></div>
               </div>
             </div>
           )}
@@ -1036,17 +920,27 @@ export function ExecutivePage() {
           title="Akurasi Self-Assessment UPMK"
           icon={<GitCompare size={14} />}
           right={
-            <span className={`status-pill ${selfAssessmentAccuracy.status === 'akurat' ? 'completed' : selfAssessmentAccuracy.status === 'perlu-perhatian' ? 'at-risk' : 'delayed'}`} style={{ fontWeight: 700 }}>
-              {selfAssessmentAccuracy.status === 'akurat' ? '✓ Akurat' : selfAssessmentAccuracy.status === 'perlu-perhatian' ? '⚠ Perlu Perhatian' : '✗ Signifikan'}
+            <span
+              className={`status-pill ${selfAssessmentAccuracy.status === "akurat" ? "completed" : selfAssessmentAccuracy.status === "perlu-perhatian" ? "at-risk" : "delayed"}`}
+              style={{ fontWeight: 700 }}>
+              {selfAssessmentAccuracy.status === "akurat"
+                ? "✓ Akurat"
+                : selfAssessmentAccuracy.status === "perlu-perhatian"
+                  ? "⚠ Perlu Perhatian"
+                  : "✗ Signifikan"}
             </span>
-          }
-        >
-          <div style={{ padding: 'var(--space-4)' }}>
+          }>
+          <div style={{ padding: "var(--space-4)" }}>
             <div className="summary-hero-card" style={{ maxWidth: 320 }}>
-              <div className="summary-hero-label">Rata-rata Selisih Nilai (|gap|)</div>
-              <div className="summary-hero-value">{fmt(selfAssessmentAccuracy.avgGap)}</div>
+              <div className="summary-hero-label">
+                Rata-rata Selisih Nilai (|gap|)
+              </div>
+              <div className="summary-hero-value">
+                {fmt(selfAssessmentAccuracy.avgGap)}
+              </div>
               <div className="summary-hero-meta">
-                Dari {selfAssessmentAccuracy.unitsWithData} unit UPMK · self-assessment vs hasil evaluasi berjenjang s.d. SM RPC
+                Dari {selfAssessmentAccuracy.unitsWithData} unit UPMK ·
+                self-assessment vs hasil evaluasi berjenjang s.d. SM RPC
               </div>
             </div>
           </div>
@@ -1063,146 +957,138 @@ export function ExecutivePage() {
               {isLive ? "Dari realisasi disetujui" : "Kantor Induk + 5 UPMK"}
             </span>
           }>
-          <div
-            className="table-wrap"
-            style={{ padding: "var(--space-4) var(--space-7) var(--space-7)" }}>
-            <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th style={{ width: 36 }}>No</th>
-                    <th>Unit</th>
-                    <th className="num">Semester I {currentYear}</th>
-                    <th className="num">Target {currentYear}</th>
-                    <th>Status</th>
-                    <th>KPI Kritis</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ranking.map((r, i) => {
-                    const score = r.score ?? 0;
-                    const target = (r as { target?: number }).target ?? 100;
-                    const stCls =
-                      score >= 100
-                        ? "completed"
-                        : score >= 90
-                          ? "at-risk"
-                          : "delayed";
-                    return (
-                      <tr key={i}>
-                        <td
-                          style={{
-                            color: "var(--color-text-muted)",
-                            fontWeight: 800,
-                            textAlign: "center",
-                          }}>
-                          {i + 1}
-                        </td>
-                        <td style={{ fontWeight: 700 }}>
-                          {r.name ?? r.unit ?? r.code}
-                        </td>
-                        <td
-                          className="num"
-                          style={{
-                            fontWeight: 800,
-                            color: "var(--color-brand)",
-                          }}>
-                          {fmt(score)}
-                        </td>
-                        <td
-                          className="num"
-                          style={{ color: "var(--color-text-muted)" }}>
-                          {fmt(target)}
-                        </td>
-                        <td>
-                          <span className={`status-pill ${stCls}`}>
-                            {r.status}
-                          </span>
-                        </td>
-                        <td
-                          style={{
-                            fontSize: "var(--text-xs)",
-                            color: "var(--color-text-muted)",
-                          }}>
-                          {r.criticalKpi ?? "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}>No</th>
+                  <th>Unit</th>
+                  <th className="num">Semester I {currentYear}</th>
+                  <th className="num">Target {currentYear}</th>
+                  <th>Status</th>
+                  <th>KPI Kritis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranking.map((r, i) => {
+                  const score = r.score ?? 0;
+                  const target = (r as { target?: number }).target ?? 100;
+                  const stCls =
+                    score >= 100
+                      ? "completed"
+                      : score >= 90
+                        ? "at-risk"
+                        : "delayed";
+                  return (
+                    <tr key={i}>
+                      <td
+                        style={{
+                          color: "var(--color-text-muted)",
+                          fontWeight: 800,
+                          textAlign: "center",
+                        }}>
+                        {i + 1}
+                      </td>
+                      <td style={{ fontWeight: 700 }}>
+                        {r.name ?? r.unit ?? r.code}
+                      </td>
+                      <td
+                        className="num"
+                        style={{
+                          fontWeight: 800,
+                          color: "var(--color-brand)",
+                        }}>
+                        {fmt(score)}
+                      </td>
+                      <td
+                        className="num"
+                        style={{ color: "var(--color-text-muted)" }}>
+                        {fmt(target)}
+                      </td>
+                      <td>
+                        <span className={`status-pill ${stCls}`}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td
+                        style={{
+                          fontSize: "var(--text-xs)",
+                          color: "var(--color-text-muted)",
+                        }}>
+                        {isPrivileged ? (r.criticalKpi ?? "—") : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </FoldCard>
       )}
 
       {/* Strategic Initiatives */}
-      {d.initiatives && d.initiatives.length > 0 && (
+      {isPrivileged && d.initiatives && d.initiatives.length > 0 && (
         <FoldCard
           title={`Strategic Initiatives (${d.initiatives.length})`}
           icon={<Layers size={14} />}
           right={<span className="card-meta">RKM {currentYear}</span>}>
-          <div
-            className="table-wrap "
-            style={{ paddingBottom: "var(--space-7)" }}>
-            <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Inisiatif</th>
-                    <th>PIC</th>
-                    <th>Progress</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.initiatives.map((ini) => {
-                    const pct = (ini.progress as number) ?? 0;
-                    const barCls =
-                      pct >= 100 ? "" : pct >= 80 ? "warning" : "danger";
-                    return (
-                      <tr key={ini.id}>
-                        <td style={{ fontWeight: 600, maxWidth: 200 }}>
-                          {ini.name}
-                        </td>
-                        <td style={{ color: "var(--color-text-muted)" }}>
-                          {ini.owner}
-                        </td>
-                        <td style={{ width: 120 }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "var(--space-2)",
-                            }}>
-                            <div className="progress-mini" style={{ flex: 1 }}>
-                              <div
-                                className={`progress-mini-fill ${barCls}`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                            <span
-                              style={{
-                                fontSize: "var(--text-xs)",
-                                fontWeight: 700,
-                                minWidth: 32,
-                              }}>
-                              {pct}%
-                            </span>
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Inisiatif</th>
+                  <th>PIC</th>
+                  <th>Progress</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.initiatives.map((ini) => {
+                  const pct = (ini.progress as number) ?? 0;
+                  const barCls =
+                    pct >= 100 ? "" : pct >= 80 ? "warning" : "danger";
+                  return (
+                    <tr key={ini.id}>
+                      <td style={{ fontWeight: 600, maxWidth: 200 }}>
+                        {ini.name}
+                      </td>
+                      <td style={{ color: "var(--color-text-muted)" }}>
+                        {ini.owner}
+                      </td>
+                      <td style={{ width: 120 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "var(--space-2)",
+                          }}>
+                          <div className="progress-mini" style={{ flex: 1 }}>
+                            <div
+                              className={`progress-mini-fill ${barCls}`}
+                              style={{ width: `${pct}%` }}
+                            />
                           </div>
-                        </td>
-                        <td>
                           <span
-                            className={`status-pill ${ini.status === "on-track" ? "on-track" : ini.status === "at-risk" ? "at-risk" : "delayed"}`}>
-                            {ini.status}
+                            style={{
+                              fontSize: "var(--text-xs)",
+                              fontWeight: 700,
+                              minWidth: 32,
+                            }}>
+                            {pct}%
                           </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span
+                          className={`status-pill ${ini.status === "on-track" ? "on-track" : ini.status === "at-risk" ? "at-risk" : "delayed"}`}>
+                          {ini.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </FoldCard>
       )}

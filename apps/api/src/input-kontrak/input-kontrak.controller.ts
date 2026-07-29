@@ -73,6 +73,12 @@ export class InputKontrakController {
     return this.svc.getApproved(unitCode, year, kmType);
   }
 
+  // Acuan Input Realisasi: KM Sementara begitu disubmit (paralel dgn alur review-nya sendiri).
+  @Get('for-realisasi')
+  forRealisasi(@Query('unitCode') unitCode?: string, @Query('year') year?: string, @Query('kmType') kmType?: string) {
+    return this.svc.getForRealisasi(unitCode, year, kmType);
+  }
+
   @Get('bundle')
   bundle(@Query('scope') scope: 'KP' | 'UPMK' = 'KP', @Query('year') year?: string, @Query('kmType') kmType: string = 'draft') {
     return this.svc.getBundle(scope, year, kmType);

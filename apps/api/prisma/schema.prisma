@@ -24,21 +24,6 @@ enum ReportStatus {
   APPROVED
 }
 
-enum KMDocStatus {
-  IN_REVIEW_C1
-  IN_REVIEW_C2
-  IN_REVIEW_SM
-  APPROVED
-  RETURNED
-}
-
-enum KMDocType {
-  WF1
-  WF1B
-  WF2
-  WF3
-}
-
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -218,37 +203,6 @@ model Report {
 
   @@unique([unit, periodId])
   @@map("reports")
-}
-
-model KMDocument {
-  id          String      @id @default(cuid())
-  docId       String      @unique
-  tipe        KMDocType
-  bidangUnit  String
-  holder      String
-  status      KMDocStatus
-  deadline    DateTime?
-  slaRemain   Int?
-  attachments Json        @default("[]")
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  reviews KMReview[]
-
-  @@map("km_documents")
-}
-
-model KMReview {
-  id        String   @id @default(cuid())
-  docId     String
-  actor     String
-  action    String
-  note      String?
-  createdAt DateTime @default(now())
-
-  document KMDocument @relation(fields: [docId], references: [docId], onDelete: Cascade)
-
-  @@map("km_reviews")
 }
 
 model InputRealisasi {
@@ -454,6 +408,7 @@ model KpiMaster {
   indikator    String
   formula      String   @default("")
   satuan       String   @default("")
+  bobotKm      String   @default("") // bobot skor KM (poin) — satu nilai per-KPI, sama utk semua assignment
   targetParent String   @default("") // target gabungan (bisa non-numerik, mis. "Tanggal 5")
   createdBy    String
   createdById  String?
@@ -492,15 +447,14 @@ model KpiMaster {
   @@map("kpi_masters")
 }
 
-// Assignment satu KPI parent ke satu (unit, bidang). bobotKm = bobot skor KM (poin,
-// existing); target per-assignment. Alur reviewer default menyusul (Fase C).
+// Assignment satu KPI parent ke satu (unit, bidang). Target per-assignment; bobotKm kini
+// data parent di KpiMaster (satu nilai untuk seluruh assignment KPI ini).
 model KpiAssignment {
   id             String   @id @default(cuid())
   kpiMasterId    String
   unitCode       String
   bidang         String
   holder         String   @default("")
-  bobotKm        String   @default("") // bobot skor KM (poin) — beda dari persen agregasi
   target         String   @default("") // Target Semester I per assignment
   target2        String   @default("") // Target tahunan per assignment
   // persenAgregasi: bobot rollup (0-100) ke nilai parent — diinput RPC Perencanaan,

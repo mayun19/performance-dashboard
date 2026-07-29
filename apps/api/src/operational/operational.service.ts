@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, breakdownComposite, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, breakdownComposite, dedupFanOutRealisasi, specimenOrder, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class OperationalService {
@@ -31,12 +31,8 @@ export class OperationalService {
       return (await this.prisma.operationalSnapshot.findUnique({ where: { periodId_phase: { periodId: pid, phase: 'final' } } }))
         ?? this.prisma.operationalSnapshot.findUnique({ where: { periodId_phase: { periodId: pid, phase: 'sementara' } } });
     };
-    let snap = await pick(period.id);
-    // Fallback baseline ke snapshot periode aktif bila periode terpilih belum punya snapshot.
-    if (!snap) {
-      const active = await this.prisma.period.findFirst({ where: { isActive: true } });
-      if (active && active.id !== period.id) snap = await pick(active.id);
-    }
+    // Tidak ada fallback ke snapshot periode lain — lihat catatan di ExecutiveService.getSummary().
+    const snap = await pick(period.id);
     const result = { period, data: snap?.data ?? null, phase: snap?.phase ?? (phase ?? 'sementara') };
     await this.cache.set(cacheKey, result);
     return result;
@@ -67,10 +63,21 @@ export class OperationalService {
       }
     }
 
-    const allItems = kpRecords.flatMap(r =>
+    const rawItems = kpRecords.flatMap(r =>
       Object.values((r.values ?? {}) as Record<string, Record<string, unknown>>)
         .map(it => ({ it, bidang: r.bidang }))
     );
+    // Dedup KPI lintas-bidang (fan-out) SEBELUM discoring — lihat catatan dedupFanOutRealisasi
+    // di common/capaian.ts. Tanpa ini, KPI yang di-assign ke >1 bidang (mis. "Pengendalian
+    // Anggaran" = OMP+KKU) akan dihitung berkali-kali di kpis/kepatuhan & totalBobot/totalNilai.
+    const masterIdsKp = Array.from(new Set(
+      rawItems.map(({ it }) => it['masterKpiId']).filter((v): v is string => typeof v === 'string'),
+    ));
+    const assignmentsKp = masterIdsKp.length
+      ? await this.prisma.kpiAssignment.findMany({ where: { kpiMasterId: { in: masterIdsKp } } })
+      : [];
+    const persenLookupKp = new Map(assignmentsKp.map((a) => [`${a.kpiMasterId}|${a.unitCode}|${a.bidang}`, a.persenAgregasi]));
+    const allItems = dedupFanOutRealisasi(rawItems, persenLookupKp, 'KP');
     const regularItems = allItems.filter(({ it }) => num(it['bobot']) > 0);
     const pengurangItems = allItems.filter(({ it }) => num(it['bobot']) < 0);
 
@@ -92,13 +99,20 @@ export class OperationalService {
     // Build kpis from positive-bobot items (hanya bila ADA submission KP periode ini —
     // jika tidak, pertahankan data KP terakhir dari base agar tidak tertimpa kosong).
     let kpiNo = 1;
-    const kpisBuilt = regularItems.map(({ it, bidang }) => {
+    const kpisBuilt = [...regularItems]
+      .sort((a, b) => specimenOrder(String(a.it['indikator'] ?? '')) - specimenOrder(String(b.it['indikator'] ?? '')))
+      .map(({ it, bidang }) => {
       const name = String(it['indikator'] ?? '');
-      const nameLow = name.toLowerCase();
-      const existingKpi = existingKpis.find(k => {
-        const kname = String(k['name'] ?? '').toLowerCase();
-        return kname.length > 8 && nameLow.slice(0, 20).includes(kname.slice(0, 12));
-      });
+      const nameLow = name.toLowerCase().trim();
+      const masterKpiId = it['masterKpiId'];
+      // Cocokkan via masterKpiId (stabil) bila ada; fallback nama PERSIS (bukan prefix-fuzzy —
+      // prefix 20/12 char sebelumnya menyamakan "Penambahan kapasitas pembangkit/transmisi/
+      // Gardu Induk" krn berbagi awalan sama, sehingga komentar/root cause ikut tertukar).
+      const existingKpi = existingKpis.find(k => (
+        typeof masterKpiId === 'string' && masterKpiId.length > 0
+          ? k['masterKpiId'] === masterKpiId
+          : String(k['name'] ?? '').toLowerCase().trim() === nameLow
+      ));
       const bobot = num(it['bobot']);
       const satuan = String(it['satuan'] ?? '');
       const isInverse = satuan.toLowerCase() === 'hari kerja';
@@ -124,10 +138,11 @@ export class OperationalService {
       }
       const prevSpark = (existingKpi?.['sparkline'] ?? Array(12).fill(0)) as number[];
       const no = kpiNo++;
+      const slug = nameLow.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const id = typeof masterKpiId === 'string' && masterKpiId.length > 0 ? masterKpiId : (slug || `k${no}`);
       return {
-        id:          existingKpi?.['id'] ?? `k${no}`,
-        no,
-        name,
+        id, no, name,
+        masterKpiId: typeof masterKpiId === 'string' ? masterKpiId : null,
         category:    existingKpi?.['category'] ?? (bobot >= 7 ? 'KPI' : 'PI'),
         unit:        satuan,
         target:      r2(target),
@@ -149,22 +164,32 @@ export class OperationalService {
       };
     });
 
-    // Build kepatuhan from negative-bobot items
+    // Build kepatuhan from negative-bobot items — item komposit (subIndicators, mis. "Kepatuhan,
+    // Maturity Level dan Tata Kelola Perusahaan") diperluas per-sub via breakdownComposite()
+    // (realisasi tersimpan di tiap sub, bukan di induk); item legacy flat pakai realisasi induk
+    // langsung, sama-sama dibatasi plafon |bobot| (lihat common/capaian.ts).
     const existingKepatuhan = (base.kepatuhan ?? []) as Record<string, unknown>[];
     const SUB = 'abcdefghij';
-    const kepatuhanBuilt = pengurangItems.map(({ it }, idx) => {
+    const pengurangRows = pengurangItems.flatMap(({ it }) => {
+      const subs = Array.isArray(it['subIndicators']) ? (it['subIndicators'] as Record<string, unknown>[]) : [];
+      if (subs.length > 0) {
+        return breakdownComposite(it).map((si) => ({ name: si.nama, bobot: si.bobot, nilai: si.nilai, target: si.target || '—' }));
+      }
       const fullName = String(it['indikator'] ?? '');
       const name = fullName.replace(/^Pengurang\s*[-–:]\s*/i, '');
-      const applied = num(it['realisasi']);
-      return {
-        no:         existingKepatuhan[idx]?.['no'] ?? `12${SUB[idx] ?? idx}`,
-        name,
-        maxPenalty: num(it['bobot']),
-        applied:    r2(applied),
-        target:     existingKepatuhan[idx]?.['target'] ?? String(it['target'] ?? '—'),
-        status:     applied === 0 ? 'success' : 'danger',
-      };
+      const bobot = num(it['bobot']);
+      const actual = num(it['realisasi']);
+      const nilai = actual > 0 ? -Math.min(actual, Math.abs(bobot)) : 0;
+      return [{ name, bobot, nilai, target: String(it['target'] ?? '—') }];
     });
+    const kepatuhanBuilt = pengurangRows.map((row, idx) => ({
+      no:         existingKepatuhan[idx]?.['no'] ?? `12${SUB[idx] ?? idx}`,
+      name:       row.name,
+      maxPenalty: row.bobot,
+      applied:    r2(row.nilai),
+      target:     existingKepatuhan[idx]?.['target'] ?? row.target,
+      status:     row.nilai === 0 ? 'success' : 'danger',
+    }));
 
     const kpis = (hasKpData ? kpisBuilt : existingKpis) as Record<string, unknown>[];
     const kepatuhan = (hasKpData ? kepatuhanBuilt : existingKepatuhan) as Record<string, unknown>[];

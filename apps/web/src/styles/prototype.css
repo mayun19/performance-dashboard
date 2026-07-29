@@ -253,17 +253,19 @@ a {
 /* =========================================================
        APP SHELL
        ========================================================= */
-.app {
-  display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
-  grid-template-rows: var(--topbar-h) 1fr;
-  grid-template-areas: "sidebar topbar" "sidebar main";
-  height: 100vh;
-  transition: grid-template-columns var(--tr-slow);
-}
-.app[data-sidebar="collapsed"] {
-  grid-template-columns: var(--sidebar-w-collapsed) 1fr;
-}
+    .app {
+      display: grid;
+      /* minmax(0, 1fr) — bukan cuma 1fr — cegah kolom konten "meledak" melebihi lebar
+         viewport saat topbar/tabel punya lebar minimum konten besar (grid blowout klasik).
+         Tanpa ini, overflow di child manapun mendorong SELURUH grid horizontal-scroll,
+         bukan cuma discroll lokal di elemen itu sendiri. */
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      grid-template-rows: var(--topbar-h) 1fr;
+      grid-template-areas: "sidebar topbar" "sidebar main";
+      height: 100vh;
+      transition: grid-template-columns var(--tr-slow);
+    }
+    .app[data-sidebar="collapsed"] { grid-template-columns: var(--sidebar-w-collapsed) minmax(0, 1fr); }
 
 /* =========================================================
        SIDEBAR
@@ -3215,14 +3217,20 @@ a {
 /* =========================================================
        RESPONSIVE
        ========================================================= */
-@media (max-width: 1024px) {
-  :root {
-    --content-pad-x: 24px;
-  }
-  .role-badge {
-    display: none;
-  }
-}
+    /* Lebar laptop umum (1024–1550px) — topbar-right (role badge + search + notif +
+       export + war room + tema + user) padat bersaing dengan topbar-center (segmented
+       periode + select) hingga overflow. Sembunyikan item paling boros ruang & paling
+       tidak kritis dulu (role badge, label teks War Room) — ikon War Room + title tetap
+       berfungsi penuh. */
+    @media (max-width: 1680px) {
+      .role-badge { display: none; }
+      .btn-warroom-text { display: none; }
+      .breadcrumb-prev { display: none; }
+    }
+
+    @media (max-width: 1024px) {
+      :root { --content-pad-x: 24px; }
+    }
 
 @media (max-width: 768px) {
   :root {
@@ -3266,16 +3274,8 @@ a {
     padding-bottom: var(--bottomnav-h);
   }
 
-  .topbar {
-    padding: 0 var(--space-4);
-    gap: var(--space-2);
-  }
-  .topbar-center {
-    display: none;
-  }
-  .breadcrumb-prev {
-    display: none;
-  }
+      .topbar { padding: 0 var(--space-4); gap: var(--space-2); }
+      .topbar-center { display: none; }
 
   .dropdown-menu.wide,
   .dropdown-menu.wider {

@@ -11,7 +11,6 @@ import { StrategicModule } from './strategic/strategic.module';
 import { HumanCapitalModule } from './human-capital/human-capital.module';
 import { RiskModule } from './risk/risk.module';
 import { ApprovalsModule } from './approvals/approvals.module';
-import { WorkflowKmModule } from './workflow-km/workflow-km.module';
 import { InputRealisasiModule } from './input-realisasi/input-realisasi.module';
 import { InputKontrakModule } from './input-kontrak/input-kontrak.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -40,7 +39,6 @@ import { PeriodTargetModule } from './period-target/period-target.module';
     HumanCapitalModule,
     RiskModule,
     ApprovalsModule,
-    WorkflowKmModule,
     InputRealisasiModule,
     InputKontrakModule,
     NotificationsModule,

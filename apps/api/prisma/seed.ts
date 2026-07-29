@@ -101,7 +101,9 @@ async function main() {
     ['man.aset', 'Manajer Aset & Properti', Role.MANAJER, KKU, 'man_aset_properti'],
     ['sm.kku', 'SM Keuangan, Komunikasi & Umum', Role.SRMANAJER, KKU, 'sm_kku'],
     // K3L & MRO (langsung di bawah GM)
+    ['staff.k3l', 'Staff Kinerja K3L', Role.STAFF, K3L, 'staff_general'],
     ['asman.k3l', 'ASMAN K3L', Role.ASMAN, K3L, 'asman_k3l'],
+    ['staff.mro', 'Staff Kinerja MRO', Role.STAFF, MRO, 'staff_general'],
     ['asman.mro', 'ASMAN Manajemen Risiko & Kepatuhan', Role.ASMAN, MRO, 'asman_risiko'],
   ];
   for (const [slug, name, role, bidang, vc] of KI_USERS) await upsertUser(slug, name, role, bidang, vc);
@@ -135,6 +137,38 @@ async function main() {
       });
     }
     console.log('  users upmk:', code);
+  }
+
+  // Bagian internal UPMK: tiap UPMK punya 3 bagian (Pembangkit, Jaringan, KKU), masing-masing
+  // dgn Staff PIC & ASMAN sendiri (bidang = nama bagian). MUP tetap satu per UPMK (di atas),
+  // bukan per-bagian — dialah konsolidator internal sebelum lanjut ke rantai bidang Kantor Induk.
+  const UPMK_BAGIAN: Array<{ slug: string; label: string }> = [
+    { slug: 'pembangkit', label: 'Bagian Pembangkit' },
+    { slug: 'jaringan', label: 'Bagian Jaringan' },
+    { slug: 'kku', label: 'Bagian KKU' },
+    { slug: 'k3l', label: 'Bagian K3L' },
+  ];
+  const UPMK_BAGIAN_ROLES: Array<{ key: string; role: Role; label: string }> = [
+    { key: 'staff', role: Role.STAFF, label: 'Staff PIC' },
+    { key: 'asman', role: Role.ASMAN, label: 'ASMAN' },
+  ];
+  for (const code of UPMK_CODES) {
+    const slug = code.toLowerCase();
+    for (const bg of UPMK_BAGIAN) {
+      for (const r of UPMK_BAGIAN_ROLES) {
+        const email = `${r.key}.${bg.slug}.${slug}@pusmanpro.pln.co.id`;
+        const variant = await prisma.roleVariant.findUnique({ where: { code: REP_VARIANT[r.key] } });
+        await prisma.user.upsert({
+          where: { email },
+          update: { unit: code, bidang: bg.label, roleVariantId: variant?.id ?? null },
+          create: {
+            email, name: `${r.label} ${bg.label} ${code}`, role: r.role, unit: code, bidang: bg.label,
+            passwordHash: hash, isActive: true, roleVariantId: variant?.id ?? null, prefs: { create: {} },
+          },
+        });
+      }
+    }
+    console.log('  users upmk bagian:', code);
   }
 
   // Periode — 12 bulan tahun berjalan 2026. Aktif = Februari 2026 (selaras snapshot domain).
@@ -252,37 +286,6 @@ async function main() {
     });
   }
   console.log('  reports:', approvals.reports.length);
-
-  // KM Documents — from workflowKM.pendingApprovals
-  const wkm = DATA.workflowKM as { pendingApprovals: Array<Record<string, unknown>> };
-  const TIPE_MAP: Record<string, 'WF1' | 'WF1B' | 'WF2' | 'WF3'> = {
-    'WF-1': 'WF1', 'WF-1b': 'WF1B', 'WF-2': 'WF2', 'WF-3': 'WF3',
-    WF1: 'WF1', WF1B: 'WF1B', WF2: 'WF2', WF3: 'WF3',
-  };
-  let kmDocs = 0;
-  for (const doc of (wkm.pendingApprovals ?? [])) {
-    const docId = doc.docId as string;
-    if (!docId) continue;
-    const rawTipe = (doc.tipe as string || 'WF-1');
-    const tipe = TIPE_MAP[rawTipe] ?? 'WF1';
-    const slaRaw = doc.slaRemain as string | number | null | undefined;
-    const slaRemain = typeof slaRaw === 'number' ? slaRaw : null;
-    await prisma.kMDocument.upsert({
-      where: { docId },
-      update: {},
-      create: {
-        docId,
-        tipe,
-        bidangUnit: doc.bidangUnit as string || '',
-        holder: doc.holder as string || '',
-        status: 'IN_REVIEW_C1',
-        deadline: doc.deadline ? new Date(doc.deadline as string) : null,
-        slaRemain,
-      },
-    });
-    kmDocs++;
-  }
-  console.log('  km_documents:', kmDocs);
 
   // Kontrak Manajemen — sample entries for demo
   // CATATAN: Tidak ada seeding Kontrak Manajemen / Realisasi / Notifikasi contoh.

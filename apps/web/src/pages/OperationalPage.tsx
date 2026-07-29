@@ -28,7 +28,7 @@ interface Rekap {
 }
 
 // Sub-indikator KPI komposit (opt-in, generik) — lihat common/capaian.ts breakdownComposite.
-type SubBreakdownItem = { nama: string; satuan: string; bobot: number; target: number; actual: number; capaian: number; nilai: number };
+type SubBreakdownItem = { nama: string; satuan: string; bobot: number; target: number; actual: number; capaian: number; nilai: number; formula?: string };
 
 type Kpi = {
   id: string; no?: string; label?: string; name?: string; indikator?: string; formula?: string;
@@ -67,28 +67,16 @@ function pct(v: number, d = 1) {
   return (v ?? 0).toFixed(d) + "%";
 }
 
+// Status dari backend (operational.service.ts) bernilai 'success'/'warning'/'danger' — sebelumnya
+// fungsi ini hanya mencocokkan string lama ('on-track'/'at-risk'/'delayed'/'completed') sehingga
+// SEMUA status jatuh ke warna default yang sama (tak ada beda visual sukses/waspada/bahaya).
 function statusPill(s: string) {
-  const cls =
-    s === "on-track" || s === "completed"
-      ? "completed"
-      : s === "at-risk"
-        ? "at-risk"
-        : s === "delayed"
-          ? "delayed"
-          : "needs-revision";
-  return (
-    <span className={`status-pill ${cls}`}>
-      {s === "on-track"
-        ? "On Track"
-        : s === "at-risk"
-          ? "At Risk"
-          : s === "delayed"
-            ? "Tertinggal"
-            : s === "completed"
-              ? "Tercapai"
-              : s}
-    </span>
-  );
+  const cls = s === 'success' || s === 'on-track' || s === 'completed' ? 'success'
+    : s === 'warning' || s === 'at-risk' || s === 'needs-revision' ? 'warning'
+    : s === 'danger' || s === 'delayed' ? 'danger'
+    : 'info';
+  const label = s === 'success' || s === 'on-track' ? 'Tercapai' : s === 'warning' || s === 'at-risk' ? 'Waspada' : s === 'danger' || s === 'delayed' ? 'Tertinggal' : s === 'completed' ? 'Selesai' : s;
+  return <span className={`status-pill ${cls}`}>{label}</span>;
 }
 
 export function OperationalPage() {
@@ -172,18 +160,16 @@ export function OperationalPage() {
     );
   }
 
-  const kpiRows = kpis.filter((k) => !k.id?.startsWith("pi"));
-  const piRows =
-    pis.length > 0 ? pis : kpis.filter((k) => k.id?.startsWith("pi"));
-  // KPI digabung jadi satu (sebelumnya KPI bobot 40 + KPI bobot 60).
-  const allKpiRows = [...kpiRows, ...piRows];
-  const totalMaxPenalty = kepatuhan.reduce(
-    (sum, item) => sum + item.maxPenalty,
-    0,
-  );
+  // Backend (operational.service.ts) sudah mengirim `kpis` sebagai satu daftar penuh, terurut
+  // sesuai dokumen spesimen — tak perlu dipecah KPI/PI lalu digabung lagi (pemecahan via
+  // id?.startsWith('pi') memakai id legacy yang tak konsisten & merusak urutan spesimen).
+  const allKpiRows = pis.length > 0 ? [...kpis, ...pis] : kpis;
   const kpiNilai = (sm.kpiNilai ?? 0) + (sm.piNilai ?? 0);
   const kpiBobot = (sm.kpiBobot ?? 0) + (sm.piBobot ?? 0);
   const penalty = sm.kepatuhanPenalty ?? 0;
+  // Plafon maksimum pengurang = Σ maxPenalty seluruh sub-indikator pengurang live (bukan
+  // angka statis) — mengikuti bobotKm KPI Master "Kepatuhan..." yang bisa berubah sewaktu-waktu.
+  const maxPenaltyTotal = kepatuhan.reduce((s, k) => s + (k.maxPenalty ?? 0), 0);
   // Total Nilai Kinerja = Σ nilai KPI + pengurang kepatuhan (penalty ≤ 0) — sinkron dgn kartu di atas.
   const totalNilai = kpiNilai + penalty;
   const totalBobot = kpiBobot;
@@ -222,12 +208,12 @@ export function OperationalPage() {
                     <div style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: 'var(--text-xs)' }}>
                       {k.name ?? k.label}
                       {isComposite && (
-                        <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 4, padding: '1px 4px' }} title={`Komposit — ${k.subBreakdown!.length} sub-indikator`}>
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 4, padding: '1px 4px' }} title={`Komposit — ${k.subBreakdown!.length} sub-indikator`}>
                           Komposit
                         </span>
                       )}
                     </div>
-                    {(k.formula ?? k.commentary) && <div style={{ fontSize: 10, color: 'var(--color-text-subtle)', marginTop: 2 }}>{k.formula ?? k.commentary}</div>}
+                    {(k.formula ?? k.commentary) && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginTop: 2 }}>{k.formula ?? k.commentary}</div>}
                   </td>
                   <td style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{k.satuan ?? k.unit ?? '—'}</td>
                   <td className="num">{isComposite ? '—' : fmt(k.target, 1)}</td>
@@ -242,7 +228,10 @@ export function OperationalPage() {
                 {isComposite && k.subBreakdown!.map((si, j) => (
                   <tr key={`${i}.${j}`} style={{ background: 'var(--color-surface-2)' }}>
                     <td />
-                    <td style={{ paddingLeft: 'var(--space-4)', fontSize: 12, color: 'var(--color-text-muted)' }}>↳ {si.nama}</td>
+                    <td style={{ paddingLeft: 'var(--space-4)' }}>
+                      <span style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>↳ {si.nama}</span>
+                      {si.formula && <div style={{ fontSize: 12, color: 'var(--color-text-subtle)', marginTop: 2, paddingLeft: 12 }}>{si.formula}</div>}
+                    </td>
                     <td style={{ color: 'var(--color-text-muted)' }}>{si.satuan || '—'}</td>
                     <td className="num">{fmt(si.target, 1)}</td>
                     <td className="num">{fmt(si.actual, 2)}</td>
@@ -382,9 +371,9 @@ export function OperationalPage() {
         </div>
         <div className="summary-hero-card pen">
           <div className="summary-hero-label">Pengurang Kepatuhan</div>
-          <div className="summary-hero-value">
-            {penalty}
-            <span className="of">(max  {totalMaxPenalty})</span>
+          <div className="summary-hero-value">{penalty}<span className="of">(max {maxPenaltyTotal})</span></div>
+          <div className="summary-hero-meta delta-positive">
+            {penalty === 0 ? 'Tidak ada pengurang' : `${penalty} poin`}
           </div>
           <div className="summary-hero-meta delta-positive">
             {penalty === 0 ? "Tidak ada pengurang" : `${penalty} poin`}
@@ -491,27 +480,9 @@ export function OperationalPage() {
                 }}>
                 <ShieldAlert size={16} color="var(--color-danger)" />
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}>
-                <div
-                  className="card-title"
-                  style={{
-                    color: "var(--color-danger)",
-                    fontSize: "var(--text-lg)",
-                  }}>
-                  Pengurang Kepatuhan
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    color: "var(--color-text-muted)",
-                  }}>
-                  Maks {totalMaxPenalty} poin
-                </div>
+              <div>
+                <div className="card-title" style={{ color: 'var(--color-danger)', fontSize: 'var(--text-sm)' }}>Pengurang Kepatuhan</div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>Maks {maxPenaltyTotal} poin</div>
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -528,83 +499,43 @@ export function OperationalPage() {
               </div>
             </div>
           </div>
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
-            <div className="table-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Sub-Indikator</th>
-                    <th className="num">Maks</th>
-                    <th className="num">Aktual</th>
-                    <th>Target</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kepatuhan.map((k, i) => (
-                    <tr key={i}>
-                      <td>{k.name}</td>
-                      <td
-                        className="num"
-                        style={{
-                          color: "var(--color-danger)",
-                          fontWeight: 700,
-                        }}>
-                        {k.maxPenalty}
-                      </td>
-                      <td
-                        className="num"
-                        style={{
-                          fontWeight: 700,
-                          color:
-                            k.applied < 0
-                              ? "var(--color-danger)"
-                              : "var(--color-success)",
-                        }}>
-                        {k.applied < 0 ? k.applied : "—"}
-                      </td>
-                      <td style={{ color: "var(--color-text-muted)" }}>
-                        {k.target}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${k.status === "success" ? "completed" : "needs-revision"}`}>
-                          {k.status === "success" ? "✓ Aman" : "⚠ Perhatian"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr
-                    style={{
-                      background: "var(--color-surface-2)",
-                      fontWeight: 700,
-                    }}>
-                    <td>TOTAL</td>
-                    <td
-                      className="num"
-                      style={{ color: "var(--color-danger)" }}>
-                      {totalMaxPenalty}
+          <div className="table-wrap">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Sub-Indikator</th>
+                  <th className="num">Maks</th>
+                  <th className="num">Aktual</th>
+                  <th>Target</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kepatuhan.map((k, i) => (
+                  <tr key={i}>
+                    <td>{k.name}</td>
+                    <td className="num" style={{ color: 'var(--color-danger)', fontWeight: 700 }}>{k.maxPenalty}</td>
+                    <td className="num" style={{ fontWeight: 700, color: k.applied < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                      {k.applied < 0 ? k.applied : '—'}
                     </td>
-                    <td
-                      className="num"
-                      style={{
-                        fontWeight: 800,
-                        color:
-                          (sm.kepatuhanPenalty ?? 0) < 0
-                            ? "var(--color-danger)"
-                            : "var(--color-success)",
-                      }}>
-                      {(sm.kepatuhanPenalty ?? 0) < 0
-                        ? sm.kepatuhanPenalty
-                        : "0 ✓"}
+                    <td style={{ color: 'var(--color-text-muted)' }}>{k.target}</td>
+                    <td>
+                      <span className={`status-pill ${k.status === 'success' ? 'success' : 'danger'}`}>
+                        {k.status === 'success' ? '✓ Aman' : '⚠ Perhatian'}
+                      </span>
                     </td>
-                    <td colSpan={2} />
                   </tr>
-                </tbody>
-              </table>
-            </div>
+                ))}
+                <tr style={{ background: 'var(--color-surface-2)', fontWeight: 700 }}>
+                  <td>TOTAL</td>
+                  <td className="num" style={{ color: 'var(--color-danger)' }}>{maxPenaltyTotal}</td>
+                  <td className="num" style={{ fontWeight: 800, color: (sm.kepatuhanPenalty ?? 0) < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                    {(sm.kepatuhanPenalty ?? 0) < 0 ? sm.kepatuhanPenalty : '0 ✓'}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       )}

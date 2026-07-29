@@ -58,6 +58,11 @@ export class InputRealisasiController {
     return this.svc.getHistory(unitCode, periodId);
   }
 
+  @Get('my-decisions')
+  myDecisions(@CurrentUser() user: User, @Query('periodId') periodId?: string) {
+    return this.svc.getMyDecisions(user, periodId);
+  }
+
   @Get('review/list')
   reviewList(@CurrentUser() user: User) {
     return this.svc.getReviewList(user);
@@ -69,8 +74,8 @@ export class InputRealisasiController {
   }
 
   @Get('reviewer-candidates')
-  reviewerCandidates() {
-    return this.svc.getReviewerCandidates();
+  reviewerCandidates(@Query('unitCode') unitCode?: string, @Query('bidang') bidang?: string) {
+    return this.svc.getReviewerCandidates(unitCode, bidang);
   }
 
   // Bundle periode (deklarasikan sebelum rute :id agar tidak tertangkap param)
