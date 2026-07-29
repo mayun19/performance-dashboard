@@ -7029,11 +7029,7 @@ snapshots:
 
   symbol-observable@4.0.0: {}
 
-<<<<<<< HEAD
-  tailwindcss@4.3.2: {}
-=======
   symbol-tree@3.2.4: {}
->>>>>>> upstream/main
 
   tapable@2.3.3: {}
 
