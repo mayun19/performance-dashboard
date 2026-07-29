@@ -2690,7 +2690,7 @@ export function ReviewPerKpiTab() {
       <div
         style={{
           fontSize: "var(--text-xs)",
-          color: "var(--color-text-muted)",
+          color: "var(--color-text)",
           marginBottom: "var(--space-3)",
           display: "flex",
           alignItems: "center",
@@ -2722,7 +2722,7 @@ export function ReviewPerKpiTab() {
           <div
             key={it.masterId}
             className="card p-0"
-            style={{ marginBottom: "var(--space-4)" }}>
+            style={{ marginBottom: "var(--space-6)" }}>
             <div
               className="card-header compact"
               style={{ flexWrap: "wrap", gap: "var(--space-2)" }}>
@@ -2751,13 +2751,13 @@ export function ReviewPerKpiTab() {
                 )}
                 <span
                   className={`status-pill ${it.kmType === "final" ? "completed" : "at-risk"}`}
-                  style={{ fontSize: 12 }}>
+                  style={{ fontSize: 14 }}>
                   {it.kmType === "final" ? "Final" : "Draft"}
                 </span>
                 {it.isPending && (
                   <span
                     className="status-pill in-review"
-                    style={{ fontSize: 12 }}
+                    style={{ fontSize: 14 }}
                     title={`Berlaku mulai ${it.effectiveMonth}`}>
                     v{it.version} · mulai {it.effectiveMonth}
                   </span>
@@ -2765,7 +2765,7 @@ export function ReviewPerKpiTab() {
                 {cs?.status === "approved" && (
                   <span
                     className="status-pill completed"
-                    style={{ fontSize: 12 }}
+                    style={{ fontSize: 14 }}
                     title={`Disetujui ${cs.reviewer ?? ""}`}>
                     ✓ Konsolidasi Final
                   </span>
@@ -2773,14 +2773,14 @@ export function ReviewPerKpiTab() {
                 {cs?.status === "rejected" && (
                   <span
                     className="status-pill delayed"
-                    style={{ fontSize: 12 }}>
+                    style={{ fontSize: 14 }}>
                     Konsolidasi Ditolak
                   </span>
                 )}
                 {!cs && it.readyForConsolidation && (
                   <span
                     className="status-pill at-risk"
-                    style={{ fontSize: 12 }}>
+                    style={{ fontSize: 14 }}>
                     Siap Konsolidasi
                   </span>
                 )}
@@ -2794,12 +2794,12 @@ export function ReviewPerKpiTab() {
                 }}>
                 <span
                   className={`status-pill ${it.allApproved ? "completed" : "at-risk"}`}
-                  style={{ fontSize: 12 }}>
+                  style={{ fontSize: 14 }}>
                   {it.approvedCount}/{it.totalAssignments} bidang disetujui
                 </span>
                 <span
                   style={{
-                    fontSize: "var(--text-2xs)",
+                    fontSize: "var(--text-xs)",
                     color: "var(--color-text-muted)",
                   }}>
                   {cs?.status === "approved"
@@ -2851,7 +2851,7 @@ export function ReviewPerKpiTab() {
               <div
                 style={{
                   padding: "6px 12px",
-                  fontSize: "var(--text-2xs)",
+                  fontSize: "var(--text-xs)",
                   color: "var(--color-danger)",
                   background: "var(--color-danger-tint)",
                   borderBottom: "1px solid var(--color-border)",
@@ -2864,78 +2864,80 @@ export function ReviewPerKpiTab() {
                 {cs.reviewNote}
               </div>
             )}
-            <div className="table-wrap">
-              <table className="data-table compact" style={{ margin: 0 }}>
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>PJ</th>
-                    {it.aggregationMethod === "weighted" && (
-                      <th className="num">Bobot</th>
-                    )}
-                    <th className="num">Realisasi</th>
-                    <th>Status</th>
-                    <th>Reviewer</th>
-                    <th className="num">Kontribusi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {it.slices.map((s, i) => (
-                    <tr key={i} style={{ opacity: s.isApproved ? 1 : 0.72 }}>
-                      <td style={{ fontWeight: 600 }}>
-                        {UNIT_NAMES[s.unitCode] ?? s.unitCode}
-                      </td>
-                      <td style={{ fontSize: 13 }}>{s.bidang}</td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          fontSize: 13,
-                        }}>
-                        {s.holder || "—"}
-                      </td>
+            <div
+              className="table-wrap"
+              style={{ paddingBottom: "var(--space-7)" }}>
+              <div className="table-scroll">
+                <table className="data-table compact" style={{ margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Unit</th>
+                      <th>Bidang</th>
+                      <th>PJ</th>
                       {it.aggregationMethod === "weighted" && (
-                        <td className="num">
-                          {s.persenAgregasi ? `${s.persenAgregasi}%` : "—"}
-                        </td>
+                        <th className="num">Bobot</th>
                       )}
-                      <td className="num">
-                        {s.hasData ? (
-                          s.realisasi
-                        ) : (
-                          <span style={{ color: "var(--color-text-subtle)" }}>
-                            belum ada
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${REAL_STATUS_PILL[s.status] ?? "in-review"}`}
-                          style={{ fontSize: 12 }}>
-                          {REAL_STATUS_LABEL[s.status] ?? s.status}
-                        </span>
-                      </td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          fontSize: 13,
-                        }}>
-                        {s.reviewer || "—"}
-                      </td>
-                      <td
-                        className="num"
-                        style={{
-                          fontWeight: 700,
-                          color: s.isApproved
-                            ? "var(--color-text)"
-                            : "var(--color-text-subtle)",
-                        }}>
-                        {s.isApproved ? s.kontribusi : "—"}
-                      </td>
+                      <th className="num">Realisasi</th>
+                      <th>Status</th>
+                      <th>Reviewer</th>
+                      <th className="num">Kontribusi</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {it.slices.map((s, i) => (
+                      <tr key={i} style={{ opacity: s.isApproved ? 1 : 0.72 }}>
+                        <td style={{ fontWeight: 600 }}>
+                          {UNIT_NAMES[s.unitCode] ?? s.unitCode}
+                        </td>
+                        <td>{s.bidang}</td>
+                        <td
+                          style={{
+                            color: "var(--color-text-muted)",
+                          }}>
+                          {s.holder || "—"}
+                        </td>
+                        {it.aggregationMethod === "weighted" && (
+                          <td className="num">
+                            {s.persenAgregasi ? `${s.persenAgregasi}%` : "—"}
+                          </td>
+                        )}
+                        <td className="num">
+                          {s.hasData ? (
+                            s.realisasi
+                          ) : (
+                            <span style={{ color: "var(--color-text-subtle)" }}>
+                              belum ada
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${REAL_STATUS_PILL[s.status] ?? "in-review"}`}>
+                            {REAL_STATUS_LABEL[s.status] ?? s.status}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            color: "var(--color-text-muted)",
+                            fontSize: 13,
+                          }}>
+                          {s.reviewer || "—"}
+                        </td>
+                        <td
+                          className="num"
+                          style={{
+                            fontWeight: 700,
+                            color: s.isApproved
+                              ? "var(--color-text)"
+                              : "var(--color-text-subtle)",
+                          }}>
+                          {s.isApproved ? s.kontribusi : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         );
