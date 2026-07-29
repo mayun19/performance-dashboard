@@ -4325,7 +4325,9 @@ export function ApprovalsPage() {
           </div>
         </div>
 
-        <div className="table-wrap" style={{ paddingBottom: "var(--space-7)" }}>
+        <div
+          className="table-wrap"
+          style={{ padding: "0 var(--space-7) var(--space-7)" }}>
           <div className="table-scroll">
             <table className="data-table compact">
               <thead>
@@ -4659,269 +4661,273 @@ export function ApprovalsPage() {
           </FoldCard>
 
           {/* RACI Matrix — dinamis per role */}
-           {(() => {
-        const myCol = getUserRaciCol(user);
-        return (
-          <FoldCard
-            icon={<UsersRound size={16} />}
-            title="Matriks RACI"
-            right={
-              <span className="card-meta">
-                R=Responsible · A=Accountable · C=Consulted · I=Informed
-              </span>
-            }
-            defaultOpen={false}>
-            {myCol && (
-              <div
-                style={{
-                  margin: "var(--space-4) var(--space-7) 0",
-                  padding: "var(--space-3) var(--space-4)",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--color-accent-tint)",
-                  borderLeft: "4px solid var(--color-accent)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "var(--color-accent)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                  }}>
-                  Peran Anda dalam Workflow
-                </div>
-                <div style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>
-                  {RACI_COL_LABEL[myCol]}
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    color: "var(--color-text-muted)",
-                  }}>
-                  {RACI_COL_TANGGUNG[myCol]}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--color-text-subtle)",
-                    marginTop: 6,
-                  }}>
-                  Kolom yang disorot (🔵) pada tabel di bawah menunjukkan posisi
-                  Anda dalam matriks.
-                </div>
-              </div>
-            )}
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--space-3)",
-                flexWrap: "wrap",
-                padding: "var(--space-3) var(--space-7)",
-                fontSize: 12,
-              }}>
-              {[
-                [
-                  "R",
-                  "var(--color-accent-tint)",
-                  "var(--color-accent)",
-                  "Responsible — pelaksana utama",
-                ],
-                [
-                  "A",
-                  "rgba(16,185,129,0.12)",
-                  "var(--color-success)",
-                  "Accountable — pemegang tanggung jawab akhir",
-                ],
-                [
-                  "C",
-                  "rgba(59,130,246,0.12)",
-                  "var(--color-info)",
-                  "Consulted — diminta masukan/persetujuan",
-                ],
-                [
-                  "I",
-                  "var(--color-surface-2)",
-                  "var(--color-text-subtle)",
-                  "Informed — diinformasikan",
-                ],
-                [
-                  "—",
-                  "var(--color-surface-2)",
-                  "var(--color-text-subtle)",
-                  "Tidak terlibat pada alur ini",
-                ],
-              ].map(([lbl, bg, clr, desc]) => (
-                <div
-                  key={lbl}
-                  style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span
+          {(() => {
+            const myCol = getUserRaciCol(user);
+            return (
+              <FoldCard
+                icon={<UsersRound size={16} />}
+                title="Matriks RACI"
+                right={
+                  <span className="card-meta">
+                    R=Responsible · A=Accountable · C=Consulted · I=Informed
+                  </span>
+                }
+                defaultOpen={false}>
+                {myCol && (
+                  <div
                     style={{
-                      display: "inline-block",
-                      width: 22,
-                      height: 18,
-                      borderRadius: 3,
-                      lineHeight: "18px",
-                      textAlign: "center",
-                      fontWeight: 700,
-                      background: bg as string,
-                      color: clr as string,
-                      fontSize: 10,
+                      margin: "var(--space-4) var(--space-7) 0",
+                      padding: "var(--space-3) var(--space-4)",
+                      borderRadius: "var(--radius-md)",
+                      background: "var(--color-accent-tint)",
+                      borderLeft: "4px solid var(--color-accent)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
                     }}>
-                    {lbl}
-                  </span>
-                  <span style={{ color: "var(--color-text-muted)" }}>
-                    {desc}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div
-              className="table-wrap"
-              style={{ paddingBottom: "var(--space-2)" }}>
-              <div className="table-scroll">
-                <table className="data-table compact">
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 220 }}>Aktivitas</th>
-                      <th
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "var(--color-accent)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}>
+                      Peran Anda dalam Workflow
+                    </div>
+                    <div
+                      style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>
+                      {RACI_COL_LABEL[myCol]}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "var(--text-sm)",
+                        color: "var(--color-text-muted)",
+                      }}>
+                      {RACI_COL_TANGGUNG[myCol]}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "var(--color-text-subtle)",
+                        marginTop: 6,
+                      }}>
+                      Kolom yang disorot (🔵) pada tabel di bawah menunjukkan
+                      posisi Anda dalam matriks.
+                    </div>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "var(--space-3)",
+                    flexWrap: "wrap",
+                    padding: "var(--space-3) var(--space-7)",
+                    fontSize: 12,
+                  }}>
+                  {[
+                    [
+                      "R",
+                      "var(--color-accent-tint)",
+                      "var(--color-accent)",
+                      "Responsible — pelaksana utama",
+                    ],
+                    [
+                      "A",
+                      "rgba(16,185,129,0.12)",
+                      "var(--color-success)",
+                      "Accountable — pemegang tanggung jawab akhir",
+                    ],
+                    [
+                      "C",
+                      "rgba(59,130,246,0.12)",
+                      "var(--color-info)",
+                      "Consulted — diminta masukan/persetujuan",
+                    ],
+                    [
+                      "I",
+                      "var(--color-surface-2)",
+                      "var(--color-text-subtle)",
+                      "Informed — diinformasikan",
+                    ],
+                    [
+                      "—",
+                      "var(--color-surface-2)",
+                      "var(--color-text-subtle)",
+                      "Tidak terlibat pada alur ini",
+                    ],
+                  ].map(([lbl, bg, clr, desc]) => (
+                    <div
+                      key={lbl}
+                      style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span
                         style={{
-                          fontSize: 14,
-                          color: "#e5e7eb",
-                          fontWeight: 600,
-                          whiteSpace: "nowrap",
+                          display: "inline-block",
+                          width: 22,
+                          height: 18,
+                          borderRadius: 3,
+                          lineHeight: "18px",
                           textAlign: "center",
+                          fontWeight: 700,
+                          background: bg as string,
+                          color: clr as string,
+                          fontSize: 10,
                         }}>
-                        Ruang Lingkup
-                      </th>
-                      {RACI_COLS.map((col) => (
-                        <th
-                          key={col.key}
-                          style={{
-                            textAlign: "center",
-                            minWidth: 110,
-                            background:
-                              myCol === col.key
-                                ? "var(--color-accent-tint)"
-                                : undefined,
-                            color:
-                              myCol === col.key
-                                ? "var(--color-accent)"
-                                : undefined,
-                            borderBottom:
-                              myCol === col.key
-                                ? "2px solid var(--color-accent)"
-                                : undefined,
-                          }}>
-                          <div style={{ fontWeight: 700, fontSize: 14 }}>
-                            {myCol === col.key ? "🔵 " : ""}
-                            {col.label}
-                          </div>
-                          <div
+                        {lbl}
+                      </span>
+                      <span style={{ color: "var(--color-text-muted)" }}>
+                        {desc}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div
+                  className="table-wrap"
+                  style={{ paddingBottom: "var(--space-2)" }}>
+                  <div className="table-scroll">
+                    <table className="data-table compact">
+                      <thead>
+                        <tr>
+                          <th style={{ minWidth: 220 }}>Aktivitas</th>
+                          <th
                             style={{
-                              fontSize: 12,
-                              fontWeight: 500,
-                              color:
-                                myCol === col.key
-                                  ? "var(--color-accent)"
-                                  : "var(--color-text-sidebar-muted)",
-                              marginTop: 2,
-                              whiteSpace: "normal",
-                              lineHeight: 1.3,
+                              fontSize: 14,
+                              color: "#e5e7eb",
+                              fontWeight: 600,
+                              whiteSpace: "nowrap",
+                              textAlign: "center",
                             }}>
-                            {col.sublabel}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {RACI_ROWS.map((row, i) => (
-                      <tr key={i}>
-                        <td
-                          style={{
-                            fontWeight: 500,
-                            fontSize: "var(--text-sm)",
-                          }}>
-                          {row.activity}
-                        </td>
-                        <td
-                          style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                          <span
-                            style={{
-                              fontSize: 12,
-                              background: "var(--color-surface-2)",
-                              color: "var(--color-text-muted)",
-                              padding: "2px 6px",
-                              borderRadius: 8,
-                            }}>
-                            {row.scope}
-                          </span>
-                        </td>
-                        {RACI_COLS.map((col) => {
-                          const v = row.values[col.key];
-                          const isMyCol = myCol === col.key;
-                          return (
-                            <td
+                            Ruang Lingkup
+                          </th>
+                          {RACI_COLS.map((col) => (
+                            <th
                               key={col.key}
                               style={{
                                 textAlign: "center",
-                                background: isMyCol
-                                  ? "rgba(var(--color-accent-rgb, 14,116,144),0.04)"
-                                  : undefined,
+                                minWidth: 110,
+                                background:
+                                  myCol === col.key
+                                    ? "var(--color-accent-tint)"
+                                    : undefined,
+                                color:
+                                  myCol === col.key
+                                    ? "var(--color-accent)"
+                                    : undefined,
+                                borderBottom:
+                                  myCol === col.key
+                                    ? "2px solid var(--color-accent)"
+                                    : undefined,
+                              }}>
+                              <div style={{ fontWeight: 700, fontSize: 14 }}>
+                                {myCol === col.key ? "🔵 " : ""}
+                                {col.label}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  color:
+                                    myCol === col.key
+                                      ? "var(--color-accent)"
+                                      : "var(--color-text-sidebar-muted)",
+                                  marginTop: 2,
+                                  whiteSpace: "normal",
+                                  lineHeight: 1.3,
+                                }}>
+                                {col.sublabel}
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {RACI_ROWS.map((row, i) => (
+                          <tr key={i}>
+                            <td
+                              style={{
+                                fontWeight: 500,
+                                fontSize: "var(--text-sm)",
+                              }}>
+                              {row.activity}
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "center",
+                                whiteSpace: "nowrap",
                               }}>
                               <span
                                 style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  minWidth: 32,
-                                  height: 22,
-                                  borderRadius: 4,
-                                  fontSize: "var(--text-xs)",
-                                  fontWeight: 700,
-                                  outline:
-                                    isMyCol && v !== "—"
-                                      ? "2px solid var(--color-accent)"
-                                      : undefined,
-                                  outlineOffset: 1,
-                                  ...RACI_VALUE_STYLE(v),
+                                  fontSize: 12,
+                                  background: "var(--color-surface-2)",
+                                  color: "var(--color-text-muted)",
+                                  padding: "2px 6px",
+                                  borderRadius: 8,
                                 }}>
-                                {v}
+                                {row.scope}
                               </span>
                             </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div
-              style={{
-                padding: "var(--space-3) var(--space-7)",
-                fontSize: 12,
-                color: "var(--color-text-subtle)",
-                borderTop: "1px solid var(--color-border)",
-                lineHeight: 1.7,
-              }}>
-              <strong style={{ color: "var(--color-text-muted)" }}>
-                Catatan alur:
-              </strong>{" "}
-              Dokumen dari <strong>UPMK</strong> melewati review internal (ASMAN
-              + MUP) sebelum masuk rantai Kantor Induk. Dokumen dari{" "}
-              <strong>Kantor Induk</strong> langsung ke rantai bidang KI. Semua
-              dokumen (kecuali bidang RPC sendiri) wajib melalui{" "}
-              <strong>konsolidasi RPC</strong> sebelum masuk bundle GM. GM
-              menyetujui <strong>sekali untuk seluruh dokumen</strong> dalam
-              satu bundle (KM: tahunan; Realisasi: per periode).
-            </div>
-          </FoldCard>
-        );
-      })()}
+                            {RACI_COLS.map((col) => {
+                              const v = row.values[col.key];
+                              const isMyCol = myCol === col.key;
+                              return (
+                                <td
+                                  key={col.key}
+                                  style={{
+                                    textAlign: "center",
+                                    background: isMyCol
+                                      ? "rgba(var(--color-accent-rgb, 14,116,144),0.04)"
+                                      : undefined,
+                                  }}>
+                                  <span
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      minWidth: 32,
+                                      height: 22,
+                                      borderRadius: 4,
+                                      fontSize: "var(--text-xs)",
+                                      fontWeight: 700,
+                                      outline:
+                                        isMyCol && v !== "—"
+                                          ? "2px solid var(--color-accent)"
+                                          : undefined,
+                                      outlineOffset: 1,
+                                      ...RACI_VALUE_STYLE(v),
+                                    }}>
+                                    {v}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "var(--space-3) var(--space-7)",
+                    fontSize: 12,
+                    color: "var(--color-text-subtle)",
+                    borderTop: "1px solid var(--color-border)",
+                    lineHeight: 1.7,
+                  }}>
+                  <strong style={{ color: "var(--color-text-muted)" }}>
+                    Catatan alur:
+                  </strong>{" "}
+                  Dokumen dari <strong>UPMK</strong> melewati review internal
+                  (ASMAN + MUP) sebelum masuk rantai Kantor Induk. Dokumen dari{" "}
+                  <strong>Kantor Induk</strong> langsung ke rantai bidang KI.
+                  Semua dokumen (kecuali bidang RPC sendiri) wajib melalui{" "}
+                  <strong>konsolidasi RPC</strong> sebelum masuk bundle GM. GM
+                  menyetujui <strong>sekali untuk seluruh dokumen</strong> dalam
+                  satu bundle (KM: tahunan; Realisasi: per periode).
+                </div>
+              </FoldCard>
+            );
+          })()}
         </div>
       )}
 
