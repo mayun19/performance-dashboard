@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { kpiMaster, inputKontrak } from '../lib/api';
-import type { ReviewerSlot, ReviewerSlots, SubIndicatorInput } from '../lib/api';
+import type { ReviewerSlot, ReviewerSlots, SubIndicatorInput, SubIndicatorTargetOverride } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { usePeriod } from '../context/PeriodContext';
 import {
@@ -85,6 +85,9 @@ type Assignment = {
   unitCode: string; bidang: string; holder: string; target: string; target2: string;
   persenAgregasi: number;
   reviewerSlots: ReviewerSlots | null; // legacy — tak lagi diedit di UI, sekadar pass-through
+  // Override target sub-indikator (KPI Komposit), index sejajar dgn subIndicators master.
+  // null/kosong per elemen = warisi target template global. Lihat kpi-master.service.ts fanOut().
+  subIndicatorTargets: SubIndicatorTargetOverride[] | null;
 };
 type KpiMasterRow = {
   id: string; year: string; kmType: 'draft' | 'final'; indikator: string; formula: string; satuan: string;
@@ -106,7 +109,7 @@ type Rollup = {
   totalPersen: number; nilaiParent: number; isFullyConfigured: boolean; breakdown: RollupBreakdown[];
 };
 
-const emptyAssignment = (): Assignment => ({ unitCode: 'UPMK1', bidang: UPMK_BIDANG_OPTIONS[0], holder: '', target: '', target2: '', persenAgregasi: 0, reviewerSlots: null });
+const emptyAssignment = (): Assignment => ({ unitCode: 'UPMK1', bidang: UPMK_BIDANG_OPTIONS[0], holder: '', target: '', target2: '', persenAgregasi: 0, reviewerSlots: null, subIndicatorTargets: null });
 
 // Beda dgn num() longgar di common/capaian.ts (backend, strip huruf shg "Tanggal 5" jadi 5) —
 // di sini SELURUH string harus berupa angka valid, else null. Dipakai gating fitur auto-hitung
@@ -147,6 +150,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   // Auto-hitung Bobot Agregasi dari Target Tahun — default OFF (baik buat baru maupun edit)
   // supaya tak pernah diam-diam menimpa nilai yang sudah ada/sengaja diisi manual.
   const [autoCalcPersen, setAutoCalcPersen] = useState(false);
+  // Baris assignment yang sedang expand utk edit target sub-indikator (KPI Komposit).
+  const [expandedAssignment, setExpandedAssignment] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -174,7 +179,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setEditingId(null); setEditingIsPending(false); setKmType('draft'); setAggregationMethod('weighted');
     setIndikator(''); setFormula(''); setSatuan(''); setBobotKm('');
     setTargetParent(''); setAssignments([emptyAssignment()]); setFormError(null); setShowForm(false);
-    setIsComposite(false); setSubIndicators([]); setAutoCalcPersen(false);
+    setIsComposite(false); setSubIndicators([]); setAutoCalcPersen(false); setExpandedAssignment(null);
   };
 
   const handleEdit = (m: KpiMasterRow) => {
@@ -185,6 +190,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       unitCode: a.unitCode, bidang: a.bidang, holder: a.holder, target: a.target, target2: a.target2,
       persenAgregasi: a.persenAgregasi ?? 0,
       reviewerSlots: a.reviewerSlots ?? null,
+      subIndicatorTargets: a.subIndicatorTargets ?? null,
     })));
     setEditingIsPending(m.isPending);
     setIsComposite(!!(m.subIndicators && m.subIndicators.length > 0));
@@ -215,6 +221,15 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     const n = value === '' ? 0 : Number(value);
     setAssignments((prev) => prev.map((a, idx) => (idx === i ? { ...a, persenAgregasi: Number.isFinite(n) ? n : a.persenAgregasi } : a)));
   };
+  // Override target sub-indikator (KPI Komposit) — kosong di suatu index = warisi target
+  // template global (subIndicators[subIdx]) saat fan-out (lihat kpi-master.service.ts).
+  const updateAssignmentSubTarget = (assignmentIdx: number, subIdx: number, field: 'target' | 'target2', value: string) =>
+    setAssignments((prev) => prev.map((a, idx) => {
+      if (idx !== assignmentIdx) return a;
+      const next = [...(a.subIndicatorTargets ?? subIndicators.map(() => ({ target: '', target2: '' })))];
+      next[subIdx] = { ...next[subIdx], [field]: value };
+      return { ...a, subIndicatorTargets: next };
+    }));
   // 1 assignment saja → tak ada yang perlu dibagi, Bobot Agregasi otomatis 100% (tak diminta
   // diisi manual). Baru relevan & wajib diisi manual saat assignment-nya lebih dari satu.
   const isSingleAssignment = assignments.length === 1;
@@ -616,20 +631,21 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                           </select>
                         </td>
                         <td><input className="form-input form-input-sm" value={a.holder} onChange={(e) => updateAssignment(i, 'holder', e.target.value)} placeholder="Nama PJ" /></td>
-                        <td>
-                          {isComposite ? (
-                            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }} title="Komposit — target diisi per sub-indikator">— (per sub)</span>
-                          ) : (
-                            <input className="form-input form-input-sm" value={a.target} onChange={(e) => updateAssignment(i, 'target', e.target.value)} placeholder="Target Sem I" />
-                          )}
-                        </td>
-                        <td>
-                          {isComposite ? (
-                            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>— (per sub)</span>
-                          ) : (
-                            <input className="form-input form-input-sm" value={a.target2} onChange={(e) => updateAssignment(i, 'target2', e.target.value)} placeholder="Target tahun" />
-                          )}
-                        </td>
+                        {isComposite ? (
+                          <td colSpan={2}>
+                            <button
+                              className="btn btn-ghost btn-sm" onClick={() => setExpandedAssignment(expandedAssignment === i ? null : i)}
+                              title="Atur target tiap sub-indikator utk unit ini — kosong = warisi target template"
+                            >
+                              {subIndicators.length} sub · atur target <ChevronDown size={12} style={{ transform: expandedAssignment === i ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+                            </button>
+                          </td>
+                        ) : (
+                          <>
+                            <td><input className="form-input form-input-sm" value={a.target} onChange={(e) => updateAssignment(i, 'target', e.target.value)} placeholder="Target Sem I" /></td>
+                            <td><input className="form-input form-input-sm" value={a.target2} onChange={(e) => updateAssignment(i, 'target2', e.target.value)} placeholder="Target tahun" /></td>
+                          </>
+                        )}
                         {aggregationMethod === 'weighted' && !isSingleAssignment && (
                           <td>
                             <input
@@ -644,6 +660,41 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                           <button className="btn btn-ghost btn-sm" disabled={assignments.length <= 1} onClick={() => removeAssignment(i)} style={{ color: 'var(--color-danger)' }}><Trash2 size={13} /></button>
                         </td>
                       </tr>
+                      {isComposite && expandedAssignment === i && (
+                        <tr style={{ background: 'var(--color-surface-2)' }}>
+                          <td colSpan={5 + (aggregationMethod === 'weighted' && !isSingleAssignment ? 1 : 0) + 1} style={{ padding: 0 }}>
+                            <table className="data-table compact" style={{ margin: 0 }}>
+                              <thead>
+                                <tr><th>Sub-Indikator</th><th>Target Sem I</th><th>Target {CURRENT_YEAR}</th></tr>
+                              </thead>
+                              <tbody>
+                                {subIndicators.map((si, j) => (
+                                  <tr key={j}>
+                                    <td style={{ color: 'var(--color-text-muted)' }}>↳ {si.nama || `Sub ${j + 1}`}</td>
+                                    <td>
+                                      <input
+                                        className="form-input form-input-sm" placeholder={si.target || '—'}
+                                        value={a.subIndicatorTargets?.[j]?.target ?? ''}
+                                        onChange={(e) => updateAssignmentSubTarget(i, j, 'target', e.target.value)}
+                                      />
+                                    </td>
+                                    <td>
+                                      <input
+                                        className="form-input form-input-sm" placeholder={si.target2 || '—'}
+                                        value={a.subIndicatorTargets?.[j]?.target2 ?? ''}
+                                        onChange={(e) => updateAssignmentSubTarget(i, j, 'target2', e.target.value)}
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: 'var(--space-2)' }}>
+                              Kosongkan agar unit ini mewarisi target template di atas (placeholder = nilai yang dipakai).
+                            </p>
+                          </td>
+                        </tr>
+                      )}
                       </Fragment>
                     ))}
                     {aggregationMethod === 'weighted' && !isSingleAssignment && anyPersenSet && (

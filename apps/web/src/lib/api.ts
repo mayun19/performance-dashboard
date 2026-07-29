@@ -207,10 +207,14 @@ export const inputKontrak = {
 export type ReviewerSlot = { role: 'ASMAN' | 'MANAJER' | 'SRMANAJER' | 'GM'; userId?: string };
 export type ReviewerSlots = { checkers: ReviewerSlot[]; approver: ReviewerSlot | null };
 
+// Override target sub-indikator (KPI Komposit) utk satu assignment — index sejajar dgn
+// SubIndicatorInput[] milik master. Kosong = warisi target template global.
+export type SubIndicatorTargetOverride = { target?: string; target2?: string };
 export type KpiAssignmentInput = {
   unitCode: string; bidang: string; holder?: string; target?: string; target2?: string;
   persenAgregasi?: number;
   reviewerSlots?: ReviewerSlots | null;
+  subIndicatorTargets?: SubIndicatorTargetOverride[] | null;
 };
 // Sub-indikator (opt-in, generik) — non-kosong menandai KPI ini "komposit". Lihat
 // kpi-master.service.ts SubIndicatorInput.

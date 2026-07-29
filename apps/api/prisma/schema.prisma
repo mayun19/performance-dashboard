@@ -467,6 +467,11 @@ model KpiAssignment {
   //   userId ada → override ke orang spesifik (A)
   //   null       → fallback ke default master-level (KpiMaster.defaultCheckerIds/ApproverId)
   reviewerSlots  Json?
+  // Override target per sub-indikator utk assignment ini (KPI Komposit) — array sejajar index
+  // dgn KpiMaster.subIndicators: [{ target?, target2? }, ...]. Kosong/null di suatu index =
+  // warisi nilai template global KpiMaster.subIndicators[i]. Lihat catatan sama di
+  // kpi-master.service.ts fanOut().
+  subIndicatorTargets Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

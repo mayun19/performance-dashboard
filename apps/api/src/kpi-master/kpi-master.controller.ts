@@ -16,6 +16,9 @@ class AssignmentDto {
   // reviewerSlots (A+B) divalidasi/normalisasi mendalam di service (sanitizeReviewerSlots);
   // di sini cukup terima objek opsional (atau null).
   @IsOptional() @IsObject() reviewerSlots?: Record<string, unknown> | null;
+  // Override target sub-indikator (KPI Komposit) — divalidasi/dinormalisasi di service
+  // (sanitizeSubIndicatorTargets); di sini cukup terima array opsional.
+  @IsOptional() @IsArray() subIndicatorTargets?: Array<{ target?: string; target2?: string }>;
 }
 
 class SubIndicatorDto {

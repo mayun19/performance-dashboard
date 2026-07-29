@@ -20,6 +20,10 @@ export interface AssignmentInput {
   target2?: string;
   persenAgregasi?: number; // bobot rollup ke parent (0-100), diinput RPC Perencanaan
   reviewerSlots?: unknown; // default alur reviewer per-assignment (A+B); divalidasi di service
+  // Override target per sub-indikator (KPI Komposit) — array sejajar index dgn
+  // SaveMasterInput.subIndicators. Kosong/tak diisi di suatu index = warisi target template
+  // global. Opsional — bukan validasi wajib (lihat sanitizeSubIndicatorTargets).
+  subIndicatorTargets?: Array<{ target?: string; target2?: string }>;
 }
 
 // Sub-indikator (opt-in, generik — KPI mana pun boleh dipakai). Didefinisikan sekali di KPI
@@ -177,6 +181,21 @@ export class KpiMasterService {
         target2: String(r?.target2 ?? '') || undefined,
         formula: String(r?.formula ?? '') || undefined,
       });
+    }
+    return out;
+  }
+
+  // Override target sub-indikator per assignment (KPI Komposit) — array sejajar index dgn
+  // subIndicators template. Beda dgn sanitizeSubIndicators: TIDAK ada validasi "wajib diisi",
+  // sebab kosong justru berarti "warisi target template global" (lihat catatan di fanOut()).
+  // Hasil selalu sepanjang subCount (elemen tak diisi/tak ada → string kosong).
+  private sanitizeSubIndicatorTargets(input: unknown, subCount: number): Array<{ target: string; target2: string }> | null {
+    if (subCount === 0) return null;
+    const arr = Array.isArray(input) ? input : [];
+    const out: Array<{ target: string; target2: string }> = [];
+    for (let i = 0; i < subCount; i++) {
+      const r = (arr[i] ?? {}) as Record<string, unknown>;
+      out.push({ target: String(r?.target ?? '').trim(), target2: String(r?.target2 ?? '').trim() });
     }
     return out;
   }
@@ -568,6 +587,10 @@ export class KpiMasterService {
       dto.bobotKm = String(compositeBobot);
     }
     const subIndicatorsJson = subIndicators ? (subIndicators as unknown as Prisma.InputJsonValue) : Prisma.JsonNull;
+    // Override target per sub-indikator per assignment (opsional, non-destructive — lihat
+    // sanitizeSubIndicatorTargets & fanOut()).
+    const subCount = subIndicators?.length ?? 0;
+    const subTargetsByAssignment = dto.assignments.map((a) => this.sanitizeSubIndicatorTargets(a.subIndicatorTargets, subCount));
 
     const activePeriod = await this.prisma.period.findFirst({ where: { isActive: true } });
     if (!activePeriod) throw new BadRequestException('Tidak ada periode aktif');
@@ -633,13 +656,15 @@ export class KpiMasterService {
     }
 
     await this.prisma.kpiAssignment.createMany({
-      data: dto.assignments.map((a) => {
+      data: dto.assignments.map((a, i) => {
         const slots = this.sanitizeReviewerSlots(a.reviewerSlots);
+        const subTargets = subTargetsByAssignment[i];
         return {
           kpiMasterId: master.id, unitCode: a.unitCode, bidang: a.bidang,
           holder: a.holder ?? '', target: a.target ?? '', target2: a.target2 ?? '',
           persenAgregasi: Number(a.persenAgregasi) || 0,
           reviewerSlots: slots === null ? Prisma.DbNull : (slots as unknown as Prisma.InputJsonValue),
+          subIndicatorTargets: subTargets === null ? Prisma.DbNull : (subTargets as unknown as Prisma.InputJsonValue),
         };
       }),
     });
@@ -697,11 +722,13 @@ export class KpiMasterService {
   // ===== Fan-out: sinkronkan item KPI ke dokumen KM DRAFT per-(unit,bidang) =====
   private async fanOut(
     master: { id: string; kmType: string; indikator: string; formula: string; satuan: string; bobotKm: string; createdBy: string; createdById: string | null; subIndicators?: Prisma.JsonValue | null },
-    assignments: Array<{ unitCode: string; bidang: string; holder: string; target: string; target2: string }>,
+    assignments: Array<{ unitCode: string; bidang: string; holder: string; target: string; target2: string; subIndicatorTargets?: Prisma.JsonValue | null }>,
     periodId: string,
   ): Promise<{ docsAffected: number }> {
-    // Sub-indikator (opt-in): template sama disebar ke SEMUA assignment (definisi target,
-    // belum ada realisasi — sama seperti item non-komposit).
+    // Sub-indikator (opt-in): definisi (nama/formula/satuan/bobot) sama utk SEMUA assignment,
+    // tapi target/target2 tiap sub BOLEH dioverride per assignment (KpiAssignment.subIndicatorTargets,
+    // array sejajar index) — mis. "Pengendalian NAC" bisa ditarget beda per UPMK sesuai skala
+    // anggaran masing-masing. Kosong/tak diisi di suatu index = warisi target template global.
     const subIndicatorsTemplate = Array.isArray(master.subIndicators)
       ? (master.subIndicators as unknown as SubIndicatorInput[])
       : undefined;
@@ -725,11 +752,22 @@ export class KpiMasterService {
 
     // 2. Sisipkan/perbarui item KPI di dokumen KM draft tiap (unit,bidang) yang di-assign.
     for (const a of assignments) {
+      const overrides = Array.isArray(a.subIndicatorTargets)
+        ? (a.subIndicatorTargets as unknown as Array<{ target?: string; target2?: string }>)
+        : [];
+      const mergedSubIndicators = subIndicatorsTemplate?.map((si, idx) => {
+        const ov = overrides[idx];
+        return {
+          ...si,
+          target: ov?.target?.trim() || si.target,
+          target2: ov?.target2?.trim() || si.target2,
+        };
+      });
       const item: FannedItem = {
         masterKpiId: master.id,
         indikator: master.indikator, formula: master.formula, satuan: master.satuan,
         bobot: master.bobotKm, target: a.target, target2: a.target2,
-        ...(subIndicatorsTemplate ? { subIndicators: subIndicatorsTemplate } : {}),
+        ...(mergedSubIndicators ? { subIndicators: mergedSubIndicators } : {}),
       };
       const existingKm = await this.prisma.kontrakManajemen.findFirst({
         where: { periodId, unitCode: a.unitCode, bidang: a.bidang, kmType: master.kmType, status: 'draft' },
