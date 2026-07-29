@@ -519,7 +519,7 @@ export function InputRealisasiPage() {
             </div>
             <div
               style={{
-                fontSize: "var(--text-xs)",
+                fontSize: "var(--text-sm)",
                 color: "var(--color-text-muted)",
                 marginTop: 4,
                 display: "flex",
@@ -559,7 +559,7 @@ export function InputRealisasiPage() {
                     lockedUnit}
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: 12,
                       color: "var(--color-text-subtle)",
                       marginLeft: 4,
                     }}>
@@ -595,7 +595,7 @@ export function InputRealisasiPage() {
             <div style={{ textAlign: "right", flexShrink: 0 }}>
               <div
                 style={{
-                  fontSize: "var(--text-2xs)",
+                  fontSize: "var(--text-sm)",
                   color: "var(--color-text-muted)",
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
@@ -613,7 +613,7 @@ export function InputRealisasiPage() {
                 }}>
                 {completionPct}%
               </div>
-              <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+              <div style={{ fontSize: 14, color: "var(--color-text-muted)" }}>
                 {filledCount}/{kpiList.length} terisi
               </div>
             </div>
@@ -723,136 +723,175 @@ export function InputRealisasiPage() {
               message="Belum ada KM Sementara yang disubmit Staff RPC untuk unit Anda. Setelah KPI di-assign & dokumen KM dikirim dari menu Manajemen KPI → Dokumen KM, KPI akan muncul di sini."
             />
           ) : (
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>No</th>
-                  <th>Bidang</th>
-                  <th>Indikator</th>
-                  <th>Formula</th>
-                  <th>Satuan</th>
-                  <th className="num">Bobot</th>
-                  <th className="num">Target Sem I</th>
-                  <th className="num">Target {CURRENT_YEAR}</th>
-                  {anyLivingTarget && (
-                    <th
-                      className="num"
-                      title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
-                      KM Sementara
-                    </th>
-                  )}
-                  <th>Realisasi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kpiList.map((kpi, i) => {
-                  const isComposite =
-                    !!kpi.subIndicators && kpi.subIndicators.length > 0;
-                  const hasVal = isItemFilled(kpi, i);
-                  const lt = livingTargetFor(kpi);
-                  return (
-                    <Fragment key={i}>
-                      <tr
-                        style={{
-                          background: hasVal
-                            ? "rgba(34,197,94,0.03)"
-                            : "transparent",
-                        }}>
-                        <td style={{ color: "var(--color-text-muted)" }}>
-                          {kpi.no ?? i + 1}
-                        </td>
-                        <td
+            <div className="table-scroll able-scroll">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Bidang</th>
+                    <th>Indikator</th>
+                    <th>Formula</th>
+                    <th>Satuan</th>
+                    <th className="num">Bobot</th>
+                    <th className="num">Target Sem I</th>
+                    <th className="num">Target {CURRENT_YEAR}</th>
+                    {anyLivingTarget && (
+                      <th
+                        className="num"
+                        title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
+                        KM Sementara
+                      </th>
+                    )}
+                    <th className="num">Realisasi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kpiList.map((kpi, i) => {
+                    const isComposite =
+                      !!kpi.subIndicators && kpi.subIndicators.length > 0;
+                    const hasVal = isItemFilled(kpi, i);
+                    const lt = livingTargetFor(kpi);
+                    return (
+                      <Fragment key={i}>
+                        <tr
                           style={{
-                            fontSize: 13,
-                            color: "var(--color-text-muted)",
-                            whiteSpace: "nowrap",
+                            background: hasVal
+                              ? "rgba(34,197,94,0.03)"
+                              : "transparent",
                           }}>
-                          {kpi.bidang ?? "—"}
-                        </td>
-                        <td style={{ maxWidth: 220, fontWeight: 500 }}>
-                          {kpi.indikator ?? "—"}
-                          {isComposite && (
-                            <span
-                              style={{
-                                marginLeft: 6,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--color-accent)",
-                                border: "1px solid var(--color-accent)",
-                                borderRadius: 4,
-                                padding: "1px 4px",
-                              }}
-                              title="Komposit — isi realisasi per sub-indikator di bawah">
-                              Komposit
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          style={{
-                            fontSize: 12,
-                            color: "var(--color-text-muted)",
-                            maxWidth: 200,
-                          }}>
-                          {kpi.formula ?? "—"}
-                        </td>
-                        <td
-                          style={{
-                            color: "var(--color-text-muted)",
-                            whiteSpace: "nowrap",
-                          }}>
-                          {kpi.satuan ?? "—"}
-                        </td>
-                        <td
-                          className="num"
-                          style={{
-                            fontWeight: 700,
-                            color: "var(--color-accent)",
-                          }}>
-                          {kpi.bobot ?? "—"}
-                        </td>
-                        <td className="num">
-                          {isComposite ? "— (per sub)" : (kpi.target ?? "—")}
-                        </td>
-                        <td className="num">
-                          {isComposite ? "— (per sub)" : (kpi.target2 ?? "—")}
-                        </td>
-                        {anyLivingTarget && (
-                          <td className="num" style={{ whiteSpace: "nowrap" }}>
-                            {lt ? (
-                              <>
-                                <span style={{ fontWeight: 700 }}>
-                                  {lt.frozen
-                                    ? (lt.frozenTarget ?? lt.target)
-                                    : lt.target}
-                                </span>
+                          <td style={{ color: "var(--color-text-muted)" }}>
+                            {kpi.no ?? i + 1}
+                          </td>
+                          <td
+                            style={{
+                              color: "var(--color-text-muted)",
+                              whiteSpace: "nowrap",
+                            }}>
+                            {kpi.bidang ?? "—"}
+                          </td>
+                          <td style={{ maxWidth: 220, fontWeight: 500 }}>
+                            {kpi.indikator ?? "—"}
+                            {isComposite && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  color: "var(--color-accent)",
+                                  border: "1px solid var(--color-accent)",
+                                  borderRadius: 4,
+                                  padding: "1px 4px",
+                                }}
+                                title="Komposit — isi realisasi per sub-indikator di bawah">
+                                Komposit
+                              </span>
+                            )}
+                          </td>
+                          <td
+                            style={{
+                              fontSize: 14,
+                              color: "var(--color-text-muted)",
+                              maxWidth: 200,
+                            }}>
+                            {kpi.formula ?? "—"}
+                          </td>
+                          <td
+                            style={{
+                              color: "var(--color-text-muted)",
+                              whiteSpace: "nowrap",
+                            }}>
+                            {kpi.satuan ?? "—"}
+                          </td>
+                          <td
+                            className="num"
+                            style={{
+                              fontWeight: 700,
+                              color: "var(--color-accent)",
+                            }}>
+                            {kpi.bobot ?? "—"}
+                          </td>
+                          <td className="num">
+                            {isComposite ? "— (per sub)" : (kpi.target ?? "—")}
+                          </td>
+                          <td className="num">
+                            {isComposite ? "— (per sub)" : (kpi.target2 ?? "—")}
+                          </td>
+                          {anyLivingTarget && (
+                            <td
+                              className="num"
+                              style={{ whiteSpace: "nowrap" }}>
+                              {lt ? (
+                                <>
+                                  <span style={{ fontWeight: 700 }}>
+                                    {lt.frozen
+                                      ? (lt.frozenTarget ?? lt.target)
+                                      : lt.target}
+                                  </span>
+                                  <span
+                                    title={
+                                      lt.frozen
+                                        ? "Sudah dibekukan (bundle GM disetujui / deadline / restatement)"
+                                        : lt.source === "carried"
+                                          ? "Dibawa dari bulan lalu (belum diubah)"
+                                          : "Diinput/diubah bulan ini"
+                                    }
+                                    style={{
+                                      marginLeft: 4,
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      padding: "1px 4px",
+                                      borderRadius: 4,
+                                      border: "1px solid var(--color-border)",
+                                      color: lt.frozen
+                                        ? "var(--color-text-muted)"
+                                        : lt.source === "carried"
+                                          ? "var(--color-warning)"
+                                          : "var(--color-accent)",
+                                    }}>
+                                    {lt.frozen
+                                      ? "BEKU"
+                                      : lt.source === "carried"
+                                        ? "CARRY"
+                                        : "HIDUP"}
+                                  </span>
+                                </>
+                              ) : (
                                 <span
-                                  title={
-                                    lt.frozen
-                                      ? "Sudah dibekukan (bundle GM disetujui / deadline / restatement)"
-                                      : lt.source === "carried"
-                                        ? "Dibawa dari bulan lalu (belum diubah)"
-                                        : "Diinput/diubah bulan ini"
-                                  }
-                                  style={{
-                                    marginLeft: 4,
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    padding: "1px 4px",
-                                    borderRadius: 4,
-                                    border: "1px solid var(--color-border)",
-                                    color: lt.frozen
-                                      ? "var(--color-text-muted)"
-                                      : lt.source === "carried"
-                                        ? "var(--color-warning)"
-                                        : "var(--color-accent)",
-                                  }}>
-                                  {lt.frozen
-                                    ? "BEKU"
-                                    : lt.source === "carried"
-                                      ? "CARRY"
-                                      : "HIDUP"}
+                                  style={{ color: "var(--color-text-subtle)" }}>
+                                  —
                                 </span>
-                              </>
+                              )}
+                            </td>
+                          )}
+                          <td style={{ minWidth: 340 }}>
+                            {formOpen ? (
+                              isComposite ? (
+                                <span
+                                  style={{
+                                    fontSize: 14,
+                                    color: "var(--color-text-muted)",
+                                  }}>
+                                  Isi di bawah ↓
+                                </span>
+                              ) : (
+                                <input
+                                  type="text"
+                                  className="form-input form-input-sm"
+                                  style={{
+                                    borderColor: hasVal
+                                      ? "rgba(34,197,94,0.5)"
+                                      : undefined,
+                                  }}
+                                  value={values[String(i)] ?? ""}
+                                  onChange={(e) =>
+                                    setValues((v) => ({
+                                      ...v,
+                                      [String(i)]: e.target.value,
+                                    }))
+                                  }
+                                  placeholder={`Target: ${kpi.target ?? "—"}`}
+                                />
+                              )
                             ) : (
                               <span
                                 style={{ color: "var(--color-text-subtle)" }}>
@@ -860,120 +899,85 @@ export function InputRealisasiPage() {
                               </span>
                             )}
                           </td>
-                        )}
-                        <td style={{ minWidth: 140 }}>
-                          {formOpen ? (
-                            isComposite ? (
-                              <span
+                        </tr>
+                        {isComposite &&
+                          kpi.subIndicators!.map((si, j) => {
+                            const subVal = values[`${i}.${j}`] ?? "";
+                            const subHasVal = subVal.trim() !== "";
+                            return (
+                              <tr
+                                key={`${i}.${j}`}
                                 style={{
-                                  fontSize: 13,
-                                  color: "var(--color-text-muted)",
+                                  background: subHasVal
+                                    ? "rgba(34,197,94,0.03)"
+                                    : "var(--color-surface-2)",
                                 }}>
-                                Isi di bawah ↓
-                              </span>
-                            ) : (
-                              <input
-                                type="text"
-                                className="form-input form-input-sm"
-                                style={{
-                                  borderColor: hasVal
-                                    ? "rgba(34,197,94,0.5)"
-                                    : undefined,
-                                }}
-                                value={values[String(i)] ?? ""}
-                                onChange={(e) =>
-                                  setValues((v) => ({
-                                    ...v,
-                                    [String(i)]: e.target.value,
-                                  }))
-                                }
-                                placeholder={`Target: ${kpi.target ?? "—"}`}
-                              />
-                            )
-                          ) : (
-                            <span style={{ color: "var(--color-text-subtle)" }}>
-                              —
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                      {isComposite &&
-                        kpi.subIndicators!.map((si, j) => {
-                          const subVal = values[`${i}.${j}`] ?? "";
-                          const subHasVal = subVal.trim() !== "";
-                          return (
-                            <tr
-                              key={`${i}.${j}`}
-                              style={{
-                                background: subHasVal
-                                  ? "rgba(34,197,94,0.03)"
-                                  : "var(--color-surface-2)",
-                              }}>
-                              <td />
-                              <td />
-                              <td
-                                style={{
-                                  paddingLeft: "var(--space-4)",
-                                  fontSize: 14,
-                                  color: "var(--color-text-muted)",
-                                }}>
-                                ↳ {si.nama}
-                              </td>
-                              <td
-                                style={{
-                                  fontSize: 12,
-                                  color: "var(--color-text-muted)",
-                                  maxWidth: 200,
-                                }}>
-                                {si.formula ?? "—"}
-                              </td>
-                              <td
-                                style={{
-                                  color: "var(--color-text-muted)",
-                                  whiteSpace: "nowrap",
-                                }}>
-                                {si.satuan ?? "—"}
-                              </td>
-                              <td className="num">{si.bobot}</td>
-                              <td className="num">{si.target}</td>
-                              <td className="num">{si.target2 ?? "—"}</td>
-                              {anyLivingTarget && <td />}
-                              <td style={{ minWidth: 140 }}>
-                                {formOpen ? (
-                                  <input
-                                    type="text"
-                                    className="form-input form-input-sm"
-                                    style={{
-                                      borderColor: subHasVal
-                                        ? "rgba(34,197,94,0.5)"
-                                        : undefined,
-                                    }}
-                                    value={subVal}
-                                    onChange={(e) =>
-                                      setValues((v) => ({
-                                        ...v,
-                                        [`${i}.${j}`]: e.target.value,
-                                      }))
-                                    }
-                                    placeholder={`Target: ${si.target ?? "—"}`}
-                                  />
-                                ) : (
-                                  <span
-                                    style={{
-                                      color: "var(--color-text-subtle)",
-                                    }}>
-                                    {subVal || "—"}
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                                <td />
+                                <td />
+                                <td
+                                  style={{
+                                    paddingLeft: "var(--space-4)",
+                                    fontSize: 14,
+                                    color: "var(--color-text-muted)",
+                                  }}>
+                                  ↳ {si.nama}
+                                </td>
+                                <td
+                                  style={{
+                                    fontSize: 12,
+                                    color: "var(--color-text-muted)",
+                                    maxWidth: 200,
+                                  }}>
+                                  {si.formula ?? "—"}
+                                </td>
+                                <td
+                                  style={{
+                                    color: "var(--color-text-muted)",
+                                    whiteSpace: "nowrap",
+                                  }}>
+                                  {si.satuan ?? "—"}
+                                </td>
+                                <td className="num">{si.bobot}</td>
+                                <td className="num">{si.target}</td>
+                                <td className="num">{si.target2 ?? "—"}</td>
+                                {anyLivingTarget && <td />}
+                                <td style={{ minWidth: 340 }}>
+                                  {formOpen ? (
+                                    <input
+                                      type="text"
+                                      className="form-input form-input-sm"
+                                      style={{
+                                        borderColor: subHasVal
+                                          ? "rgba(34,197,94,0.5)"
+                                          : undefined,
+                                      }}
+                                      value={subVal}
+                                      onChange={(e) =>
+                                        setValues((v) => ({
+                                          ...v,
+                                          [`${i}.${j}`]: e.target.value,
+                                        }))
+                                      }
+                                      placeholder={`Target: ${si.target ?? "—"}`}
+                                    />
+                                  ) : (
+                                    <span
+                                      style={{
+                                        color: "var(--color-text-subtle)",
+                                      }}>
+                                      {subVal || "—"}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
         {formOpen && kpiList.length > 0 && (
@@ -987,7 +991,7 @@ export function InputRealisasiPage() {
             }}>
             <span
               style={{
-                fontSize: "var(--text-xs)",
+                fontSize: "var(--text-sm)",
                 color: "var(--color-text-muted)",
               }}>
               {filledCount} dari {kpiList.length} indikator terisi
@@ -1053,7 +1057,6 @@ export function InputRealisasiPage() {
                         </td>
                         <td
                           style={{
-                            fontSize: 13,
                             color: "var(--color-text-muted)",
                           }}>
                           {(item.bidang as string) ?? "—"}
@@ -1375,87 +1378,91 @@ export function InputRealisasiPage() {
               style={{
                 padding: "var(--space-4)",
                 color: "var(--color-text-muted)",
-                fontSize: 13,
+                textAlign: "center",
+                fontSize: 14,
               }}>
               Belum ada keputusan Anda pada periode ini.
             </div>
           ) : (
-            <div className="table-wrap">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>Status Saat Ini</th>
-                    <th>Aksi Anda</th>
-                    <th>Catatan</th>
-                    <th>Tanggal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {myDecisions.map((d) => (
-                    <Fragment key={d.id}>
-                      {d.myActions.map((a, i) => (
-                        <tr key={`${d.id}-${i}`}>
-                          {i === 0 && (
-                            <>
-                              <td
-                                style={{ fontWeight: 600 }}
-                                rowSpan={d.myActions.length}>
-                                {d.unitCode}
-                              </td>
-                              <td
-                                style={{
-                                  fontSize: 13,
-                                  color: "var(--color-text-muted)",
-                                }}
-                                rowSpan={d.myActions.length}>
-                                {d.bidang}
-                              </td>
-                              <td rowSpan={d.myActions.length}>
-                                <span
-                                  className={`status-pill ${STATUS_PILL[d.status] ?? "in-review"}`}
-                                  style={{ fontSize: 12 }}>
-                                  {STATUS_LABEL[d.status] ?? d.status}
-                                </span>
-                              </td>
-                            </>
-                          )}
-                          <td>
-                            <span
-                              className={`status-pill ${DECISION_ACTION_PILL[a.action] ?? "in-review"}`}
-                              style={{ fontSize: 12 }}>
-                              {DECISION_ACTION_LABEL[a.action] ?? a.action}
-                            </span>
-                          </td>
-                          <td
-                            style={{
-                              fontSize: 13,
-                              color: "var(--color-text-muted)",
-                              maxWidth: 260,
-                            }}>
-                            {a.note || "—"}
-                          </td>
-                          <td
-                            style={{
-                              fontSize: 13,
-                              color: "var(--color-text-muted)",
-                              whiteSpace: "nowrap",
-                            }}>
-                            {a.ts
-                              ? new Date(a.ts).toLocaleDateString("id-ID", {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
+            <div
+              className="table-wrap"
+              style={{ paddingBottom: "var(--space-7)" }}>
+              <div className="table-scroll">
+                <table className="data-table compact">
+                  <thead>
+                    <tr>
+                      <th>Unit</th>
+                      <th>Bidang</th>
+                      <th>Status Saat Ini</th>
+                      <th>Aksi Anda</th>
+                      <th>Catatan</th>
+                      <th>Tanggal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myDecisions.map((d) => (
+                      <Fragment key={d.id}>
+                        {d.myActions.map((a, i) => (
+                          <tr key={`${d.id}-${i}`}>
+                            {i === 0 && (
+                              <>
+                                <td
+                                  style={{ fontWeight: 600 }}
+                                  rowSpan={d.myActions.length}>
+                                  {d.unitCode}
+                                </td>
+                                <td
+                                  style={{
+                                    color: "var(--color-text-muted)",
+                                  }}
+                                  rowSpan={d.myActions.length}>
+                                  {d.bidang}
+                                </td>
+                                <td rowSpan={d.myActions.length}>
+                                  <span
+                                    className={`status-pill ${STATUS_PILL[d.status] ?? "in-review"}`}
+                                    >
+                                    {STATUS_LABEL[d.status] ?? d.status}
+                                  </span>
+                                </td>
+                              </>
+                            )}
+                            <td>
+                              <span
+                                className={`status-pill ${DECISION_ACTION_PILL[a.action] ?? "in-review"}`}
+                               >
+                                {DECISION_ACTION_LABEL[a.action] ?? a.action}
+                              </span>
+                            </td>
+                            <td
+                              style={{
+                                fontSize: 12,
+                                color: "var(--color-text-muted)",
+                                maxWidth: 260,
+                              }}>
+                              {a.note || "—"}
+                            </td>
+                            <td
+                              style={{
+                                fontSize: 12,
+                                color: "var(--color-text-muted)",
+                                whiteSpace: "nowrap",
+                              }}>
+                              {a.ts
+                                ? new Date(a.ts).toLocaleDateString("id-ID", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

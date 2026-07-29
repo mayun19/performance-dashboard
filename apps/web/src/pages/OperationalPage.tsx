@@ -371,9 +371,12 @@ export function OperationalPage() {
         </div>
         <div className="summary-hero-card pen">
           <div className="summary-hero-label">Pengurang Kepatuhan</div>
-          <div className="summary-hero-value">{penalty}<span className="of">(max {maxPenaltyTotal})</span></div>
+          <div className="summary-hero-value">
+            {penalty}
+            <span className="of">(max {maxPenaltyTotal})</span>
+          </div>
           <div className="summary-hero-meta delta-positive">
-            {penalty === 0 ? 'Tidak ada pengurang' : `${penalty} poin`}
+            {penalty === 0 ? "Tidak ada pengurang" : `${penalty} poin`}
           </div>
           <div className="summary-hero-meta delta-positive">
             {penalty === 0 ? "Tidak ada pengurang" : `${penalty} poin`}
@@ -481,8 +484,21 @@ export function OperationalPage() {
                 <ShieldAlert size={16} color="var(--color-danger)" />
               </div>
               <div>
-                <div className="card-title" style={{ color: 'var(--color-danger)', fontSize: 'var(--text-sm)' }}>Pengurang Kepatuhan</div>
-                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>Maks {maxPenaltyTotal} poin</div>
+                <div
+                  className="card-title"
+                  style={{
+                    color: "var(--color-danger)",
+                    fontSize: "var(--text-sm)",
+                  }}>
+                  Pengurang Kepatuhan
+                </div>
+                <div
+                  style={{
+                    fontSize: "var(--text-2xs)",
+                    color: "var(--color-text-muted)",
+                  }}>
+                  Maks {maxPenaltyTotal} poin
+                </div>
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -514,23 +530,54 @@ export function OperationalPage() {
                 {kepatuhan.map((k, i) => (
                   <tr key={i}>
                     <td>{k.name}</td>
-                    <td className="num" style={{ color: 'var(--color-danger)', fontWeight: 700 }}>{k.maxPenalty}</td>
-                    <td className="num" style={{ fontWeight: 700, color: k.applied < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                      {k.applied < 0 ? k.applied : '—'}
+                    <td
+                      className="num"
+                      style={{ color: "var(--color-danger)", fontWeight: 700 }}>
+                      {k.maxPenalty}
                     </td>
-                    <td style={{ color: 'var(--color-text-muted)' }}>{k.target}</td>
+                    <td
+                      className="num"
+                      style={{
+                        fontWeight: 700,
+                        color:
+                          k.applied < 0
+                            ? "var(--color-danger)"
+                            : "var(--color-success)",
+                      }}>
+                      {k.applied < 0 ? k.applied : "—"}
+                    </td>
+                    <td style={{ color: "var(--color-text-muted)" }}>
+                      {k.target}
+                    </td>
                     <td>
-                      <span className={`status-pill ${k.status === 'success' ? 'success' : 'danger'}`}>
-                        {k.status === 'success' ? '✓ Aman' : '⚠ Perhatian'}
+                      <span
+                        className={`status-pill ${k.status === "success" ? "success" : "danger"}`}>
+                        {k.status === "success" ? "✓ Aman" : "⚠ Perhatian"}
                       </span>
                     </td>
                   </tr>
                 ))}
-                <tr style={{ background: 'var(--color-surface-2)', fontWeight: 700 }}>
+                <tr
+                  style={{
+                    background: "var(--color-surface-2)",
+                    fontWeight: 700,
+                  }}>
                   <td>TOTAL</td>
-                  <td className="num" style={{ color: 'var(--color-danger)' }}>{maxPenaltyTotal}</td>
-                  <td className="num" style={{ fontWeight: 800, color: (sm.kepatuhanPenalty ?? 0) < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                    {(sm.kepatuhanPenalty ?? 0) < 0 ? sm.kepatuhanPenalty : '0 ✓'}
+                  <td className="num" style={{ color: "var(--color-danger)" }}>
+                    {maxPenaltyTotal}
+                  </td>
+                  <td
+                    className="num"
+                    style={{
+                      fontWeight: 800,
+                      color:
+                        (sm.kepatuhanPenalty ?? 0) < 0
+                          ? "var(--color-danger)"
+                          : "var(--color-success)",
+                    }}>
+                    {(sm.kepatuhanPenalty ?? 0) < 0
+                      ? sm.kepatuhanPenalty
+                      : "0 ✓"}
                   </td>
                   <td colSpan={2} />
                 </tr>
@@ -542,12 +589,20 @@ export function OperationalPage() {
 
       {/* Akurasi Self-Assessment UPMK vs Evaluasi RPC */}
       {selfAssessmentGap.length > 0 && (
-        <div className="card p-0" style={{ marginTop: 'var(--space-6)' }}>
+        <div className="card p-0" style={{ marginTop: "var(--space-6)" }}>
           <div className="card-header compact">
-            <div className="card-title"><GitCompare size={14} />Akurasi Self-Assessment UPMK</div>
-            <span className="card-meta">Self-assessment (dikunci saat submit) vs hasil evaluasi berjenjang s.d. SM RPC</span>
+            <div className="card-title">
+              <GitCompare size={14} />
+              Akurasi Self-Assessment UPMK
+            </div>
+            <span className="card-meta">
+              Self-assessment (dikunci saat submit) vs hasil evaluasi berjenjang
+              s.d. SM RPC
+            </span>
           </div>
-          <div className="table-wrap">
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
             <table className="data-table compact">
               <thead>
                 <tr>
@@ -564,14 +619,27 @@ export function OperationalPage() {
                   <tr key={g.code}>
                     <td style={{ fontWeight: 600 }}>{g.unit}</td>
                     <td className="num">{fmt(g.selfScore)}</td>
-                    <td className="num" style={{ fontWeight: 700 }}>{fmt(g.evaluatedScore)}</td>
-                    <td className={`num ${g.gap > 0 ? 'delta-positive' : g.gap < 0 ? 'delta-negative' : ''}`} style={{ fontWeight: 700 }}>
-                      {g.gap > 0 ? '+' : ''}{fmt(g.gap)}
+                    <td className="num" style={{ fontWeight: 700 }}>
+                      {fmt(g.evaluatedScore)}
                     </td>
-                    <td className="num">{g.gap > 0 ? '+' : ''}{pct(g.gapPct)}</td>
+                    <td
+                      className={`num ${g.gap > 0 ? "delta-positive" : g.gap < 0 ? "delta-negative" : ""}`}
+                      style={{ fontWeight: 700 }}>
+                      {g.gap > 0 ? "+" : ""}
+                      {fmt(g.gap)}
+                    </td>
+                    <td className="num">
+                      {g.gap > 0 ? "+" : ""}
+                      {pct(g.gapPct)}
+                    </td>
                     <td>
-                      <span className={`status-pill ${g.status === 'akurat' ? 'completed' : g.status === 'perlu-perhatian' ? 'at-risk' : 'delayed'}`}>
-                        {g.status === 'akurat' ? '✓ Akurat' : g.status === 'perlu-perhatian' ? '⚠ Perlu Perhatian' : '✗ Signifikan'}
+                      <span
+                        className={`status-pill ${g.status === "akurat" ? "completed" : g.status === "perlu-perhatian" ? "at-risk" : "delayed"}`}>
+                        {g.status === "akurat"
+                          ? "✓ Akurat"
+                          : g.status === "perlu-perhatian"
+                            ? "⚠ Perlu Perhatian"
+                            : "✗ Signifikan"}
                       </span>
                     </td>
                   </tr>
