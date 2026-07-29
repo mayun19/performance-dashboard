@@ -1,15 +1,41 @@
-import { useEffect, useState, Fragment, type ReactNode } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { approvals as approvalsApi, inputKontrak, inputRealisasi, meta as metaApi, admin, periodTarget, type PeriodTarget } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
-import { usePeriod } from '../context/PeriodContext';
-import { useNotif } from '../context/NotifContext';
-import type { Report, KontrakManajemen, RealisasiKinerja } from '../lib/types';
-import { CheckCircle, XCircle, Clock, CalendarClock, FileText, UsersRound, FileSignature, ChevronDown, ClipboardCheck, Timer, MessageSquare, Pencil, Layers, Printer, Unlock, Lock, PieChart } from 'lucide-react';
-import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
+import { useEffect, useState, Fragment, type ReactNode } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import {
+  approvals as approvalsApi,
+  inputKontrak,
+  inputRealisasi,
+  meta as metaApi,
+  admin,
+  periodTarget,
+  type PeriodTarget,
+} from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import { usePeriod } from "../context/PeriodContext";
+import { useNotif } from "../context/NotifContext";
+import type { Report, KontrakManajemen, RealisasiKinerja } from "../lib/types";
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  CalendarClock,
+  FileText,
+  UsersRound,
+  FileSignature,
+  ChevronDown,
+  ClipboardCheck,
+  Timer,
+  MessageSquare,
+  Pencil,
+  Layers,
+  Printer,
+  Unlock,
+  Lock,
+  PieChart,
+} from "lucide-react";
+import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
 // Konsolidasi nilai parent KPI lintas-bidang (dulu tab "Review per-KPI" di Manajemen KPI) —
 // GM tak lagi punya akses menu Manajemen KPI (rpcOnly), jadi kartu ini dipindah ke sini.
-import { ReviewPerKpiTab } from './KpiMasterPage';
+import { ReviewPerKpiTab } from "./KpiMasterPage";
 
 // Badge SLA approval (Task 6): hari tersisa hingga deadline tahap berjalan.
 function SlaBadge({ days }: { days?: number | null }) {
@@ -28,9 +54,25 @@ function SlaBadge({ days }: { days?: number | null }) {
       ? "var(--color-warning-tint)"
       : "var(--color-success-tint)";
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color, background: bg, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        fontSize: 12,
+        fontWeight: 700,
+        color,
+        background: bg,
+        padding: "2px 8px",
+        borderRadius: 8,
+        whiteSpace: "nowrap",
+      }}>
       <Timer size={11} />
-      {overdue ? `Telat ${Math.abs(days)} hari` : days === 0 ? 'Jatuh tempo hari ini' : `${days} hari lagi`}
+      {overdue
+        ? `Telat ${Math.abs(days)} hari`
+        : days === 0
+          ? "Jatuh tempo hari ini"
+          : `${days} hari lagi`}
     </span>
   );
 }
@@ -214,7 +256,17 @@ const ACTION_LABEL: Record<string, string> = {
 };
 function ApprovalTimeline({ history }: { history: unknown }) {
   const entries = Array.isArray(history) ? (history as HistEntry[]) : [];
-  if (entries.length === 0) return <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: 'var(--space-3)' }}>Belum ada riwayat persetujuan.</div>;
+  if (entries.length === 0)
+    return (
+      <div
+        style={{
+          fontSize: 13,
+          color: "var(--color-text-muted)",
+          padding: "var(--space-3)",
+        }}>
+        Belum ada riwayat persetujuan.
+      </div>
+    );
   return (
     <div
       style={{
@@ -224,8 +276,22 @@ function ApprovalTimeline({ history }: { history: unknown }) {
         gap: "var(--space-2)",
       }}>
       {entries.map((e, i) => (
-        <div key={i} style={{ display: 'flex', gap: 'var(--space-3)', fontSize: 13, alignItems: 'flex-start' }}>
-          <MessageSquare size={14} style={{  marginTop: 4, color: 'var(--color-text-muted)', flexShrink: 0 }} />
+        <div
+          key={i}
+          style={{
+            display: "flex",
+            gap: "var(--space-3)",
+            fontSize: 13,
+            alignItems: "flex-start",
+          }}>
+          <MessageSquare
+            size={14}
+            style={{
+              marginTop: 4,
+              color: "var(--color-text-muted)",
+              flexShrink: 0,
+            }}
+          />
           <div>
             <div style={{ fontWeight: 600 }}>
               {ACTION_LABEL[e.action ?? ""] ?? e.action ?? "—"} ·{" "}
@@ -298,17 +364,35 @@ function FoldCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div id={id} className={`card p-0${highlight ? ' notif-highlight' : ''}`} style={{ marginBottom: 'var(--space-6)', ...(accent ? { borderTop: `3px solid ${accent}` } : {}) }}>
+    <div
+      id={id}
+      className={`card p-0${highlight ? " notif-highlight" : ""}`}
+      style={{
+        marginBottom: "var(--space-6)",
+        ...(accent ? { borderTop: `3px solid ${accent}` } : {}),
+      }}>
       <div
         role="button"
         tabIndex={0}
         className="card-header compact fold-card-header"
         onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o); } }}
-        aria-expanded={open}
-      >
-        <div className="card-title">{icon}{title}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((o) => !o);
+          }
+        }}
+        aria-expanded={open}>
+        <div className="card-title">
+          {icon}
+          {title}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+          }}>
           {right}
           <ChevronDown
             size={16}
@@ -329,10 +413,20 @@ const STAGES = ["", "Staff", "Asman", "Manajer", "Sr. Manajer", "GM"];
 // Jenjang persetujuan usulan Kontrak Manajemen: Staff → Asman → Manajer → Sr. Manajer → GM (final)
 
 const DOC_STATUS_LABEL: Record<string, string> = {
-  draft: 'Draft', submitted: 'Menunggu Review', ready: 'Siap Konsolidasi', approved: 'Disetujui', rejected: 'Dikembalikan', target_fix: 'Koreksi Target (PIC REN)',
+  draft: "Draft",
+  submitted: "Menunggu Review",
+  ready: "Siap Konsolidasi",
+  approved: "Disetujui",
+  rejected: "Dikembalikan",
+  target_fix: "Koreksi Target (PIC REN)",
 };
 const DOC_STATUS_PILL: Record<string, string> = {
-  draft: 'in-review', submitted: 'needs-revision', ready: 'at-risk', approved: 'completed', rejected: 'delayed', target_fix: 'needs-revision',
+  draft: "in-review",
+  submitted: "needs-revision",
+  ready: "at-risk",
+  approved: "completed",
+  rejected: "delayed",
+  target_fix: "needs-revision",
 };
 const UNIT_NAMES: Record<string, string> = {
   KP: "Kantor Induk",
@@ -343,11 +437,17 @@ const UNIT_NAMES: Record<string, string> = {
   UPMK5: "UPMK V",
 };
 const BIDANG_ORDER: Record<string, number> = {
-  'Operasi Manajemen Proyek': 0, 'QA/QC': 1,
-  'Keuangan, Komunikasi & Umum': 2, 'Perencanaan & Project Control': 3,
-  'MRO': 4, 'K3L': 5,
+  "Operasi Manajemen Proyek": 0,
+  "QA/QC": 1,
+  "Keuangan, Komunikasi & Umum": 2,
+  "Perencanaan & Project Control": 3,
+  MRO: 4,
+  K3L: 5,
   // Bagian internal UPMK (taksonomi terpisah dari bidang Kantor Induk di atas)
-  'Bagian Pembangkit': 0, 'Bagian Jaringan': 1, 'Bagian KKU': 2, 'Bagian K3L': 3,
+  "Bagian Pembangkit": 0,
+  "Bagian Jaringan": 1,
+  "Bagian KKU": 2,
+  "Bagian K3L": 3,
 };
 const sortByBidang = <T extends { bidang: string }>(arr: T[]): T[] =>
   [...arr].sort(
@@ -2110,309 +2210,128 @@ export function ApprovalsPage() {
               />
             </div>
           ) : (
-            <div className="table-wrap">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Jenis</th>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>Pengirim</th>
-                    <th>Indikator</th>
-                    <th>Jenjang Persetujuan</th>
-                    <th>SLA</th>
-                    <th>Tanggal</th>
-                    <th style={{ width: 260 }}>Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {queueEntries.map((entry) =>
-                    entry.kind === "km"
-                      ? (() => {
-                          const k = entry.data;
-                          const kk = k as KontrakManajemen & {
-                            steps?: { label: string }[];
-                            currentStepIndex?: number;
-                            stepLabel?: string;
-                          };
-                          const ksteps = kk.steps ?? [];
-                          const kci = kk.currentStepIndex ?? 0;
-                          const kIsLast = kci >= ksteps.length - 1;
-                          const kPrev = ksteps[kci - 1]?.label;
-                          return (
-                            <Fragment key={k.id}>
-                              <tr>
-                                <td>
-                                  <span
-                                    className="status-pill"
-                                    style={{
-                                      fontSize: 11,
-                                      background: "var(--color-accent-tint)",
-                                      color: "var(--color-accent)",
-                                      fontWeight: 700,
-                                    }}>
-                                    KM Sementara
-                                  </span>
-                                </td>
-                                <td style={{ fontWeight: 600 }}>
-                                  {UNIT_NAMES[k.unitCode] ?? k.unitCode}
-                                </td>
-                                <td>{k.bidang}</td>
-                                <td
-                                  style={{ color: "var(--color-text-muted)" }}>
-                                  {k.submitter}
-                                </td>
-                                <td>
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() =>
-                                      setKmExpanded(
-                                        kmExpanded === k.id ? null : k.id,
-                                      )
-                                    }>
-                                    {k.kpiItems.length} indikator{" "}
-                                    <ChevronDown
-                                      size={12}
-                                      style={{
-                                        transform:
-                                          kmExpanded === k.id
-                                            ? "rotate(180deg)"
-                                            : "none",
-                                        transition: "transform .2s",
-                                      }}
-                                    />
-                                  </button>
-                                </td>
-                                <td style={{ minWidth: 200 }}>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                      marginBottom: 3,
-                                    }}>
-                                    {ksteps.map((_, idx) => (
-                                      <div
-                                        key={idx}
-                                        title={ksteps[idx]?.label}
-                                        style={{
-                                          width: 16,
-                                          height: 16,
-                                          borderRadius: "50%",
-                                          fontSize: 10,
-                                          fontWeight: 700,
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          background:
-                                            idx < kci
-                                              ? "var(--color-success)"
-                                              : idx === kci
-                                                ? "var(--color-accent)"
-                                                : "var(--color-surface-2)",
-                                          color:
-                                            idx <= kci
-                                              ? "#fff"
-                                              : "var(--color-text-muted)",
-                                        }}>
-                                        {idx < kci ? "✓" : idx + 1}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: 12,
-                                      color: "var(--color-accent)",
-                                      fontWeight: 600,
-                                    }}>
-                                    Langkah {kci}/{ksteps.length - 1}:{" "}
-                                    {kk.stepLabel ?? ksteps[kci]?.label ?? "—"}
-                                  </div>
-                                </td>
-                                <td>
-                                  <SlaBadge
-                                    days={
-                                      (
-                                        k as KontrakManajemen & {
-                                          slaRemainingDays?: number;
-                                        }
-                                      ).slaRemainingDays
-                                    }
-                                  />
-                                </td>
-                                <td
-                                  style={{
-                                    color: "var(--color-text-muted)",
-                                    whiteSpace: "nowrap",
-                                  }}>
-                                  {new Date(k.submittedAt).toLocaleDateString(
-                                    "id-ID",
-                                    { day: "2-digit", month: "short" },
-                                  )}
-                                </td>
-                                <td>
-                                  {kmTarget === k.id ? (
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: "var(--space-2)",
-                                      }}>
-                                      <textarea
-                                        className="form-textarea"
-                                        style={{
-                                          fontSize: "var(--text-xs)",
-                                          minHeight: 48,
-                                        }}
-                                        placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
-                                        value={kmNote}
-                                        onChange={(e) =>
-                                          setKmNote(e.target.value)
-                                        }
-                                      />
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          gap: "var(--space-2)",
-                                          flexWrap: "wrap",
-                                        }}>
-                                        <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-success)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={kmBusy}
-                                          onClick={() =>
-                                            handleKmReview(k.id, "approve")
-                                          }>
-                                          <CheckCircle size={12} />{" "}
-                                          {kIsLast
-                                            ? "Setujui (Selesai → Bundle)"
-                                            : "Setujui & Teruskan"}
-                                        </button>
-                                        <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-danger)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={kmBusy}
-                                          onClick={() =>
-                                            handleKmReview(
-                                              k.id,
-                                              "reject",
-                                              "konseptor",
-                                            )
-                                          }
-                                          title="Kembalikan ke konseptor untuk revisi">
-                                          <XCircle size={12} /> Kembalikan ke
-                                          Konseptor
-                                        </button>
-                                        {kci >= 2 && (
-                                          <button
-                                            className="btn btn-sm"
-                                            style={{
-                                              background:
-                                                "var(--color-warning)",
-                                              color: "#fff",
-                                            }}
-                                            disabled={kmBusy}
-                                            onClick={() =>
-                                              handleKmReview(
-                                                k.id,
-                                                "reject",
-                                                "previous",
-                                              )
-                                            }>
-                                            <XCircle size={12} /> Kembalikan ke{" "}
-                                            {kPrev ?? "langkah sebelumnya"}
-                                          </button>
-                                        )}
-                                        <button
-                                          className="btn btn-ghost btn-sm"
-                                          onClick={() => {
-                                            setKmTarget(null);
-                                            setKmNote("");
-                                          }}>
-                                          Batal
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        gap: "var(--space-2)",
-                                        flexWrap: "wrap",
-                                      }}>
-                                      <button
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => {
-                                          setKmTarget(k.id);
-                                          setKmNote("");
-                                        }}>
-                                        <Clock size={12} /> Tinjau
-                                      </button>
-                                      <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() => startEditKm(k)}
-                                        title="Edit KPI items pada tahap Anda">
-                                        <Pencil size={12} /> Edit
-                                      </button>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                              {kmExpanded === k.id && (
+            <div
+              className="table-wrap"
+              style={{ paddingBottom: "var(--space-7)" }}>
+              <div
+                className={`table-scroll ${kmList.length > 0 && "able-scroll"}`}>
+                <table className="data-table compact">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 140 }}>Jenis</th>
+                      <th>Unit</th>
+                      <th>Bidang</th>
+                      <th>Pengirim</th>
+                      <th>Indikator</th>
+                      <th>Jenjang Persetujuan</th>
+                      <th>SLA</th>
+                      <th>Tanggal</th>
+                      <th style={{ width: 260, textAlign: "center" }}>
+                        Tindakan
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queueEntries.map((entry) =>
+                      entry.kind === "km"
+                        ? (() => {
+                            const k = entry.data;
+                            const kk = k as KontrakManajemen & {
+                              steps?: { label: string }[];
+                              currentStepIndex?: number;
+                              stepLabel?: string;
+                            };
+                            const ksteps = kk.steps ?? [];
+                            const kci = kk.currentStepIndex ?? 0;
+                            const kIsLast = kci >= ksteps.length - 1;
+                            const kPrev = ksteps[kci - 1]?.label;
+                            return (
+                              <Fragment key={k.id}>
                                 <tr>
+                                  <td>
+                                    <span
+                                      className="status-pill"
+                                      style={{
+                                        fontSize: 11,
+                                        background: "var(--color-accent-tint)",
+                                        color: "var(--color-accent)",
+                                        fontWeight: 700,
+                                      }}>
+                                      KM Sementara
+                                    </span>
+                                  </td>
+                                  <td style={{ fontWeight: 600 }}>
+                                    {UNIT_NAMES[k.unitCode] ?? k.unitCode}
+                                  </td>
+                                  <td>{k.bidang}</td>
                                   <td
-                                    colSpan={9}
                                     style={{
-                                      background: "var(--color-surface-2)",
-                                      padding: 0,
+                                      color: "var(--color-text-muted)",
                                     }}>
+                                    {k.submitter}
+                                  </td>
+                                  <td>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() =>
+                                        setKmExpanded(
+                                          kmExpanded === k.id ? null : k.id,
+                                        )
+                                      }>
+                                      {k.kpiItems.length} indikator{" "}
+                                      <ChevronDown
+                                        size={12}
+                                        style={{
+                                          transform:
+                                            kmExpanded === k.id
+                                              ? "rotate(180deg)"
+                                              : "none",
+                                          transition: "transform .2s",
+                                        }}
+                                      />
+                                    </button>
+                                  </td>
+                                  <td style={{ minWidth: 200 }}>
                                     <div
                                       style={{
                                         display: "flex",
-                                        justifyContent: "flex-end",
-                                        gap: "var(--space-2)",
-                                        padding:
-                                          "var(--space-2) var(--space-3)",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        marginBottom: 3,
                                       }}>
-                                      {kmEditId === k.id ? (
-                                        <>
-                                          <button
-                                            className="btn btn-sm"
-                                            style={{
-                                              background:
-                                                "var(--color-success)",
-                                              color: "#fff",
-                                            }}
-                                            disabled={kmBusy}
-                                            onClick={() => saveEditKm(k)}>
-                                            <CheckCircle size={12} /> Simpan KPI
-                                          </button>
-                                          <button
-                                            className="btn btn-ghost btn-sm"
-                                            onClick={() => setKmEditId(null)}>
-                                            Batal Edit
-                                          </button>
-                                        </>
-                                      ) : (
-                                        <button
-                                          className="btn btn-secondary btn-sm"
-                                          onClick={() => startEditKm(k)}>
-                                          <Pencil size={12} /> Edit
-                                        </button>
-                                      )}
+                                      {ksteps.map((_, idx) => (
+                                        <div
+                                          key={idx}
+                                          title={ksteps[idx]?.label}
+                                          style={{
+                                            width: 16,
+                                            height: 16,
+                                            borderRadius: "50%",
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            background:
+                                              idx < kci
+                                                ? "var(--color-success)"
+                                                : idx === kci
+                                                  ? "var(--color-accent)"
+                                                  : "var(--color-surface-2)",
+                                            color:
+                                              idx <= kci
+                                                ? "#fff"
+                                                : "var(--color-text-muted)",
+                                          }}>
+                                          {idx < kci ? "✓" : idx + 1}
+                                        </div>
+                                      ))}
                                     </div>
                                     <div
                                       style={{
                                         fontSize: 12,
                                         color: "var(--color-accent)",
                                         fontWeight: 600,
-                                        paddingTop: 4,
                                       }}>
                                       Langkah {kci}/{ksteps.length - 1}:{" "}
                                       {kk.stepLabel ??
@@ -2452,7 +2371,7 @@ export function ApprovalsPage() {
                                         <textarea
                                           className="form-textarea"
                                           style={{
-                                            fontSize: "var(--text-sm)",
+                                            fontSize: "var(--text-xs)",
                                             minHeight: 48,
                                           }}
                                           placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
@@ -2474,14 +2393,11 @@ export function ApprovalsPage() {
                                               width: "100%",
                                             }}>
                                             <button
-                                              className="btn btn-md"
+                                              className="btn btn-sm"
                                               style={{
                                                 background:
                                                   "var(--color-success)",
                                                 color: "#fff",
-                                                width: "100%",
-                                                display: "flex",
-                                                justifyContent: "center",
                                               }}
                                               disabled={kmBusy}
                                               onClick={() =>
@@ -2493,7 +2409,7 @@ export function ApprovalsPage() {
                                                 : "Setujui & Teruskan"}
                                             </button>
                                             <button
-                                              className="btn btn-md"
+                                              className="btn btn-sm"
                                               style={{
                                                 background:
                                                   "var(--color-danger)",
@@ -2566,250 +2482,445 @@ export function ApprovalsPage() {
                                           flexWrap: "wrap",
                                         }}>
                                         <button
-                                          className="btn btn-secondary btn-md"
+                                          className="btn btn-secondary btn-sm"
                                           onClick={() => {
                                             setKmTarget(k.id);
                                             setKmNote("");
                                           }}>
                                           <Clock size={12} /> Tinjau
                                         </button>
-
                                         <button
-                                          className="btn btn-ghost btn-md"
-                                          onClick={() =>
-                                            kmExpanded && kmEditId
-                                              ? setKmEditId(null)
-                                              : startEditKm(k)
-                                          }
+                                          className="btn btn-ghost btn-sm"
+                                          onClick={() => startEditKm(k)}
                                           title="Edit KPI items pada tahap Anda">
-                                          <Pencil size={12} />{" "}
-                                          {kmExpanded && kmEditId
-                                            ? "Batal Edit"
-                                            : "Edit"}
+                                          <Pencil size={12} /> Edit
                                         </button>
                                       </div>
                                     )}
                                   </td>
                                 </tr>
-                              )}
-                            </Fragment>
-                          );
-                        })()
-                      : (() => {
-                          const rl = entry.data;
-                          const entries = Object.values(rl.values ?? {});
-                          const rr = rl as RealisasiKinerja & {
-                            steps?: { label: string }[];
-                            currentStepIndex?: number;
-                            stepLabel?: string;
-                          };
-                          const steps = rr.steps ?? [];
-                          const ci = rr.currentStepIndex ?? 0;
-                          const stepCount = steps.length;
-                          const isLastStep = ci >= stepCount - 1;
-                          const prevLabel = steps[ci - 1]?.label;
-                          return (
-                            <Fragment key={rl.id}>
-                              <tr>
-                                <td>
-                                  <span
-                                    className="status-pill"
-                                    style={{
-                                      fontSize: 11,
-                                      background: "var(--color-info-tint)",
-                                      color: "var(--color-info)",
-                                      fontWeight: 700,
-                                    }}>
-                                    Realisasi
-                                  </span>
-                                </td>
-                                <td style={{ fontWeight: 600 }}>
-                                  {UNIT_NAMES[rl.unitCode] ?? rl.unitCode}
-                                </td>
-                                <td
-                                  style={{
-                                    fontSize: 13,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  {(
-                                    rl as RealisasiKinerja & { bidang?: string }
-                                  ).bidang ?? "—"}
-                                </td>
-                                <td
-                                  style={{ color: "var(--color-text-muted)" }}>
-                                  {rl.submitter}
-                                </td>
-                                <td>
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() =>
-                                      setRealExpanded(
-                                        realExpanded === rl.id ? null : rl.id,
-                                      )
-                                    }>
-                                    {entries.length} indikator{" "}
-                                    <ChevronDown
-                                      size={12}
+                                {kmExpanded === k.id && (
+                                  <tr>
+                                    <td
+                                      colSpan={9}
                                       style={{
-                                        transform:
-                                          realExpanded === rl.id
-                                            ? "rotate(180deg)"
-                                            : "none",
-                                        transition: "transform .2s",
-                                      }}
-                                    />
-                                  </button>
-                                </td>
-                                <td style={{ minWidth: 200 }}>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                      marginBottom: 3,
-                                    }}>
-                                    {steps.map((_, idx) => (
+                                        background: "var(--color-surface-2)",
+                                        padding: 0,
+                                      }}>
                                       <div
-                                        key={idx}
-                                        title={steps[idx]?.label}
                                         style={{
-                                          width: 16,
-                                          height: 16,
-                                          borderRadius: "50%",
-                                          fontSize: 10,
-                                          fontWeight: 700,
                                           display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          background:
-                                            idx < ci
-                                              ? "var(--color-success)"
-                                              : idx === ci
-                                                ? "var(--color-info)"
-                                                : "var(--color-surface-2)",
-                                          color:
-                                            idx <= ci
-                                              ? "#fff"
-                                              : "var(--color-text-muted)",
+                                          justifyContent: "flex-end",
+                                          gap: "var(--space-2)",
+                                          padding:
+                                            "var(--space-2) var(--space-3)",
                                         }}>
-                                        {idx < ci ? "✓" : idx + 1}
+                                        {kmEditId === k.id ? (
+                                          <>
+                                            <button
+                                              className="btn btn-sm"
+                                              style={{
+                                                background:
+                                                  "var(--color-success)",
+                                                color: "#fff",
+                                              }}
+                                              disabled={kmBusy}
+                                              onClick={() => saveEditKm(k)}>
+                                              <CheckCircle size={12} /> Simpan
+                                              KPI
+                                            </button>
+                                            <button
+                                              className="btn btn-ghost btn-sm"
+                                              onClick={() => setKmEditId(null)}>
+                                              Batal Edit
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <button
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => startEditKm(k)}>
+                                            <Pencil size={12} /> Edit
+                                          </button>
+                                        )}
                                       </div>
-                                    ))}
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: 12,
-                                      color: "var(--color-info)",
-                                      fontWeight: 600,
-                                    }}>
-                                    Langkah {ci}/{stepCount - 1}:{" "}
-                                    {rr.stepLabel ?? steps[ci]?.label ?? "—"}
-                                  </div>
-                                </td>
-                                <td>
-                                  <SlaBadge
-                                    days={
-                                      (
-                                        rl as RealisasiKinerja & {
-                                          slaRemainingDays?: number;
+                                      <div
+                                        style={{
+                                          fontSize: 12,
+                                          color: "var(--color-accent)",
+                                          fontWeight: 600,
+                                          paddingTop: 4,
+                                        }}>
+                                        Langkah {kci}/{ksteps.length - 1}:{" "}
+                                        {kk.stepLabel ??
+                                          ksteps[kci]?.label ??
+                                          "—"}
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <SlaBadge
+                                        days={
+                                          (
+                                            k as KontrakManajemen & {
+                                              slaRemainingDays?: number;
+                                            }
+                                          ).slaRemainingDays
                                         }
-                                      ).slaRemainingDays
-                                    }
-                                  />
-                                </td>
-                                <td
-                                  style={{
-                                    color: "var(--color-text-muted)",
-                                    whiteSpace: "nowrap",
-                                  }}>
-                                  {new Date(rl.submittedAt).toLocaleDateString(
-                                    "id-ID",
-                                    { day: "2-digit", month: "short" },
-                                  )}
-                                </td>
-                                <td>
-                                  {realTarget === rl.id ? (
+                                      />
+                                    </td>
+                                    <td
+                                      style={{
+                                        color: "var(--color-text-muted)",
+                                        whiteSpace: "nowrap",
+                                      }}>
+                                      {new Date(
+                                        k.submittedAt,
+                                      ).toLocaleDateString("id-ID", {
+                                        day: "2-digit",
+                                        month: "short",
+                                      })}
+                                    </td>
+                                    <td>
+                                      {kmTarget === k.id ? (
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: "var(--space-2)",
+                                          }}>
+                                          <textarea
+                                            className="form-textarea"
+                                            style={{
+                                              fontSize: "var(--text-sm)",
+                                              minHeight: 48,
+                                            }}
+                                            placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
+                                            value={kmNote}
+                                            onChange={(e) =>
+                                              setKmNote(e.target.value)
+                                            }
+                                          />
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: "var(--space-2)",
+                                              flexWrap: "wrap",
+                                            }}>
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                gap: "var(--space-2)",
+                                                width: "100%",
+                                              }}>
+                                              <button
+                                                className="btn btn-md"
+                                                style={{
+                                                  background:
+                                                    "var(--color-success)",
+                                                  color: "#fff",
+                                                  width: "100%",
+                                                  display: "flex",
+                                                  justifyContent: "center",
+                                                }}
+                                                disabled={kmBusy}
+                                                onClick={() =>
+                                                  handleKmReview(
+                                                    k.id,
+                                                    "approve",
+                                                  )
+                                                }>
+                                                <CheckCircle size={12} />{" "}
+                                                {kIsLast
+                                                  ? "Setujui (Selesai → Bundle)"
+                                                  : "Setujui & Teruskan"}
+                                              </button>
+                                              <button
+                                                className="btn btn-md"
+                                                style={{
+                                                  background:
+                                                    "var(--color-danger)",
+                                                  color: "#fff",
+                                                }}
+                                                disabled={kmBusy}
+                                                onClick={() =>
+                                                  handleKmReview(
+                                                    k.id,
+                                                    "reject",
+                                                    "konseptor",
+                                                  )
+                                                }
+                                                title="Kembalikan ke konseptor untuk revisi">
+                                                <XCircle size={12} /> Kembalikan
+                                                ke Konseptor
+                                              </button>
+                                            </div>
+                                            {kci >= 2 ? (
+                                              <div
+                                                style={{
+                                                  display: "flex",
+                                                  gap: "var(--space-2)",
+                                                }}>
+                                                <button
+                                                  className="btn btn-md"
+                                                  style={{
+                                                    background:
+                                                      "var(--color-warning)",
+                                                    color: "#fff",
+                                                  }}
+                                                  disabled={kmBusy}
+                                                  onClick={() =>
+                                                    handleKmReview(
+                                                      k.id,
+                                                      "reject",
+                                                      "previous",
+                                                    )
+                                                  }>
+                                                  <XCircle size={12} />{" "}
+                                                  Kembalikan ke{" "}
+                                                  {kPrev ??
+                                                    "langkah sebelumnya"}
+                                                </button>
+                                                <button
+                                                  className="btn btn-ghost btn-md"
+                                                  onClick={() => {
+                                                    setKmTarget(null);
+                                                    setKmNote("");
+                                                  }}>
+                                                  Batal
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                className="btn btn-ghost btn-md"
+                                                onClick={() => {
+                                                  setKmTarget(null);
+                                                  setKmNote("");
+                                                }}>
+                                                Batal
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "var(--space-2)",
+                                            flexWrap: "wrap",
+                                          }}>
+                                          <button
+                                            className="btn btn-secondary btn-md"
+                                            onClick={() => {
+                                              setKmTarget(k.id);
+                                              setKmNote("");
+                                            }}>
+                                            <Clock size={12} /> Tinjau
+                                          </button>
+
+                                          <button
+                                            className="btn btn-ghost btn-md"
+                                            onClick={() =>
+                                              kmExpanded && kmEditId
+                                                ? setKmEditId(null)
+                                                : startEditKm(k)
+                                            }
+                                            title="Edit KPI items pada tahap Anda">
+                                            <Pencil size={12} />{" "}
+                                            {kmExpanded && kmEditId
+                                              ? "Batal Edit"
+                                              : "Edit"}
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            );
+                          })()
+                        : (() => {
+                            const rl = entry.data;
+                            const entries = Object.values(rl.values ?? {});
+                            const rr = rl as RealisasiKinerja & {
+                              steps?: { label: string }[];
+                              currentStepIndex?: number;
+                              stepLabel?: string;
+                            };
+                            const steps = rr.steps ?? [];
+                            const ci = rr.currentStepIndex ?? 0;
+                            const stepCount = steps.length;
+                            const isLastStep = ci >= stepCount - 1;
+                            const prevLabel = steps[ci - 1]?.label;
+                            return (
+                              <Fragment key={rl.id}>
+                                <tr>
+                                  <td>
+                                    <span
+                                      className="status-pill"
+                                      style={{
+                                        fontSize: 11,
+                                        background: "var(--color-info-tint)",
+                                        color: "var(--color-info)",
+                                        fontWeight: 700,
+                                      }}>
+                                      Realisasi
+                                    </span>
+                                  </td>
+                                  <td style={{ fontWeight: 600 }}>
+                                    {UNIT_NAMES[rl.unitCode] ?? rl.unitCode}
+                                  </td>
+                                  <td
+                                    style={{
+                                      fontSize: 13,
+                                      color: "var(--color-text-muted)",
+                                    }}>
+                                    {(
+                                      rl as RealisasiKinerja & {
+                                        bidang?: string;
+                                      }
+                                    ).bidang ?? "—"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      color: "var(--color-text-muted)",
+                                    }}>
+                                    {rl.submitter}
+                                  </td>
+                                  <td>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() =>
+                                        setRealExpanded(
+                                          realExpanded === rl.id ? null : rl.id,
+                                        )
+                                      }>
+                                      {entries.length} indikator{" "}
+                                      <ChevronDown
+                                        size={12}
+                                        style={{
+                                          transform:
+                                            realExpanded === rl.id
+                                              ? "rotate(180deg)"
+                                              : "none",
+                                          transition: "transform .2s",
+                                        }}
+                                      />
+                                    </button>
+                                  </td>
+                                  <td style={{ minWidth: 200 }}>
                                     <div
                                       style={{
                                         display: "flex",
-                                        flexDirection: "column",
-                                        gap: "var(--space-2)",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        marginBottom: 3,
                                       }}>
-                                      <textarea
-                                        className="form-textarea"
-                                        style={{
-                                          fontSize: "var(--text-xs)",
-                                          minHeight: 48,
-                                        }}
-                                        placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
-                                        value={realNote}
-                                        onChange={(e) =>
-                                          setRealNote(e.target.value)
-                                        }
-                                      />
+                                      {steps.map((_, idx) => (
+                                        <div
+                                          key={idx}
+                                          title={steps[idx]?.label}
+                                          style={{
+                                            width: 16,
+                                            height: 16,
+                                            borderRadius: "50%",
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            background:
+                                              idx < ci
+                                                ? "var(--color-success)"
+                                                : idx === ci
+                                                  ? "var(--color-info)"
+                                                  : "var(--color-surface-2)",
+                                            color:
+                                              idx <= ci
+                                                ? "#fff"
+                                                : "var(--color-text-muted)",
+                                          }}>
+                                          {idx < ci ? "✓" : idx + 1}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        color: "var(--color-info)",
+                                        fontWeight: 600,
+                                      }}>
+                                      Langkah {ci}/{stepCount - 1}:{" "}
+                                      {rr.stepLabel ?? steps[ci]?.label ?? "—"}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <SlaBadge
+                                      days={
+                                        (
+                                          rl as RealisasiKinerja & {
+                                            slaRemainingDays?: number;
+                                          }
+                                        ).slaRemainingDays
+                                      }
+                                    />
+                                  </td>
+                                  <td
+                                    style={{
+                                      color: "var(--color-text-muted)",
+                                      whiteSpace: "nowrap",
+                                    }}>
+                                    {new Date(
+                                      rl.submittedAt,
+                                    ).toLocaleDateString("id-ID", {
+                                      day: "2-digit",
+                                      month: "short",
+                                    })}
+                                  </td>
+                                  <td>
+                                    {realTarget === rl.id ? (
                                       <div
                                         style={{
                                           display: "flex",
+                                          flexDirection: "column",
                                           gap: "var(--space-2)",
-                                          flexWrap: "wrap",
                                         }}>
-                                        <button
-                                          className="btn btn-sm"
+                                        <textarea
+                                          className="form-textarea"
                                           style={{
-                                            background: "var(--color-success)",
-                                            color: "#fff",
+                                            fontSize: "var(--text-xs)",
+                                            minHeight: 48,
                                           }}
-                                          disabled={realBusy}
-                                          onClick={() =>
-                                            handleRealReview(rl.id, "approve")
-                                          }>
-                                          <CheckCircle size={12} />{" "}
-                                          {isLastStep
-                                            ? "Setujui (Selesai → Bundle)"
-                                            : "Setujui & Teruskan"}
-                                        </button>
-                                        <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-danger)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={realBusy}
-                                          onClick={() =>
-                                            handleRealReview(
-                                              rl.id,
-                                              "reject",
-                                              "konseptor",
-                                            )
+                                          placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
+                                          value={realNote}
+                                          onChange={(e) =>
+                                            setRealNote(e.target.value)
                                           }
-                                          title="Masalah pada REALISASI → kembali ke penyusun (PIC)">
-                                          <XCircle size={12} /> Masalah
-                                          Realisasi → Konseptor
-                                        </button>
-                                        <button
-                                          className="btn btn-sm"
+                                        />
+                                        <div
                                           style={{
-                                            background: "var(--color-accent)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={realBusy}
-                                          onClick={() =>
-                                            handleRealReview(
-                                              rl.id,
-                                              "reject",
-                                              "target",
-                                            )
-                                          }
-                                          title="Masalah pada TARGET (KM Sementara) → routing ke PIC REN untuk koreksi target">
-                                          <XCircle size={12} /> Masalah Target →
-                                          PIC REN
-                                        </button>
-                                        {ci >= 2 && (
+                                            display: "flex",
+                                            gap: "var(--space-2)",
+                                            flexWrap: "wrap",
+                                          }}>
                                           <button
                                             className="btn btn-sm"
                                             style={{
                                               background:
-                                                "var(--color-warning)",
+                                                "var(--color-success)",
+                                              color: "#fff",
+                                            }}
+                                            disabled={realBusy}
+                                            onClick={() =>
+                                              handleRealReview(rl.id, "approve")
+                                            }>
+                                            <CheckCircle size={12} />{" "}
+                                            {isLastStep
+                                              ? "Setujui (Selesai → Bundle)"
+                                              : "Setujui & Teruskan"}
+                                          </button>
+                                          <button
+                                            className="btn btn-sm"
+                                            style={{
+                                              background: "var(--color-danger)",
                                               color: "#fff",
                                             }}
                                             disabled={realBusy}
@@ -2817,104 +2928,147 @@ export function ApprovalsPage() {
                                               handleRealReview(
                                                 rl.id,
                                                 "reject",
-                                                "previous",
+                                                "konseptor",
                                               )
-                                            }>
-                                            <XCircle size={12} /> Kembalikan ke{" "}
-                                            {prevLabel ?? "langkah sebelumnya"}
+                                            }
+                                            title="Masalah pada REALISASI → kembali ke penyusun (PIC)">
+                                            <XCircle size={12} /> Masalah
+                                            Realisasi → Konseptor
                                           </button>
-                                        )}
+                                          <button
+                                            className="btn btn-sm"
+                                            style={{
+                                              background: "var(--color-accent)",
+                                              color: "#fff",
+                                            }}
+                                            disabled={realBusy}
+                                            onClick={() =>
+                                              handleRealReview(
+                                                rl.id,
+                                                "reject",
+                                                "target",
+                                              )
+                                            }
+                                            title="Masalah pada TARGET (KM Sementara) → routing ke PIC REN untuk koreksi target">
+                                            <XCircle size={12} /> Masalah Target
+                                            → PIC REN
+                                          </button>
+                                          {ci >= 2 && (
+                                            <button
+                                              className="btn btn-sm"
+                                              style={{
+                                                background:
+                                                  "var(--color-warning)",
+                                                color: "#fff",
+                                              }}
+                                              disabled={realBusy}
+                                              onClick={() =>
+                                                handleRealReview(
+                                                  rl.id,
+                                                  "reject",
+                                                  "previous",
+                                                )
+                                              }>
+                                              <XCircle size={12} /> Kembalikan
+                                              ke{" "}
+                                              {prevLabel ??
+                                                "langkah sebelumnya"}
+                                            </button>
+                                          )}
+                                          <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => {
+                                              setRealTarget(null);
+                                              setRealNote("");
+                                            }}>
+                                            Batal
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                          flexWrap: "wrap",
+                                        }}>
                                         <button
-                                          className="btn btn-ghost btn-sm"
+                                          className="btn btn-secondary btn-sm"
                                           onClick={() => {
-                                            setRealTarget(null);
+                                            setRealTarget(rl.id);
                                             setRealNote("");
                                           }}>
-                                          Batal
+                                          <Clock size={12} /> Tinjau
                                         </button>
                                       </div>
-                                    </div>
-                                  ) : (
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        gap: "var(--space-2)",
-                                        flexWrap: "wrap",
-                                      }}>
-                                      <button
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => {
-                                          setRealTarget(rl.id);
-                                          setRealNote("");
-                                        }}>
-                                        <Clock size={12} /> Tinjau
-                                      </button>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                              {realExpanded === rl.id && (
-                                <tr>
-                                  <td
-                                    colSpan={9}
-                                    style={{
-                                      background: "var(--color-surface-2)",
-                                      padding: 0,
-                                    }}>
-                                    <table
-                                      className="data-table compact"
-                                      style={{ margin: 0 }}>
-                                      <thead>
-                                        <tr>
-                                          <th>No</th>
-                                          <th>Indikator</th>
-                                          <th>Satuan</th>
-                                          <th className="num">Bobot</th>
-                                          <th className="num">Target</th>
-                                          <th className="num">Realisasi</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {Object.entries(rl.values ?? {}).map(
-                                          ([key, vRaw], idx) => {
-                                            const it = vRaw as {
-                                              indikator?: string;
-                                              satuan?: string;
-                                              bobot?: unknown;
-                                              target?: unknown;
-                                              realisasi?: unknown;
-                                            };
-                                            return (
-                                              <tr key={key}>
-                                                <td>{idx + 1}</td>
-                                                <td>{it.indikator ?? "—"}</td>
-                                                <td>{it.satuan ?? "—"}</td>
-                                                <td className="num">
-                                                  {String(it.bobot ?? "—")}
-                                                </td>
-                                                <td className="num">
-                                                  {String(it.target ?? "—")}
-                                                </td>
-                                                <td
-                                                  className="num"
-                                                  style={{ fontWeight: 700 }}>
-                                                  {String(it.realisasi ?? "—")}
-                                                </td>
-                                              </tr>
-                                            );
-                                          },
-                                        )}
-                                      </tbody>
-                                    </table>
+                                    )}
                                   </td>
                                 </tr>
-                              )}
-                            </Fragment>
-                          );
-                        })(),
-                  )}
-                </tbody>
-              </table>
+                                {realExpanded === rl.id && (
+                                  <tr>
+                                    <td
+                                      colSpan={9}
+                                      style={{
+                                        background: "var(--color-surface-2)",
+                                        padding: 0,
+                                      }}>
+                                      <table
+                                        className="data-table compact"
+                                        style={{ margin: 0 }}>
+                                        <thead>
+                                          <tr>
+                                            <th>No</th>
+                                            <th>Indikator</th>
+                                            <th>Satuan</th>
+                                            <th className="num">Bobot</th>
+                                            <th className="num">Target</th>
+                                            <th className="num">Realisasi</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {Object.entries(rl.values ?? {}).map(
+                                            ([key, vRaw], idx) => {
+                                              const it = vRaw as {
+                                                indikator?: string;
+                                                satuan?: string;
+                                                bobot?: unknown;
+                                                target?: unknown;
+                                                realisasi?: unknown;
+                                              };
+                                              return (
+                                                <tr key={key}>
+                                                  <td>{idx + 1}</td>
+                                                  <td>{it.indikator ?? "—"}</td>
+                                                  <td>{it.satuan ?? "—"}</td>
+                                                  <td className="num">
+                                                    {String(it.bobot ?? "—")}
+                                                  </td>
+                                                  <td className="num">
+                                                    {String(it.target ?? "—")}
+                                                  </td>
+                                                  <td
+                                                    className="num"
+                                                    style={{ fontWeight: 700 }}>
+                                                    {String(
+                                                      it.realisasi ?? "—",
+                                                    )}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            },
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            );
+                          })(),
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </FoldCard>
