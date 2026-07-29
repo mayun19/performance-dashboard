@@ -524,6 +524,7 @@ export function ExecutivePage() {
             display: "flex",
             gap: "var(--space-2)",
             alignItems: "center",
+            flexWrap: "wrap",
           }}>
           {isLive && (
             <span
@@ -537,7 +538,7 @@ export function ExecutivePage() {
               ● Data Realisasi Disetujui
             </span>
           )}
-          <span className="meta-pill">{String(selectedPeriod)}</span>
+          {phaseControls}
         </div>
       </div>
 
