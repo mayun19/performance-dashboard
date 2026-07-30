@@ -63,7 +63,8 @@ function StatusPill({ status }: { status?: string }) {
   return <span className={`status-pill ${cls}`}>{status}</span>;
 }
 
-interface RekapUnit { code: string; name: string; score: number; status: string; }
+interface RekapKpi { indikator: string; satuan: string; bobot: number; target: number; realisasi: number; capaian: number; nilai: number; }
+interface RekapUnit { code: string; name: string; score: number; status: string; kpis: RekapKpi[]; }
 interface Rekap { hasData: boolean; overall: number | null; units: RekapUnit[]; }
 
 export function ExecutivePage() {
@@ -154,6 +155,14 @@ export function ExecutivePage() {
     isLive && rekap
       ? rekap.units.map((u) => ({ code: u.code, name: u.name, score: u.score, status: u.status }))
       : (d.unitRanking ?? []);
+  // Rangkuman Kinerja UPMK (kartu terpisah dari Kantor Induk) — sumber sama dgn rekap.units di
+  // atas (realisasi disetujui final, sudah lewat koreksi RPC/KI — "KI Adjusted"), difilter unit
+  // selain KP. Tak perlu endpoint baru: kinerja.rekap() sudah mengembalikan itemized kpis[]
+  // per unit termasuk kelima UPMK, hanya belum ditampilkan terpisah di halaman ini.
+  const upmkRekapUnits = rekap?.units.filter((u) => u.code !== 'KP') ?? [];
+  const upmkRekapAvg = upmkRekapUnits.length
+    ? upmkRekapUnits.reduce((s, u) => s + u.score, 0) / upmkRekapUnits.length
+    : 0;
 
   const scoreColor = gaugeValue >= 100 ? 'var(--color-success)' : gaugeValue >= 90 ? 'var(--color-warning)' : 'var(--color-danger)';
   const currentYear = new Date().getFullYear();
@@ -363,7 +372,7 @@ export function ExecutivePage() {
       {/* ── OPERATIONAL KPIs (merged) ── */}
       {hasOpData && (
         <FoldCard
-          title="Rangkuman Kinerja"
+          title="Rangkuman Kinerja — Kantor Induk"
           icon={<Target size={14} />}
           accent="var(--color-accent)"
           right={<span className="status-pill" style={{background:'var(--color-accent-tint)',color:'var(--color-accent)',fontWeight:700}}>Total {fmt(totalNilai)} · {totalStatus}</span>}
@@ -418,6 +427,59 @@ export function ExecutivePage() {
               </div>
             </div>
           )}
+        </FoldCard>
+      )}
+
+      {/* ── OPERATIONAL KPIs — UPMK (terpisah dari Kantor Induk) ── */}
+      {upmkRekapUnits.length > 0 && (
+        <FoldCard
+          title="Rangkuman Kinerja — UPMK"
+          icon={<Target size={14} />}
+          accent="var(--color-accent)"
+          right={<span className="status-pill" style={{background:'var(--color-accent-tint)',color:'var(--color-accent)',fontWeight:700}}>Rata-rata {fmt(upmkRekapAvg)} · {upmkRekapUnits.length} unit</span>}
+        >
+          <div style={{borderBottom:'1px solid var(--color-border)'}}>
+            <div style={{padding:'var(--space-2) var(--space-4)',background:'var(--color-success-tint)',display:'flex',alignItems:'center',gap:'var(--space-2)'}}>
+              <ClipboardCheck size={13} style={{color:'var(--color-success)'}} />
+              <span style={{fontSize:'var(--text-xs)',fontWeight:700,color:'var(--color-success)'}}>Capaian dari Realisasi Disetujui — {upmkRekapUnits.length} unit UPMK</span>
+            </div>
+          </div>
+          {upmkRekapUnits.map((u) => (
+            <div key={u.code}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'var(--space-2) var(--space-4)',background:'var(--color-surface-2)',fontWeight:700,fontSize:'var(--text-sm)'}}>
+                <span>{u.name}</span>
+                <span style={{display:'flex',gap:'var(--space-3)',alignItems:'center'}}>
+                  <span style={{color:'var(--color-brand)'}}>Nilai {fmt(u.score)}</span>
+                  <span className={`status-pill ${u.score >= 100 ? 'completed' : u.score >= 90 ? 'at-risk' : 'delayed'}`}>{u.status}</span>
+                </span>
+              </div>
+              <div className="table-wrap">
+                <table className="data-table compact">
+                  <thead>
+                    <tr>
+                      <th>No</th><th>Indikator</th><th>Satuan</th>
+                      <th className="num">Target</th><th className="num">Realisasi</th>
+                      <th className="num">Bobot</th><th className="num">Capaian</th><th className="num">Nilai</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {u.kpis.map((k, i) => (
+                      <tr key={i}>
+                        <td style={{color:'var(--color-text-muted)'}}>{i + 1}</td>
+                        <td style={{fontWeight:500}}>{k.indikator}</td>
+                        <td style={{color:'var(--color-text-muted)'}}>{k.satuan || '—'}</td>
+                        <td className="num">{fmt(k.target)}</td>
+                        <td className="num" style={{fontWeight:700}}>{fmt(k.realisasi)}</td>
+                        <td className="num">{fmt(k.bobot)}</td>
+                        <td className={`num ${k.capaian >= 100 ? 'delta-positive' : k.capaian >= 90 ? '' : 'delta-negative'}`} style={{fontWeight:700}}>{fmtPct(k.capaian)}</td>
+                        <td className="num" style={{fontWeight:700}}>{fmt(k.nilai)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </FoldCard>
       )}
 

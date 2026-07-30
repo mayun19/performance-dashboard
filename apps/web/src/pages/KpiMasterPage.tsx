@@ -27,6 +27,10 @@ const BIDANG_OPTIONS = [
 // dari bidang Kantor Induk, jangan dicampur.
 const UPMK_BIDANG_OPTIONS = ['Bagian Pembangkit', 'Bagian Jaringan', 'Bagian KKU', 'Bagian K3L'];
 const bidangOptionsFor = (unitCode: string) => (unitCode === 'KP' ? BIDANG_OPTIONS : UPMK_BIDANG_OPTIONS);
+// Daftar tertutup — mencakup seluruh nilai yang benar-benar dipakai KPI existing (dicek via
+// query DB), plus "-" utk sub-indikator penalti yang memang tanpa satuan bermakna (mis.
+// "Implementasi Maturity Level"). Dipakai baik utk Satuan indikator induk maupun sub-indikator.
+const SATUAN_OPTIONS = ['%', 'Rp Miliar', 'Hari kerja', 'kms', 'MVA', 'MW', 'Waktu', 'Milestone', 'Dokumen legal', '-'];
 const CURRENT_YEAR = new Date().getFullYear();
 // KPI Master (definisi lintas-bidang/unit) dipersempit ke RPC — lihat kpi-master.service.ts save().
 const RPC_BIDANG = 'Perencanaan & Project Control';
@@ -81,18 +85,23 @@ export function KpiMasterPage() {
 }
 
 // ============================ Tab 1: Definisi KPI ============================
+// Bidang bertipe array — 1 baris form bisa punya banyak bidang sekaligus (kenyamanan entri data,
+// bukan mengubah model backend). Di-"expand" jadi entri tunggal-bidang saat disimpan — lihat
+// expandAssignmentsForSave().
 type Assignment = {
-  unitCode: string; bidang: string; holder: string; target: string; target2: string;
+  unitCode: string; bidang: string[]; holder: string; target: string; target2: string;
   persenAgregasi: number;
   reviewerSlots: ReviewerSlots | null; // legacy — tak lagi diedit di UI, sekadar pass-through
   // Override target sub-indikator (KPI Komposit), index sejajar dgn subIndicators master.
   // null/kosong per elemen = warisi target template global. Lihat kpi-master.service.ts fanOut().
   subIndicatorTargets: SubIndicatorTargetOverride[] | null;
 };
+// Bentuk assignment APA ADANYA dari backend (satu bidang per baris, model DB tak berubah).
+type AssignmentRow = Omit<Assignment, 'bidang'> & { id: string; bidang: string };
 type KpiMasterRow = {
   id: string; year: string; kmType: 'draft' | 'final'; indikator: string; formula: string; satuan: string;
   bobotKm: string; targetParent: string; createdBy: string; createdAt: string;
-  assignments: Array<Assignment & { id: string }>;
+  assignments: AssignmentRow[];
   defaultCheckerIds: string[]; defaultApproverId: string | null;
   effectiveMonth: string; version: number; status: string; previousVersionId: string | null;
   isPending: boolean; isCurrent: boolean;
@@ -109,7 +118,18 @@ type Rollup = {
   totalPersen: number; nilaiParent: number; isFullyConfigured: boolean; breakdown: RollupBreakdown[];
 };
 
-const emptyAssignment = (): Assignment => ({ unitCode: 'UPMK1', bidang: UPMK_BIDANG_OPTIONS[0], holder: '', target: '', target2: '', persenAgregasi: 0, reviewerSlots: null, subIndicatorTargets: null });
+const emptyAssignment = (): Assignment => ({ unitCode: 'UPMK1', bidang: [UPMK_BIDANG_OPTIONS[0]], holder: '', target: '', target2: '', persenAgregasi: 0, reviewerSlots: null, subIndicatorTargets: null });
+// Pecah 1 baris multi-bidang jadi entri tunggal-bidang (format yg diterima backend) — Bobot
+// Agregasi baris dibagi rata ke tiap bidang (kompensasi pembulatan di bidang terakhir), field
+// lain (target/target2/holder/subIndicatorTargets) disalin identik ke semua bidang baris itu.
+const expandAssignmentsForSave = (rows: Assignment[]) => rows.flatMap((a) => {
+  const n = a.bidang.length;
+  const share = Math.round((a.persenAgregasi / n) * 100) / 100;
+  return a.bidang.map((bidang, idx) => ({
+    ...a, bidang,
+    persenAgregasi: idx === n - 1 ? Math.round((a.persenAgregasi - share * (n - 1)) * 100) / 100 : share,
+  }));
+});
 
 // Beda dgn num() longgar di common/capaian.ts (backend, strip huruf shg "Tanggal 5" jadi 5) —
 // di sini SELURUH string harus berupa angka valid, else null. Dipakai gating fitur auto-hitung
@@ -152,6 +172,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const [autoCalcPersen, setAutoCalcPersen] = useState(false);
   // Baris assignment yang sedang expand utk edit target sub-indikator (KPI Komposit).
   const [expandedAssignment, setExpandedAssignment] = useState<number | null>(null);
+  // Baris assignment yang sedang expand utk pilih bidang (multi-select checkbox).
+  const [expandedBidangRow, setExpandedBidangRow] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -179,7 +201,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setEditingId(null); setEditingIsPending(false); setKmType('draft'); setAggregationMethod('weighted');
     setIndikator(''); setFormula(''); setSatuan(''); setBobotKm('');
     setTargetParent(''); setAssignments([emptyAssignment()]); setFormError(null); setShowForm(false);
-    setIsComposite(false); setSubIndicators([]); setAutoCalcPersen(false); setExpandedAssignment(null);
+    setIsComposite(false); setSubIndicators([]); setAutoCalcPersen(false); setExpandedAssignment(null); setExpandedBidangRow(null);
   };
 
   const handleEdit = (m: KpiMasterRow) => {
@@ -187,7 +209,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setIndikator(m.indikator); setFormula(m.formula);
     setSatuan(m.satuan); setBobotKm(m.bobotKm ?? ''); setTargetParent(m.targetParent);
     setAssignments(m.assignments.map((a) => ({
-      unitCode: a.unitCode, bidang: a.bidang, holder: a.holder, target: a.target, target2: a.target2,
+      unitCode: a.unitCode, bidang: [a.bidang], holder: a.holder, target: a.target, target2: a.target2,
       persenAgregasi: a.persenAgregasi ?? 0,
       reviewerSlots: a.reviewerSlots ?? null,
       subIndicatorTargets: a.subIndicatorTargets ?? null,
@@ -201,22 +223,29 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
 
   const addAssignment = () => setAssignments((prev) => {
     const next = [...prev, emptyAssignment()];
-    // Dari 1 assignment (Bobot Agregasi otomatis 100%) ke 2+ — reset ke kosong, wajib diisi
+    // Dari 1 bidang total (Bobot Agregasi otomatis 100%) ke 2+ — reset ke kosong, wajib diisi
     // manual (hindari asumsi split yang mungkin salah, mis. bila baris lama masih bernilai 100).
-    return prev.length === 1 ? next.map((a) => ({ ...a, persenAgregasi: 0 })) : next;
+    const totalBefore = prev.reduce((s, a) => s + a.bidang.length, 0);
+    return totalBefore === 1 ? next.map((a) => ({ ...a, persenAgregasi: 0 })) : next;
   });
   const removeAssignment = (i: number) => setAssignments((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
-  const updateAssignment = (i: number, field: Exclude<keyof Assignment, 'persenAgregasi' | 'reviewerSlots'>, value: string) =>
+  const updateAssignment = (i: number, field: Exclude<keyof Assignment, 'persenAgregasi' | 'reviewerSlots' | 'bidang' | 'subIndicatorTargets'>, value: string) =>
     setAssignments((prev) => prev.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)));
   // Unit KP dan UPMK punya taksonomi Bidang berbeda (6 bidang KI vs 3 bagian UPMK) —
   // ganti unit harus mereset Bidang ke opsi valid pada taksonomi barunya.
   const updateAssignmentUnit = (i: number, unitCode: string) =>
+    setAssignments((prev) => prev.map((a, idx) => (idx === i ? { ...a, unitCode, bidang: [bidangOptionsFor(unitCode)[0]] } : a)));
+  // Tambah/hapus 1 bidang dari baris — minimal 1 bidang per baris (tak boleh dikosongkan lewat sini).
+  const toggleRowBidang = (rowIdx: number, b: string) =>
     setAssignments((prev) => prev.map((a, idx) => {
-      if (idx !== i) return a;
-      const options = bidangOptionsFor(unitCode);
-      const bidang = options.includes(a.bidang) ? a.bidang : options[0];
-      return { ...a, unitCode, bidang };
+      if (idx !== rowIdx) return a;
+      const has = a.bidang.includes(b);
+      if (has && a.bidang.length <= 1) return a;
+      return { ...a, bidang: has ? a.bidang.filter((x) => x !== b) : [...a.bidang, b] };
     }));
+  // Bidang yang dipakai baris LAIN pada unit yang sama — dicegah dipilih ganda di baris ini.
+  const bidangUsedElsewhere = (rowIdx: number, unitCode: string) =>
+    new Set(assignments.flatMap((a, idx) => (idx !== rowIdx && a.unitCode === unitCode ? a.bidang : [])));
   const updatePersen = (i: number, value: string) => {
     const n = value === '' ? 0 : Number(value);
     setAssignments((prev) => prev.map((a, idx) => (idx === i ? { ...a, persenAgregasi: Number.isFinite(n) ? n : a.persenAgregasi } : a)));
@@ -230,9 +259,11 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       next[subIdx] = { ...next[subIdx], [field]: value };
       return { ...a, subIndicatorTargets: next };
     }));
-  // 1 assignment saja → tak ada yang perlu dibagi, Bobot Agregasi otomatis 100% (tak diminta
-  // diisi manual). Baru relevan & wajib diisi manual saat assignment-nya lebih dari satu.
-  const isSingleAssignment = assignments.length === 1;
+  // 1 bidang total saja (lintas semua baris) → tak ada yang perlu dibagi, Bobot Agregasi otomatis
+  // 100% (tak diminta diisi manual). Baru relevan & wajib diisi manual saat totalnya lebih dari
+  // satu — dihitung dari total bidang, bukan jumlah baris, krn 1 baris bisa punya banyak bidang.
+  const totalBidangCount = assignments.reduce((s, a) => s + a.bidang.length, 0);
+  const isSingleAssignment = totalBidangCount === 1;
   const totalPersenForm = isSingleAssignment ? 100 : assignments.reduce((s, a) => s + (a.persenAgregasi || 0), 0);
   const anyPersenSet = isSingleAssignment || assignments.some((a) => (a.persenAgregasi || 0) > 0);
 
@@ -300,9 +331,11 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     if (!indikator.trim()) { setFormError('Nama indikator wajib diisi.'); return; }
     const keys = new Set<string>();
     for (const a of assignments) {
-      const k = `${a.unitCode}||${a.bidang}`;
-      if (keys.has(k)) { setFormError(`Assignment ganda: ${UNIT_NAMES[a.unitCode]} — ${a.bidang}`); return; }
-      keys.add(k);
+      for (const b of a.bidang) {
+        const k = `${a.unitCode}||${b}`;
+        if (keys.has(k)) { setFormError(`Assignment ganda: ${UNIT_NAMES[a.unitCode]} — ${b}`); return; }
+        keys.add(k);
+      }
     }
     if (aggregationMethod === 'weighted' && anyPersenSet && Math.abs(totalPersenForm - 100) > 0.01) {
       setFormError(`Total bobot agregasi harus 100%, saat ini ${totalPersenForm}%.`);
@@ -313,7 +346,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     // karena mudah terlewat & user diminta lengkapi dulu sebelum bisa disimpan sama sekali.
     const missingTargets = isComposite
       ? subIndicators.filter((s) => !s.target.trim()).map((s) => `Sub-indikator "${s.nama.trim() || '(tanpa nama)'}"`)
-      : assignments.filter((a) => !a.target.trim()).map((a) => `${UNIT_NAMES[a.unitCode] ?? a.unitCode} — ${a.bidang}`);
+      : assignments.filter((a) => !a.target.trim()).map((a) => `${UNIT_NAMES[a.unitCode] ?? a.unitCode} — ${a.bidang.join(', ')}`);
     if (missingTargets.length > 0) { setMissingTargetItems(missingTargets); return; }
     if (isComposite) {
       if (subIndicators.length === 0) { setFormError('Tambahkan minimal satu sub-indikator, atau matikan mode Komposit.'); return; }
@@ -332,9 +365,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     }
     setFormError(null); setBusy(true);
     try {
+      const expanded = expandAssignmentsForSave(assignments);
       const assignmentsToSave = isSingleAssignment && aggregationMethod === 'weighted'
-        ? assignments.map((a) => ({ ...a, persenAgregasi: 100 }))
-        : assignments;
+        ? expanded.map((a) => ({ ...a, persenAgregasi: 100 }))
+        : expanded;
       await kpiMaster.save({
         id: editingId ?? undefined, kmType, aggregationMethod, indikator: indikator.trim(), formula, satuan, bobotKm, targetParent, assignments: assignmentsToSave,
         subIndicators: isComposite ? subIndicators : undefined,
@@ -471,7 +505,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-4)' }}>
               <div>
                 <label className="form-label">Satuan</label>
-                <input className="form-input" value={satuan} onChange={(e) => setSatuan(e.target.value)} placeholder="mis. %, MW, Hari kerja" />
+                <select className="form-input" value={satuan} onChange={(e) => setSatuan(e.target.value)}>
+                  <option value="">— Pilih satuan —</option>
+                  {(satuan && !SATUAN_OPTIONS.includes(satuan) ? [satuan, ...SATUAN_OPTIONS] : SATUAN_OPTIONS).map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
               <div>
                 <label className="form-label">Bobot KM (poin)</label>
@@ -545,7 +582,12 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                         <tr key={i}>
                           <td><input className="form-input form-input-sm" value={s.nama} onChange={(e) => updateSubIndicator(i, 'nama', e.target.value)} placeholder="mis. OPEX vs RKAP" /></td>
                           <td><input className="form-input form-input-sm" value={s.formula ?? ''} onChange={(e) => updateSubIndicator(i, 'formula', e.target.value)} placeholder="Rumus / cara pengukuran sub ini" /></td>
-                          <td><input className="form-input form-input-sm" value={s.satuan ?? ''} onChange={(e) => updateSubIndicator(i, 'satuan', e.target.value)} placeholder="%, Rp M, dsb" /></td>
+                          <td>
+                            <select className="form-input form-input-sm" value={s.satuan ?? ''} onChange={(e) => updateSubIndicator(i, 'satuan', e.target.value)}>
+                              <option value="">—</option>
+                              {(s.satuan && !SATUAN_OPTIONS.includes(s.satuan) ? [s.satuan, ...SATUAN_OPTIONS] : SATUAN_OPTIONS).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                            </select>
+                          </td>
                           <td><input className="form-input form-input-sm" style={{ textAlign: 'center' }} value={s.bobot} onChange={(e) => updateSubIndicator(i, 'bobot', e.target.value)} placeholder={aggregationMethod === 'sum' ? '-3' : 'poin'} /></td>
                           <td><input className="form-input form-input-sm" value={s.target} onChange={(e) => updateSubIndicator(i, 'target', e.target.value)} placeholder="Target Sem I" /></td>
                           <td><input className="form-input form-input-sm" value={s.target2 ?? ''} onChange={(e) => updateSubIndicator(i, 'target2', e.target.value)} placeholder="Target tahun" /></td>
@@ -569,9 +611,14 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
             {/* Assignments */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-                <label className="form-label" style={{ marginBottom: 0 }}>Assign ke Unit / Bidang ({assignments.length})</label>
+                <label className="form-label" style={{ marginBottom: 0 }}>Assign ke Unit / Bidang ({totalBidangCount})</label>
                 <button className="btn btn-ghost btn-sm" onClick={addAssignment}><Plus size={14} /> Tambah Assignment</button>
               </div>
+              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '0 0 var(--space-2)' }}>
+                Satu baris bisa punya lebih dari 1 Bidang sekaligus (klik &quot;+ Bidang&quot; di kolom Bidang) —
+                Target/PJ/Bobot Agregasi baris itu berlaku sama ke semua bidang terpilih; saat disimpan tiap
+                bidang tetap jadi dokumen KM & alur realisasi sendiri-sendiri seperti biasa.
+              </p>
               <p style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)', margin: '0 0 var(--space-2)' }}>
                 {aggregationMethod === 'weighted' ? (
                   isSingleAssignment ? (
@@ -626,9 +673,33 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                           </select>
                         </td>
                         <td>
-                          <select className="form-input form-input-sm" value={a.bidang} onChange={(e) => updateAssignment(i, 'bidang', e.target.value)}>
-                            {bidangOptionsFor(a.unitCode).map((b) => <option key={b} value={b}>{b}</option>)}
-                          </select>
+                          {a.unitCode === 'KP' ? (
+                            // Kantor Induk: tetap single-select seperti semula — target/PJ tiap bidang KP
+                            // biasanya beda-beda & tak sesederhana UPMK, jadi multi-bidang-per-baris
+                            // sengaja TIDAK diaktifkan di sini (khusus diminta hanya utk UPMK).
+                            <select
+                              className="form-input form-input-sm" value={a.bidang[0] ?? ''}
+                              onChange={(e) => setAssignments((prev) => prev.map((row, idx) => (idx === i ? { ...row, bidang: [e.target.value] } : row)))}
+                            >
+                              {bidangOptionsFor(a.unitCode).map((b) => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                          ) : (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                              {a.bidang.map((b) => (
+                                <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 4px' }}>
+                                  {b}
+                                  <button
+                                    onClick={() => toggleRowBidang(i, b)} disabled={a.bidang.length <= 1}
+                                    style={{ border: 'none', background: 'none', cursor: a.bidang.length <= 1 ? 'not-allowed' : 'pointer', color: 'var(--color-text-muted)', padding: 0, lineHeight: 1 }}
+                                    title="Hapus bidang ini dari baris"
+                                  >×</button>
+                                </span>
+                              ))}
+                              <button className="btn btn-ghost btn-sm" onClick={() => setExpandedBidangRow(expandedBidangRow === i ? null : i)}>
+                                <Plus size={11} /> Bidang
+                              </button>
+                            </div>
+                          )}
                         </td>
                         <td><input className="form-input form-input-sm" value={a.holder} onChange={(e) => updateAssignment(i, 'holder', e.target.value)} placeholder="Nama PJ" /></td>
                         {isComposite ? (
@@ -660,6 +731,23 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                           <button className="btn btn-ghost btn-sm" disabled={assignments.length <= 1} onClick={() => removeAssignment(i)} style={{ color: 'var(--color-danger)' }}><Trash2 size={13} /></button>
                         </td>
                       </tr>
+                      {a.unitCode !== 'KP' && expandedBidangRow === i && (
+                        <tr style={{ background: 'var(--color-surface-2)' }}>
+                          <td colSpan={5 + (aggregationMethod === 'weighted' && !isSingleAssignment ? 1 : 0) + 1} style={{ padding: 'var(--space-2) var(--space-4)' }}>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              {bidangOptionsFor(a.unitCode).map((b) => {
+                                const usedElsewhere = bidangUsedElsewhere(i, a.unitCode).has(b);
+                                return (
+                                  <label key={b} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)', opacity: usedElsewhere ? 0.5 : 1, cursor: usedElsewhere ? 'not-allowed' : 'pointer' }}>
+                                    <input type="checkbox" disabled={usedElsewhere} checked={a.bidang.includes(b)} onChange={() => toggleRowBidang(i, b)} />
+                                    {b}{usedElsewhere && ' (dipakai baris lain)'}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                       {isComposite && expandedAssignment === i && (
                         <tr style={{ background: 'var(--color-surface-2)' }}>
                           <td colSpan={5 + (aggregationMethod === 'weighted' && !isSingleAssignment ? 1 : 0) + 1} style={{ padding: 0 }}>
