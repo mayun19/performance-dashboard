@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, scoreItems, dedupFanOutRealisasi, resolveTarget, computeCapaian, computeNilai, breakdownComposite, specimenOrder, resolvePolarity, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, scoreItems, dedupFanOutRealisasi, resolveTarget, resolveCapaian, computeNilai, breakdownComposite, specimenOrder, resolvePolarity, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class ExecutiveService {
@@ -178,7 +178,7 @@ export class ExecutiveService {
         } else {
           target = resolveTarget(it, targetOfRecord);
           actual = num(it['realisasi']);
-          achievement = computeCapaian(target, actual, isInverse);
+          achievement = resolveCapaian(target, actual, isInverse, it['capaianResmi']);
           nilai = computeNilai(bobot, achievement);
         }
         const prevSpark = (existing?.['sparkline'] ?? Array(12).fill(0)) as number[];

@@ -266,6 +266,11 @@ export function ApprovalsPage() {
   const [realExpanded, setRealExpanded] = useState<string | null>(null);
   const [realBusy, setRealBusy] = useState(false);
   const [realBulkBusy, setRealBulkBusy] = useState(false);
+  // Pencapaian Resmi (diisi reviewer saat review, menang atas hitungan otomatis — lihat
+  // common/capaian.ts resolveCapaian). Key per package: `${itemKey}` (flat) atau
+  // `${itemKey}.${subIdx}` (komposit). Kosong (tak pernah diedit) → tetap fallback otomatis.
+  const [realCapaianEdits, setRealCapaianEdits] = useState<Record<string, Record<string, string>>>({});
+  const [realCapaianBusy, setRealCapaianBusy] = useState<string | null>(null);
   // Modal pasca-keputusan Realisasi: arahkan reviewer ke "Tinjauan Realisasi Bulanan" utk
   // melihat kembali dokumen yang baru saja diputuskan (lihat riwayat keputusan di sana).
   const [postReviewModal, setPostReviewModal] = useState<{ action: 'approve' | 'reject'; unitCode: string; bidang: string } | null>(null);
@@ -1149,6 +1154,39 @@ export function ApprovalsPage() {
     }
   };
 
+  // Simpan Pencapaian Resmi per package — reviewer mengoreksi/mengonfirmasi angka % resmi
+  // (menang atas hitungan otomatis, lihat common/capaian.ts resolveCapaian) sebelum menyetujui.
+  // Pakai endpoint updateValues() yang sudah ada (dipakai jg utk koreksi Realisasi reviewer),
+  // hanya berlaku selama status 'submitted' & langkah aktif milik reviewer ybs.
+  const handleSaveCapaianResmi = async (rl: RealisasiKinerja) => {
+    const edits = realCapaianEdits[rl.id];
+    if (!edits || Object.keys(edits).length === 0) return;
+    setRealCapaianBusy(rl.id);
+    try {
+      const updated: RealisasiKinerja['values'] = {};
+      for (const [key, it] of Object.entries(rl.values ?? {})) {
+        if (Array.isArray(it.subIndicators) && it.subIndicators.length > 0) {
+          updated[key] = {
+            ...it,
+            subIndicators: it.subIndicators.map((si, j) => {
+              const edited = edits[`${key}.${j}`];
+              return edited !== undefined ? { ...si, capaianResmi: edited } : si;
+            }),
+          };
+        } else {
+          const edited = edits[key];
+          updated[key] = edited !== undefined ? { ...it, capaianResmi: edited } : it;
+        }
+      }
+      await inputRealisasi.updateValues(rl.id, updated, 'Koreksi/konfirmasi Pencapaian Resmi');
+      setRealCapaianEdits((c) => { const n = { ...c }; delete n[rl.id]; return n; });
+      loadReal();
+    } catch (e) {
+      alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan Pencapaian Resmi');
+    } finally {
+      setRealCapaianBusy(null);
+    }
+  };
 
   const startEditKm = (k: KontrakManajemen) => {
     setKmEditItems((k.kpiItems as Record<string, unknown>[]).map((item) => ({ ...(item as object) })));
@@ -1572,24 +1610,81 @@ export function ApprovalsPage() {
                             <td colSpan={9} style={{ background: 'var(--color-surface-2)', padding: 0 }}>
                               <table className="data-table compact" style={{ margin: 0 }}>
                                 <thead>
-                                  <tr><th>No</th><th>Indikator</th><th>Satuan</th><th className="num">Bobot</th><th className="num">Target</th><th className="num">Realisasi</th></tr>
+                                  <tr>
+                                    <th>No</th><th>Indikator</th><th>Satuan</th><th className="num">Bobot</th>
+                                    <th className="num">Target</th><th className="num">Realisasi</th>
+                                    <th className="num" title="Saran staff/formula — informasional, tak dipakai skor">Saran</th>
+                                    <th className="num" title="Angka final yang dipakai skor dashboard — kosong = pakai hitungan otomatis">Pencapaian Resmi (%)</th>
+                                  </tr>
                                 </thead>
                                 <tbody>
-                                  {Object.entries(rl.values ?? {}).map(([key, vRaw], idx) => {
-                                    const it = vRaw as { indikator?: string; satuan?: string; bobot?: unknown; target?: unknown; realisasi?: unknown };
+                                  {Object.entries(rl.values ?? {}).map(([key, it], idx) => {
+                                    const subs = it.subIndicators ?? [];
+                                    if (subs.length > 0) {
+                                      return (
+                                        <Fragment key={key}>
+                                          <tr>
+                                            <td>{idx + 1}</td>
+                                            <td colSpan={7} style={{ fontWeight: 700 }}>{it.indikator ?? '—'} <span style={{ fontWeight: 400, fontStyle: 'italic', color: 'var(--color-text-muted)' }}>(Komposit)</span></td>
+                                          </tr>
+                                          {subs.map((si, j) => {
+                                            const editKey = `${key}.${j}`;
+                                            const resmiVal = realCapaianEdits[rl.id]?.[editKey] ?? si.capaianResmi ?? '';
+                                            return (
+                                              <tr key={editKey}>
+                                                <td />
+                                                <td style={{ paddingLeft: 'var(--space-4)', color: 'var(--color-text-muted)' }}>↳ {si.nama ?? '—'}</td>
+                                                <td>{si.satuan ?? '—'}</td>
+                                                <td className="num">{String(si.bobot ?? '—')}</td>
+                                                <td className="num">{String(si.target2 ?? si.target ?? '—')}</td>
+                                                <td className="num" style={{ fontWeight: 700 }}>{String(si.realisasi ?? '—')}</td>
+                                                <td className="num" style={{ color: 'var(--color-text-muted)' }}>{si.capaianSaran ?? '—'}</td>
+                                                <td className="num">
+                                                  <input
+                                                    type="text" className="form-input form-input-sm" style={{ width: 70, textAlign: 'right' }}
+                                                    value={resmiVal}
+                                                    onChange={(e) => setRealCapaianEdits((c) => ({ ...c, [rl.id]: { ...(c[rl.id] ?? {}), [editKey]: e.target.value } }))}
+                                                    placeholder="%"
+                                                  />
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </Fragment>
+                                      );
+                                    }
+                                    const resmiVal = realCapaianEdits[rl.id]?.[key] ?? it.capaianResmi ?? '';
                                     return (
                                       <tr key={key}>
                                         <td>{idx + 1}</td>
                                         <td>{it.indikator ?? '—'}</td>
                                         <td>{it.satuan ?? '—'}</td>
                                         <td className="num">{String(it.bobot ?? '—')}</td>
-                                        <td className="num">{String(it.target ?? '—')}</td>
+                                        <td className="num">{String(it.target2 ?? it.target ?? '—')}</td>
                                         <td className="num" style={{ fontWeight: 700 }}>{String(it.realisasi ?? '—')}</td>
+                                        <td className="num" style={{ color: 'var(--color-text-muted)' }}>{it.capaianSaran ?? '—'}</td>
+                                        <td className="num">
+                                          <input
+                                            type="text" className="form-input form-input-sm" style={{ width: 70, textAlign: 'right' }}
+                                            value={resmiVal}
+                                            onChange={(e) => setRealCapaianEdits((c) => ({ ...c, [rl.id]: { ...(c[rl.id] ?? {}), [key]: e.target.value } }))}
+                                            placeholder="%"
+                                          />
+                                        </td>
                                       </tr>
                                     );
                                   })}
                                 </tbody>
                               </table>
+                              <div style={{ padding: 'var(--space-2) var(--space-4)', display: 'flex', justifyContent: 'flex-end' }}>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  disabled={!realCapaianEdits[rl.id] || Object.keys(realCapaianEdits[rl.id]).length === 0 || realCapaianBusy === rl.id}
+                                  onClick={() => handleSaveCapaianResmi(rl)}
+                                >
+                                  {realCapaianBusy === rl.id ? 'Menyimpan…' : 'Simpan Pencapaian Resmi'}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         )}

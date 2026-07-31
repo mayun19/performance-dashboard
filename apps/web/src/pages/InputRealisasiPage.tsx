@@ -18,7 +18,7 @@ const BIDANG_SORT: Record<string, number> = {
 
 // Sub-indikator KPI komposit (opt-in, generik) — lihat kpi-master.service.ts SubIndicatorInput.
 // Definisi target/bobot dari dokumen KM; `realisasi` diisi di sini saat submit.
-type SubIndicatorItem = { nama: string; satuan?: string; bobot: string; target: string; target2?: string; realisasi?: number | string; formula?: string };
+type SubIndicatorItem = { nama: string; satuan?: string; bobot: string; target: string; target2?: string; realisasi?: number | string; formula?: string; polaritas?: 'positive' | 'negative' };
 
 type KpiItem = {
   no?: number; indikator?: string; formula?: string; satuan?: string;
@@ -26,6 +26,20 @@ type KpiItem = {
   bidang?: string; realisasi?: number | string;
   masterKpiId?: string; // tautan ke KpiAssignment untuk resolusi living target (KM Sementara)
   subIndicators?: SubIndicatorItem[]; // non-kosong = item ini "komposit" — realisasi diisi per-sub
+  polaritas?: 'positive' | 'negative';
+};
+
+// Saran Pencapaian (%) murni tampilan — mirror ringkas resolvePolarity+computeCapaian backend
+// (common/capaian.ts), TAK perlu presisi identik krn nilainya cuma saran (capaianSaran), tak
+// pernah dibaca skoring. Target2 (target tahun) dipakai bila ada, else target Sem I.
+const suggestCapaian = (targetRaw: unknown, target2Raw: unknown, actualRaw: unknown, satuan: string, polaritas?: string): string => {
+  const clean = (v: unknown) => parseFloat(String(v ?? '').replace(',', '.').replace(/[^0-9.-]/g, ''));
+  const t = clean(target2Raw) || clean(targetRaw);
+  const a = clean(actualRaw);
+  if (!Number.isFinite(t) || !Number.isFinite(a) || t <= 0 || a <= 0) return '';
+  const isInverse = polaritas === 'negative' ? true : polaritas === 'positive' ? false : satuan.trim().toLowerCase() === 'hari kerja';
+  const pct = isInverse ? (t / a) * 100 : (a / t) * 100;
+  return String(Math.round(Math.min(pct, 110) * 100) / 100);
 };
 
 // Fase 5: RevisionLog field='values' menyimpan seluruh blob values lama/baru — tampilkan
@@ -102,6 +116,9 @@ export function InputRealisasiPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  // Saran Pencapaian (%) — diisi otomatis (suggestCapaian) saat Realisasi diketik, boleh ditimpa
+  // manual staff. Murni informasional (capaianSaran), tidak pernah jadi skor resmi.
+  const [capaianValues, setCapaianValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -198,6 +215,7 @@ export function InputRealisasiPage() {
           merged = merged.sort((a, b) => (BIDANG_SORT[a.bidang ?? ''] ?? 99) - (BIDANG_SORT[b.bidang ?? ''] ?? 99));
           setKpiList(merged);
           setValues({});
+          setCapaianValues({});
         }
       } catch (e) {
         setError((e as Error)?.message ?? 'Gagal memuat data');
@@ -239,10 +257,10 @@ export function InputRealisasiPage() {
         if (kpi.subIndicators && kpi.subIndicators.length > 0) {
           bucket[`kpi_${i}`] = {
             ...kpi,
-            subIndicators: kpi.subIndicators.map((si, j) => ({ ...si, realisasi: values[`${i}.${j}`] ?? '' })),
+            subIndicators: kpi.subIndicators.map((si, j) => ({ ...si, realisasi: values[`${i}.${j}`] ?? '', capaianSaran: capaianValues[`${i}.${j}`] ?? '' })),
           };
         } else {
-          bucket[`kpi_${i}`] = { ...kpi, realisasi: values[String(i)] ?? '' };
+          bucket[`kpi_${i}`] = { ...kpi, realisasi: values[String(i)] ?? '', capaianSaran: capaianValues[String(i)] ?? '' };
         }
       });
       for (const [bidang, payload] of byBidang) {
@@ -251,6 +269,7 @@ export function InputRealisasiPage() {
       setPickerOpen(false);
       setSubmitted(true);
       setValues({});
+      setCapaianValues({});
       const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
       setHistory(hist as unknown[]);
       setTimeout(() => setSubmitted(false), 3000);
@@ -455,6 +474,7 @@ export function InputRealisasiPage() {
                   <th className="num">Target {CURRENT_YEAR}</th>
                   {anyLivingTarget && <th className="num" title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">KM Sementara</th>}
                   <th>Realisasi</th>
+                  <th title="Dihitung otomatis dari target vs realisasi, boleh ditimpa — hanya saran, evaluasi resmi tetap di reviewer">Pencapaian (saran)</th>
                 </tr>
               </thead>
               <tbody>
@@ -505,8 +525,27 @@ export function InputRealisasiPage() {
                               className="form-input form-input-sm"
                               style={{ borderColor: hasVal ? 'rgba(34,197,94,0.5)' : undefined }}
                               value={values[String(i)] ?? ''}
-                              onChange={e => setValues(v => ({ ...v, [String(i)]: e.target.value }))}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setValues(v => ({ ...v, [String(i)]: val }));
+                                setCapaianValues(c => ({ ...c, [String(i)]: suggestCapaian(kpi.target, kpi.target2, val, kpi.satuan ?? '', kpi.polaritas) }));
+                              }}
                               placeholder={`Target: ${kpi.target ?? '—'}`}
+                            />
+                          )
+                        ) : <span style={{ color: 'var(--color-text-subtle)' }}>—</span>}
+                      </td>
+                      <td style={{ minWidth: 100 }}>
+                        {formOpen ? (
+                          isComposite ? (
+                            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>—</span>
+                          ) : (
+                            <input
+                              type="text"
+                              className="form-input form-input-sm"
+                              value={capaianValues[String(i)] ?? ''}
+                              onChange={e => setCapaianValues(c => ({ ...c, [String(i)]: e.target.value }))}
+                              placeholder="%"
                             />
                           )
                         ) : <span style={{ color: 'var(--color-text-subtle)' }}>—</span>}
@@ -533,10 +572,25 @@ export function InputRealisasiPage() {
                                 className="form-input form-input-sm"
                                 style={{ borderColor: subHasVal ? 'rgba(34,197,94,0.5)' : undefined }}
                                 value={subVal}
-                                onChange={e => setValues(v => ({ ...v, [`${i}.${j}`]: e.target.value }))}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setValues(v => ({ ...v, [`${i}.${j}`]: val }));
+                                  setCapaianValues(c => ({ ...c, [`${i}.${j}`]: suggestCapaian(si.target, si.target2, val, si.satuan ?? '', si.polaritas) }));
+                                }}
                                 placeholder={`Target: ${si.target ?? '—'}`}
                               />
                             ) : <span style={{ color: 'var(--color-text-subtle)' }}>{subVal || '—'}</span>}
+                          </td>
+                          <td style={{ minWidth: 100 }}>
+                            {formOpen ? (
+                              <input
+                                type="text"
+                                className="form-input form-input-sm"
+                                value={capaianValues[`${i}.${j}`] ?? ''}
+                                onChange={e => setCapaianValues(c => ({ ...c, [`${i}.${j}`]: e.target.value }))}
+                                placeholder="%"
+                              />
+                            ) : <span style={{ color: 'var(--color-text-subtle)' }}>{capaianValues[`${i}.${j}`] || '—'}</span>}
                           </td>
                         </tr>
                       );

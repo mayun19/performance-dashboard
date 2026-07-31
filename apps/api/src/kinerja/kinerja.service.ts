@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, resolveTarget, computeCapaian, computeNilai, dedupFanOutRealisasi, specimenOrder, resolvePolarity, type PersenLookup, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, resolveTarget, resolveCapaian, computeNilai, dedupFanOutRealisasi, specimenOrder, resolvePolarity, type PersenLookup, type TargetOverrideMap } from '../common/capaian';
 
 const UNIT_NAMES: Record<string, string> = {
   KP: 'Kantor Induk', UPMK1: 'UPMK I', UPMK2: 'UPMK II',
@@ -170,7 +170,7 @@ export class KinerjaService {
             }
             const target = num(si['target2'] ?? si['target']);
             const satuan = String(si['satuan'] ?? '').toLowerCase();
-            const capaian = subBobot > 0 && target > 0 && avgReal > 0 ? computeCapaian(target, avgReal, resolvePolarity(satuan, si['polaritas'])) : 0;
+            const capaian = subBobot > 0 && target > 0 && avgReal > 0 ? resolveCapaian(target, avgReal, resolvePolarity(satuan, si['polaritas']), si['capaianResmi']) : 0;
             nilaiSum += computeNilai(subBobot, capaian);
           });
           const nilai = r2(nilaiSum);
@@ -186,7 +186,7 @@ export class KinerjaService {
         }
         const target = resolveTarget(e.it, targetOfRecord);
         const satuan = String(e.it['satuan'] ?? '').toLowerCase();
-        const capaian = bobotInduk > 0 && target > 0 && avgReal > 0 ? computeCapaian(target, avgReal, resolvePolarity(satuan, e.it['polaritas'])) : 0;
+        const capaian = bobotInduk > 0 && target > 0 && avgReal > 0 ? resolveCapaian(target, avgReal, resolvePolarity(satuan, e.it['polaritas']), e.it['capaianResmi']) : 0;
         const nilai = computeNilai(bobotInduk, capaian);
         totalNilai += nilai;
         return { indikator, satuan: String(e.it['satuan'] ?? ''), bobot: round2(bobotInduk), target: round2(target), realisasi: round2(avgReal), capaian: round2(capaian), nilai: round2(nilai) };
