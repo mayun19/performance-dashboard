@@ -410,6 +410,12 @@ model KpiMaster {
   satuan       String   @default("")
   bobotKm      String   @default("") // bobot skor KM (poin) — satu nilai per-KPI, sama utk semua assignment
   targetParent String   @default("") // target gabungan (bisa non-numerik, mis. "Tanggal 5")
+  // Polaritas EKSPLISIT ('positive'=Maximize | 'negative'=Minimize), dipilih RPC saat definisi —
+  // menggantikan heuristik lama (isInverse = satuan==='hari kerja') yg terbukti salah utk KPI
+  // Minimize bersatuan lain (mis. "Pengendalian NAC", satuan Rp Miliar). Item lama tanpa nilai
+  // eksplisit (subIndicators JSON) tetap fallback ke heuristik lama di common/capaian.ts
+  // resolvePolarity() — field DB ini defaultnya 'positive', item existing tak berubah perilaku.
+  polaritas    String   @default("positive") // 'positive' | 'negative'
   createdBy    String
   createdById  String?
   status       String   @default("active") // active | superseded (Fase D — diganti versi lebih baru)

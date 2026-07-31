@@ -5,11 +5,13 @@ import { useAuth } from '../context/AuthContext';
 import { usePeriod } from '../context/PeriodContext';
 import {
   Layers, Plus, Trash2, Edit2, X, ChevronDown, AlertCircle, CheckCircle, PieChart,
-  Check, FileText, Send, FileCheck2, Boxes,
+  Check, FileText, Send, FileCheck2, Boxes, Calendar,
 } from 'lucide-react';
 import { SkeletonTable, EmptyState, ErrorState } from '../components/LoadState';
 import ReviewerPickerModal from '../components/ReviewerPickerModal';
 import type { ReviewerCandidate } from '../components/ReviewerPickerModal';
+import DisburseTargetModal from '../components/DisburseTargetModal';
+import { strictNum, satuanCategory } from '../lib/satuan';
 import type { KontrakManajemen } from '../lib/types';
 
 const UNIT_OPTIONS = [
@@ -107,8 +109,9 @@ type KpiMasterRow = {
   isPending: boolean; isCurrent: boolean;
   aggregationMethod: 'weighted' | 'sum';
   subIndicators: SubIndicatorInput[] | null;
+  polaritas?: 'positive' | 'negative';
 };
-const emptySubIndicator = (): SubIndicatorInput => ({ nama: '', satuan: '', bobot: '', target: '', target2: '', formula: '' });
+const emptySubIndicator = (): SubIndicatorInput => ({ nama: '', satuan: '', bobot: '', target: '', target2: '', formula: '', polaritas: 'positive' });
 const ROLE_LABEL: Record<string, string> = { ASMAN: 'ASMAN', MANAJER: 'Manajer', SRMANAJER: 'Senior Manajer', GM: 'General Manager' };
 const candDesc = (c: ReviewerCandidate) => `${ROLE_LABEL[c.role] ?? c.role}${c.unit && c.unit !== 'KP' ? ' · ' + (UNIT_NAMES[c.unit] ?? c.unit) : ''}`;
 type RollupBreakdown = { unitCode: string; bidang: string; persenAgregasi: number; realisasi: number | null; kontribusi: number; hasData: boolean };
@@ -130,14 +133,6 @@ const expandAssignmentsForSave = (rows: Assignment[]) => rows.flatMap((a) => {
     persenAgregasi: idx === n - 1 ? Math.round((a.persenAgregasi - share * (n - 1)) * 100) / 100 : share,
   }));
 });
-
-// Beda dgn num() longgar di common/capaian.ts (backend, strip huruf shg "Tanggal 5" jadi 5) —
-// di sini SELURUH string harus berupa angka valid, else null. Dipakai gating fitur auto-hitung
-// Bobot Agregasi supaya tak salah aktif utk target non-numerik (tanggal/milestone).
-const strictNum = (s: string): number | null => {
-  const t = s.trim().replace(',', '.');
-  return t !== '' && /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
-};
 
 function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const { user } = useAuth();
@@ -164,6 +159,9 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const [indikator, setIndikator] = useState('');
   const [formula, setFormula] = useState('');
   const [satuan, setSatuan] = useState('');
+  // Polaritas indikator induk (non-komposit) — default Positif (Maximize), sesuai mayoritas KPI.
+  // Hanya relevan/ditampilkan saat TIDAK komposit — sub-indikator komposit punya polaritas sendiri2.
+  const [polaritas, setPolaritas] = useState<'positive' | 'negative'>('positive');
   const [bobotKm, setBobotKm] = useState('');
   const [targetParent, setTargetParent] = useState('');
   const [assignments, setAssignments] = useState<Assignment[]>([emptyAssignment()]);
@@ -174,6 +172,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const [expandedAssignment, setExpandedAssignment] = useState<number | null>(null);
   // Baris assignment yang sedang expand utk pilih bidang (multi-select checkbox).
   const [expandedBidangRow, setExpandedBidangRow] = useState<number | null>(null);
+  // Modal disburse target 12 bulan — dipicu dari tabel assignment read-only (baris expand daftar).
+  const [disburseFor, setDisburseFor] = useState<{ assignment: AssignmentRow; indikator: string; satuan: string; unitLabel: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -199,7 +199,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
 
   const resetForm = () => {
     setEditingId(null); setEditingIsPending(false); setKmType('draft'); setAggregationMethod('weighted');
-    setIndikator(''); setFormula(''); setSatuan(''); setBobotKm('');
+    setIndikator(''); setFormula(''); setSatuan(''); setPolaritas('positive'); setBobotKm('');
     setTargetParent(''); setAssignments([emptyAssignment()]); setFormError(null); setShowForm(false);
     setIsComposite(false); setSubIndicators([]); setAutoCalcPersen(false); setExpandedAssignment(null); setExpandedBidangRow(null);
   };
@@ -207,7 +207,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const handleEdit = (m: KpiMasterRow) => {
     setEditingId(m.id); setKmType(m.kmType); setAggregationMethod(m.aggregationMethod ?? 'weighted');
     setIndikator(m.indikator); setFormula(m.formula);
-    setSatuan(m.satuan); setBobotKm(m.bobotKm ?? ''); setTargetParent(m.targetParent);
+    setSatuan(m.satuan); setPolaritas(m.polaritas === 'negative' ? 'negative' : 'positive'); setBobotKm(m.bobotKm ?? ''); setTargetParent(m.targetParent);
     setAssignments(m.assignments.map((a) => ({
       unitCode: a.unitCode, bidang: [a.bidang], holder: a.holder, target: a.target, target2: a.target2,
       persenAgregasi: a.persenAgregasi ?? 0,
@@ -279,11 +279,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   // suatu total, jadi Σ/auto-calc-proporsional (dua-duanya berbasis penjumlahan) tak bermakna.
   // Kata kunci dicek via .includes() pada satuan.trim().toLowerCase() — case-insensitive,
   // substring match (jadi "Hari kerja" & "waktu proses" dst ikut tertangkap).
-  const RATE_LIKE_KEYWORDS = ['hari', 'waktu', 'jam', 'minggu', 'bulan'];
-  const DATE_LIKE_KEYWORDS = ['tanggal', 'tgl', 'deadline'];
-  const isPercentSatuan = satuan.trim() === '%';
-  const isRateLikeSatuan = !isPercentSatuan && RATE_LIKE_KEYWORDS.some((k) => satuan.trim().toLowerCase().includes(k));
-  const isDateLikeSatuan = DATE_LIKE_KEYWORDS.some((k) => satuan.trim().toLowerCase().includes(k));
+  const satuanCat = satuanCategory(satuan);
+  const isPercentSatuan = satuanCat === 'percent';
+  const isRateLikeSatuan = satuanCat === 'rate';
+  const isDateLikeSatuan = satuanCat === 'date';
   // Kategori "rata-rata": % atau durasi/rate non-persen — sama-sama ditampilkan sbg average.
   const isAverageSatuan = isPercentSatuan || isRateLikeSatuan;
   const isNonAdditiveSatuan = isAverageSatuan || isDateLikeSatuan;
@@ -372,6 +371,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       await kpiMaster.save({
         id: editingId ?? undefined, kmType, aggregationMethod, indikator: indikator.trim(), formula, satuan, bobotKm, targetParent, assignments: assignmentsToSave,
         subIndicators: isComposite ? subIndicators : undefined,
+        polaritas,
       });
       resetForm();
       load();
@@ -502,13 +502,24 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
               <label className="form-label">Formula / Metode Perhitungan</label>
               <input className="form-input" value={formula} onChange={(e) => setFormula(e.target.value)} placeholder="Rumus / cara pengukuran KPI" />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-4)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 'var(--space-4)' }}>
               <div>
                 <label className="form-label">Satuan</label>
                 <select className="form-input" value={satuan} onChange={(e) => setSatuan(e.target.value)}>
                   <option value="">— Pilih satuan —</option>
                   {(satuan && !SATUAN_OPTIONS.includes(satuan) ? [satuan, ...SATUAN_OPTIONS] : SATUAN_OPTIONS).map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="form-label">Polaritas</label>
+                {isComposite ? (
+                  <input className="form-input" value="Per sub-indikator" disabled title="KPI komposit — polaritas diatur per sub-indikator di tabel bawah" />
+                ) : (
+                  <select className="form-input" value={polaritas} onChange={(e) => setPolaritas(e.target.value as 'positive' | 'negative')}>
+                    <option value="positive">Positif (Maximize)</option>
+                    <option value="negative">Negatif (Minimize)</option>
+                  </select>
+                )}
               </div>
               <div>
                 <label className="form-label">Bobot KM (poin)</label>
@@ -573,6 +584,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                     <thead>
                       <tr>
                         <th>Nama Sub-Indikator</th><th>Formula / Cara Pengukuran</th><th>Satuan</th>
+                        {aggregationMethod === 'weighted' && <th>Polaritas</th>}
                         <th className="num">{aggregationMethod === 'sum' ? 'Max Penalti (poin)' : 'Bobot (poin)'}</th><th>Target Sem I</th><th>Target {CURRENT_YEAR}</th>
                         <th style={{ width: 40 }} />
                       </tr>
@@ -588,6 +600,14 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                               {(s.satuan && !SATUAN_OPTIONS.includes(s.satuan) ? [s.satuan, ...SATUAN_OPTIONS] : SATUAN_OPTIONS).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
                           </td>
+                          {aggregationMethod === 'weighted' && (
+                            <td>
+                              <select className="form-input form-input-sm" value={s.polaritas ?? 'positive'} onChange={(e) => updateSubIndicator(i, 'polaritas', e.target.value)}>
+                                <option value="positive">Positif</option>
+                                <option value="negative">Negatif</option>
+                              </select>
+                            </td>
+                          )}
                           <td><input className="form-input form-input-sm" style={{ textAlign: 'center' }} value={s.bobot} onChange={(e) => updateSubIndicator(i, 'bobot', e.target.value)} placeholder={aggregationMethod === 'sum' ? '-3' : 'poin'} /></td>
                           <td><input className="form-input form-input-sm" value={s.target} onChange={(e) => updateSubIndicator(i, 'target', e.target.value)} placeholder="Target Sem I" /></td>
                           <td><input className="form-input form-input-sm" value={s.target2 ?? ''} onChange={(e) => updateSubIndicator(i, 'target2', e.target.value)} placeholder="Target tahun" /></td>
@@ -597,7 +617,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                         </tr>
                       ))}
                       <tr style={{ background: 'var(--color-surface-2)' }}>
-                        <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, fontSize: 'var(--text-xs)' }}>{aggregationMethod === 'sum' ? 'Total Max Penalti (= Bobot KM assignment):' : 'Total Bobot (= Bobot KM assignment):'}</td>
+                        <td colSpan={aggregationMethod === 'weighted' ? 4 : 3} style={{ textAlign: 'right', fontWeight: 700, fontSize: 'var(--text-xs)' }}>{aggregationMethod === 'sum' ? 'Total Max Penalti (= Bobot KM assignment):' : 'Total Bobot (= Bobot KM assignment):'}</td>
                         <td className="num" style={{ fontWeight: 700 }}>{totalSubBobot || 0}</td>
                         <td colSpan={3} />
                       </tr>
@@ -877,7 +897,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                         <td colSpan={8} style={{ background: 'var(--color-surface-2)', padding: 0 }}>
                           <table className="data-table compact" style={{ margin: 0 }}>
                             <thead>
-                              <tr><th>Unit</th><th>Bidang</th><th>PJ</th><th>Target Sem I</th><th>Target {CURRENT_YEAR}</th><th className="num">{m.aggregationMethod === 'sum' ? 'Metode' : 'Bobot Agregasi'}</th></tr>
+                              <tr><th>Unit</th><th>Bidang</th><th>PJ</th><th>Target Sem I</th><th>Target {CURRENT_YEAR}</th><th className="num">{m.aggregationMethod === 'sum' ? 'Metode' : 'Bobot Agregasi'}</th><th style={{ width: 40 }}>Bulanan</th></tr>
                             </thead>
                             <tbody>
                               {m.assignments.map((a) => (
@@ -888,6 +908,12 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                   <td>{a.target || '—'}</td>
                                   <td>{a.target2 || '—'}</td>
                                   <td className="num">{m.aggregationMethod === 'sum' ? 'SUM' : (a.persenAgregasi ? `${a.persenAgregasi}%` : '—')}</td>
+                                  <td>
+                                    <button
+                                      className="btn btn-ghost btn-sm" title="Atur target 12 bulan"
+                                      onClick={() => setDisburseFor({ assignment: a, indikator: m.indikator, satuan: m.satuan, unitLabel: UNIT_NAMES[a.unitCode] ?? a.unitCode })}
+                                    ><Calendar size={13} /></button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -940,6 +966,13 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
           </div>
         )}
       </div>
+      {disburseFor && (
+        <DisburseTargetModal
+          assignment={disburseFor.assignment} indikator={disburseFor.indikator}
+          satuan={disburseFor.satuan} unitLabel={disburseFor.unitLabel}
+          onClose={() => setDisburseFor(null)}
+        />
+      )}
     </>
   );
 }

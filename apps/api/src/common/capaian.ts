@@ -29,6 +29,17 @@ export function computeCapaian(target: number, actual: number, isInverse: boolea
   return isInverse ? Math.min((target / actual) * 100, 110) : Math.min((actual / target) * 100, 110);
 }
 
+// Resolusi polaritas → isInverse (boolean) dipakai computeCapaian(). PRIORITAS: field eksplisit
+// `polaritas` ('positive'|'negative', dipilih RPC saat definisi KPI Master) — baru fallback ke
+// heuristik lama (satuan === 'hari kerja') utk item lama yg belum py field ini (backward compat,
+// TAK mengubah perilaku item existing). Field eksplisit menggantikan heuristik yg terbukti keliru
+// utk KPI Minimize bersatuan lain (mis. "Pengendalian NAC", satuan Rp Miliar — lihat commit terkait).
+export function resolvePolarity(satuan: string, polaritas?: unknown): boolean {
+  if (polaritas === 'negative') return true;
+  if (polaritas === 'positive') return false;
+  return satuan.trim().toLowerCase() === 'hari kerja';
+}
+
 export function computeNilai(bobot: number, capaian: number): number {
   return r2((capaian / 100) * bobot);
 }
@@ -53,7 +64,7 @@ export function breakdownComposite(item: Record<string, unknown>): SubIndicatorS
       const capaian = bobot !== 0 ? r2((nilai / bobot) * 100) : 0; // % plafon penalti terpakai
       return { nama: String(si['nama'] ?? ''), satuan, bobot, target, actual, capaian, nilai, formula: String(si['formula'] ?? '') };
     }
-    const capaian = bobot > 0 && target > 0 && actual > 0 ? computeCapaian(target, actual, satuan === 'hari kerja') : 0;
+    const capaian = bobot > 0 && target > 0 && actual > 0 ? computeCapaian(target, actual, resolvePolarity(satuan, si['polaritas'])) : 0;
     return { nama: String(si['nama'] ?? ''), satuan, bobot, target, actual, capaian, nilai: computeNilai(bobot, capaian), formula: String(si['formula'] ?? '') };
   });
 }
@@ -86,7 +97,7 @@ export function scoreItems(items: Record<string, unknown>[], overrides?: TargetO
     const target = resolveTarget(it, overrides);
     const satuan = String(it['satuan'] ?? '').toLowerCase();
     if (bobot > 0 && target > 0 && actual > 0) {
-      const capaian = computeCapaian(target, actual, satuan === 'hari kerja');
+      const capaian = computeCapaian(target, actual, resolvePolarity(satuan, it['polaritas']));
       total += (capaian / 100) * bobot;
     }
   }

@@ -36,6 +36,10 @@ export interface SubIndicatorInput {
   target: string;
   target2?: string;
   formula?: string; // teks deskriptif cara pengukuran sub ini — tak memengaruhi nilai (sama sifatnya dgn KpiMaster.formula)
+  // Polaritas eksplisit sub ini ('positive'|'negative') — hanya berlaku utk sub bobot>0 (positif/
+  // weighted); sub bobot<0 (penalti/SUM) pakai formula pengurang sendiri, tak terpengaruh field ini.
+  // Kosong = fallback heuristik lama (satuan==='hari kerja') di common/capaian.ts resolvePolarity().
+  polaritas?: string;
 }
 export interface SaveMasterInput {
   id?: string;
@@ -50,6 +54,7 @@ export interface SaveMasterInput {
   defaultApproverId?: string;
   aggregationMethod?: string; // 'weighted' | 'sum' (Fase E) — dipilih per-KPI
   subIndicators?: SubIndicatorInput[]; // non-kosong = KPI ini "komposit"
+  polaritas?: string; // 'positive' | 'negative' — indikator non-komposit; lihat SubIndicatorInput.polaritas
 }
 
 // Item yang disebar (fan-out) ke kpiItems dokumen KM. Bentuknya kompatibel dengan
@@ -60,7 +65,7 @@ export interface SaveMasterInput {
 type FannedItem = {
   masterKpiId: string;
   indikator: string; formula: string; satuan: string;
-  bobot: string; target: string; target2: string;
+  bobot: string; target: string; target2: string; polaritas: string;
   subIndicators?: SubIndicatorInput[];
 };
 
@@ -176,10 +181,12 @@ export class KpiMasterService {
       }
       const target = String(r?.target ?? '').trim();
       if (!target) throw new BadRequestException(`Target sub-indikator "${nama}" wajib diisi`);
+      const polaritas = r?.polaritas === 'negative' ? 'negative' : r?.polaritas === 'positive' ? 'positive' : undefined;
       out.push({
         nama, satuan: String(r?.satuan ?? ''), bobot: bobotStr, target,
         target2: String(r?.target2 ?? '') || undefined,
         formula: String(r?.formula ?? '') || undefined,
+        polaritas,
       });
     }
     return out;
@@ -587,6 +594,9 @@ export class KpiMasterService {
       dto.bobotKm = String(compositeBobot);
     }
     const subIndicatorsJson = subIndicators ? (subIndicators as unknown as Prisma.InputJsonValue) : Prisma.JsonNull;
+    // Polaritas eksplisit indikator induk (non-komposit) — 'positive'|'negative', default
+    // 'positive' bila tak dikirim/nilai tak dikenal (lihat resolvePolarity() di common/capaian.ts).
+    const polaritas = dto.polaritas === 'negative' ? 'negative' : 'positive';
     // Override target per sub-indikator per assignment (opsional, non-destructive — lihat
     // sanitizeSubIndicatorTargets & fanOut()).
     const subCount = subIndicators?.length ?? 0;
@@ -623,7 +633,7 @@ export class KpiMasterService {
           data: {
             indikator: dto.indikator.trim(), formula: dto.formula ?? '', satuan: dto.satuan ?? '',
             bobotKm: dto.bobotKm ?? '', targetParent: dto.targetParent ?? '', kmType, defaultCheckerIds, defaultApproverId, aggregationMethod,
-            subIndicators: subIndicatorsJson,
+            subIndicators: subIndicatorsJson, polaritas,
           },
         });
         await this.prisma.kpiAssignment.deleteMany({ where: { kpiMasterId: master.id } });
@@ -636,7 +646,7 @@ export class KpiMasterService {
           data: {
             year: nextPeriod.yearMonth.slice(0, 4), kmType, indikator: dto.indikator.trim(), formula: dto.formula ?? '',
             satuan: dto.satuan ?? '', bobotKm: dto.bobotKm ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
-            defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson,
+            defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson, polaritas,
             effectiveMonth: nextMonth, version: existing.version + 1, previousVersionId: existing.id,
           },
         });
@@ -648,7 +658,7 @@ export class KpiMasterService {
         data: {
           year: activePeriod.yearMonth.slice(0, 4), kmType, indikator: dto.indikator.trim(), formula: dto.formula ?? '',
           satuan: dto.satuan ?? '', bobotKm: dto.bobotKm ?? '', targetParent: dto.targetParent ?? '', createdBy: user.name, createdById: user.id,
-          defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson,
+          defaultCheckerIds, defaultApproverId, aggregationMethod, subIndicators: subIndicatorsJson, polaritas,
           effectiveMonth: activePeriod.yearMonth, version: 1,
         },
       });
@@ -721,7 +731,7 @@ export class KpiMasterService {
 
   // ===== Fan-out: sinkronkan item KPI ke dokumen KM DRAFT per-(unit,bidang) =====
   private async fanOut(
-    master: { id: string; kmType: string; indikator: string; formula: string; satuan: string; bobotKm: string; createdBy: string; createdById: string | null; subIndicators?: Prisma.JsonValue | null },
+    master: { id: string; kmType: string; indikator: string; formula: string; satuan: string; bobotKm: string; createdBy: string; createdById: string | null; subIndicators?: Prisma.JsonValue | null; polaritas?: string },
     assignments: Array<{ unitCode: string; bidang: string; holder: string; target: string; target2: string; subIndicatorTargets?: Prisma.JsonValue | null }>,
     periodId: string,
   ): Promise<{ docsAffected: number }> {
@@ -766,7 +776,7 @@ export class KpiMasterService {
       const item: FannedItem = {
         masterKpiId: master.id,
         indikator: master.indikator, formula: master.formula, satuan: master.satuan,
-        bobot: master.bobotKm, target: a.target, target2: a.target2,
+        bobot: master.bobotKm, target: a.target, target2: a.target2, polaritas: master.polaritas ?? 'positive',
         ...(mergedSubIndicators ? { subIndicators: mergedSubIndicators } : {}),
       };
       const existingKm = await this.prisma.kontrakManajemen.findFirst({

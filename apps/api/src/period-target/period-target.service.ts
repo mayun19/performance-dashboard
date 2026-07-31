@@ -147,6 +147,36 @@ export class PeriodTargetService {
     return { frozen: count };
   }
 
+  // Disburse Target Tahun jadi alokasi 12 bulan sekaligus (PIC REN, direncanakan di muka —
+  // beda dari updateTarget() yg reaktif satu bulan per panggilan). Reuse getOrSeed() penuh;
+  // bulan yg sudah frozen DILEWATI (bukan gagal total) — dilaporkan via skippedFrozen supaya FE
+  // bisa kasih tahu user tanpa membatalkan bulan-bulan lain yg masih bisa diisi. Entry dgn target
+  // kosong sengaja diabaikan (mis. kategori satuan non-numerik yg sebagian bulan belum diisi).
+  async disburse(user: User, kpiAssignmentId: string, entries: Array<{ periodId: string; target: string }>) {
+    if (!this.isPicRen(user)) throw new ForbiddenException('Hanya PIC REN (Staff Perencanaan) yang dapat mengatur target bulanan');
+    const assignment = await this.prisma.kpiAssignment.findUnique({ where: { id: kpiAssignmentId } });
+    if (!assignment) throw new NotFoundException('KPI assignment tidak ditemukan');
+
+    let updated = 0, skippedFrozen = 0;
+    for (const { periodId, target } of entries) {
+      if (!target?.trim()) continue;
+      const pt = await this.getOrSeed(periodId, kpiAssignmentId);
+      if (pt.frozen) { skippedFrozen++; continue; }
+      const oldValue = pt.target;
+      await this.prisma.periodTarget.update({ where: { id: pt.id }, data: { target, source: 'disbursed' } });
+      await this.prisma.revisionLog.create({
+        data: {
+          entity: 'period_target', targetId: pt.id, periodId,
+          actor: user.name, actorId: user.id, field: 'target',
+          oldValue: oldValue as unknown as object, newValue: target as unknown as object,
+          note: 'Disburse target tahunan per bulan',
+        },
+      });
+      updated++;
+    }
+    return { updated, skippedFrozen, total: entries.length };
+  }
+
   async getForPeriod(periodId: string) {
     return this.prisma.periodTarget.findMany({ where: { periodId }, include: { assignment: true } });
   }

@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, breakdownComposite, dedupFanOutRealisasi, specimenOrder, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, resolveTarget, computeCapaian, computeNilai, scoreItems, breakdownComposite, dedupFanOutRealisasi, specimenOrder, resolvePolarity, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class OperationalService {
@@ -115,7 +115,7 @@ export class OperationalService {
       ));
       const bobot = num(it['bobot']);
       const satuan = String(it['satuan'] ?? '');
-      const isInverse = satuan.toLowerCase() === 'hari kerja';
+      const isInverse = resolvePolarity(satuan, it['polaritas']);
 
       // KPI komposit (opt-in, generik — lihat kpi-master.service.ts SubIndicatorInput):
       // nilai = Σ nilai sub (common/capaian.ts breakdownComposite); target/actual induk tak

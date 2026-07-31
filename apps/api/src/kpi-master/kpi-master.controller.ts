@@ -28,6 +28,7 @@ class SubIndicatorDto {
   @IsString() target: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsString() formula?: string;
+  @IsOptional() @IsIn(['positive', 'negative']) polaritas?: string;
 }
 
 class SaveMasterDto {
@@ -44,6 +45,8 @@ class SaveMasterDto {
   @IsOptional() @IsIn(['weighted', 'sum']) aggregationMethod?: string;
   // Sub-indikator (opt-in, generik) — non-kosong menandai KPI ini "komposit".
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SubIndicatorDto) subIndicators?: SubIndicatorDto[];
+  // Polaritas indikator induk non-komposit ('positive'|'negative') — lihat catatan di service.
+  @IsOptional() @IsIn(['positive', 'negative']) polaritas?: string;
 }
 
 class ConsolidationReviewDto {
