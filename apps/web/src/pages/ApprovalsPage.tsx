@@ -2264,166 +2264,269 @@ export function ApprovalsPage() {
               />
             </div>
           ) : (
-            <div className="table-wrap">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Jenis</th>
-                    <th>Unit</th>
-                    <th>Bidang</th>
-                    <th>Pengirim</th>
-                    <th>Indikator</th>
-                    <th>Jenjang Persetujuan</th>
-                    <th>SLA</th>
-                    <th>Tanggal</th>
-                    <th style={{ width: 260 }}>Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {queueEntries.map((entry) =>
-                    entry.kind === "km"
-                      ? (() => {
-                          const k = entry.data;
-                          const kk = k as KontrakManajemen & {
-                            steps?: { label: string }[];
-                            currentStepIndex?: number;
-                            stepLabel?: string;
-                          };
-                          const ksteps = kk.steps ?? [];
-                          const kci = kk.currentStepIndex ?? 0;
-                          const kIsLast = kci >= ksteps.length - 1;
-                          const kPrev = ksteps[kci - 1]?.label;
-                          return (
-                            <Fragment key={k.id}>
-                              <tr>
-                                <td>
-                                  <span
-                                    className="status-pill"
-                                    style={{
-                                      fontSize: 11,
-                                      background: "var(--color-accent-tint)",
-                                      color: "var(--color-accent)",
-                                      fontWeight: 700,
-                                    }}>
-                                    KM Sementara
-                                  </span>
-                                </td>
-                                <td style={{ fontWeight: 600 }}>
-                                  {UNIT_NAMES[k.unitCode] ?? k.unitCode}
-                                </td>
-                                <td>{k.bidang}</td>
-                                <td
-                                  style={{ color: "var(--color-text-muted)" }}>
-                                  {k.submitter}
-                                </td>
-                                <td>
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() =>
-                                      setKmExpanded(
-                                        kmExpanded === k.id ? null : k.id,
-                                      )
-                                    }>
-                                    {k.kpiItems.length} indikator{" "}
-                                    <ChevronDown
-                                      size={12}
+            <div
+              className="table-wrap"
+              style={{ paddingBottom: "var(--space-7)" }}>
+              <div
+                className={`table-scroll ${kmList.length > 0 && "able-scroll"}`}>
+                <table className="data-table compact">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 160 }}>Jenis</th>
+                      <th>Unit</th>
+                      <th>Bidang</th>
+                      <th>Pengirim</th>
+                      <th>Indikator</th>
+                      <th>Jenjang Persetujuan</th>
+                      <th>SLA</th>
+                      <th>Tanggal</th>
+                      <th style={{ width: 260 }}>Tindakan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {queueEntries.map((entry) =>
+                      entry.kind === "km"
+                        ? (() => {
+                            const k = entry.data;
+                            const kk = k as KontrakManajemen & {
+                              steps?: { label: string }[];
+                              currentStepIndex?: number;
+                              stepLabel?: string;
+                            };
+                            const ksteps = kk.steps ?? [];
+                            const kci = kk.currentStepIndex ?? 0;
+                            const kIsLast = kci >= ksteps.length - 1;
+                            const kPrev = ksteps[kci - 1]?.label;
+                            return (
+                              <Fragment key={k.id}>
+                                <tr>
+                                  <td>
+                                    <span
+                                      className="status-pill"
                                       style={{
-                                        transform:
-                                          kmExpanded === k.id
-                                            ? "rotate(180deg)"
-                                            : "none",
-                                        transition: "transform .2s",
-                                      }}
-                                    />
-                                  </button>
-                                </td>
-                                <td style={{ minWidth: 200 }}>
-                                  <div
+                                        fontSize: 11,
+                                        background: "var(--color-accent-tint)",
+                                        color: "var(--color-accent)",
+                                        fontWeight: 700,
+                                      }}>
+                                      KM Sementara
+                                    </span>
+                                  </td>
+                                  <td style={{ fontWeight: 600 }}>
+                                    {UNIT_NAMES[k.unitCode] ?? k.unitCode}
+                                  </td>
+                                  <td>{k.bidang}</td>
+                                  <td
                                     style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                      marginBottom: 3,
+                                      color: "var(--color-text-muted)",
                                     }}>
-                                    {ksteps.map((_, idx) => (
-                                      <div
-                                        key={idx}
-                                        title={ksteps[idx]?.label}
+                                    {k.submitter}
+                                  </td>
+                                  <td>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() =>
+                                        setKmExpanded(
+                                          kmExpanded === k.id ? null : k.id,
+                                        )
+                                      }>
+                                      {k.kpiItems.length} indikator{" "}
+                                      <ChevronDown
+                                        size={12}
                                         style={{
-                                          width: 16,
-                                          height: 16,
-                                          borderRadius: "50%",
-                                          fontSize: 10,
-                                          fontWeight: 700,
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          background:
-                                            idx < kci
-                                              ? "var(--color-success)"
-                                              : idx === kci
-                                                ? "var(--color-accent)"
-                                                : "var(--color-surface-2)",
-                                          color:
-                                            idx <= kci
-                                              ? "#fff"
-                                              : "var(--color-text-muted)",
-                                        }}>
-                                        {idx < kci ? "✓" : idx + 1}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: 12,
-                                      color: "var(--color-accent)",
-                                      fontWeight: 600,
-                                    }}>
-                                    Langkah {kci}/{ksteps.length - 1}:{" "}
-                                    {kk.stepLabel ?? ksteps[kci]?.label ?? "—"}
-                                  </div>
-                                </td>
-                                <td>
-                                  <SlaBadge
-                                    days={
-                                      (
-                                        k as KontrakManajemen & {
-                                          slaRemainingDays?: number;
-                                        }
-                                      ).slaRemainingDays
-                                    }
-                                  />
-                                </td>
-                                <td
-                                  style={{
-                                    color: "var(--color-text-muted)",
-                                    whiteSpace: "nowrap",
-                                  }}>
-                                  {new Date(k.submittedAt).toLocaleDateString(
-                                    "id-ID",
-                                    { day: "2-digit", month: "short" },
-                                  )}
-                                </td>
-                                <td>
-                                  {kmTarget === k.id ? (
+                                          transform:
+                                            kmExpanded === k.id
+                                              ? "rotate(180deg)"
+                                              : "none",
+                                          transition: "transform .2s",
+                                        }}
+                                      />
+                                    </button>
+                                  </td>
+                                  <td style={{ minWidth: 200 }}>
                                     <div
                                       style={{
                                         display: "flex",
-                                        flexDirection: "column",
-                                        gap: "var(--space-2)",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        marginBottom: 3,
                                       }}>
-                                      <textarea
-                                        className="form-textarea"
+                                      {ksteps.map((_, idx) => (
+                                        <div
+                                          key={idx}
+                                          title={ksteps[idx]?.label}
+                                          style={{
+                                            width: 16,
+                                            height: 16,
+                                            borderRadius: "50%",
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            background:
+                                              idx < kci
+                                                ? "var(--color-success)"
+                                                : idx === kci
+                                                  ? "var(--color-accent)"
+                                                  : "var(--color-surface-2)",
+                                            color:
+                                              idx <= kci
+                                                ? "#fff"
+                                                : "var(--color-text-muted)",
+                                          }}>
+                                          {idx < kci ? "✓" : idx + 1}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        color: "var(--color-accent)",
+                                        fontWeight: 600,
+                                      }}>
+                                      Langkah {kci}/{ksteps.length - 1}:{" "}
+                                      {kk.stepLabel ??
+                                        ksteps[kci]?.label ??
+                                        "—"}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <SlaBadge
+                                      days={
+                                        (
+                                          k as KontrakManajemen & {
+                                            slaRemainingDays?: number;
+                                          }
+                                        ).slaRemainingDays
+                                      }
+                                    />
+                                  </td>
+                                  <td
+                                    style={{
+                                      color: "var(--color-text-muted)",
+                                      whiteSpace: "nowrap",
+                                    }}>
+                                    {new Date(k.submittedAt).toLocaleDateString(
+                                      "id-ID",
+                                      { day: "2-digit", month: "short" },
+                                    )}
+                                  </td>
+                                  <td>
+                                    {kmTarget === k.id ? (
+                                      <div
                                         style={{
-                                          fontSize: "var(--text-xs)",
-                                          minHeight: 48,
-                                        }}
-                                        placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
-                                        value={kmNote}
-                                        onChange={(e) =>
-                                          setKmNote(e.target.value)
-                                        }
-                                      />
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          gap: "var(--space-2)",
+                                        }}>
+                                        <textarea
+                                          className="form-textarea"
+                                          style={{
+                                            fontSize: "var(--text-xs)",
+                                            minHeight: 48,
+                                          }}
+                                          placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
+                                          value={kmNote}
+                                          onChange={(e) =>
+                                            setKmNote(e.target.value)
+                                          }
+                                        />
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "var(--space-2)",
+                                            flexWrap: "wrap",
+                                          }}>
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              gap: "var(--space-2)",
+                                              flexWrap: "wrap",
+                                            }}>
+                                            <button
+                                              className="btn btn-sm"
+                                              style={{
+                                                background:
+                                                  "var(--color-success)",
+                                                color: "#fff",
+                                              }}
+                                              disabled={kmBusy}
+                                              onClick={() =>
+                                                handleKmReview(k.id, "approve")
+                                              }>
+                                              <CheckCircle size={12} />{" "}
+                                              {kIsLast
+                                                ? "Setujui (Selesai → Bundle)"
+                                                : "Setujui & Teruskan"}
+                                            </button>
+                                            <button
+                                              className="btn btn-sm"
+                                              style={{
+                                                background:
+                                                  "var(--color-danger)",
+                                                color: "#fff",
+                                              }}
+                                              disabled={kmBusy}
+                                              onClick={() =>
+                                                handleKmReview(
+                                                  k.id,
+                                                  "reject",
+                                                  "konseptor",
+                                                )
+                                              }
+                                              title="Kembalikan ke konseptor untuk revisi">
+                                              <XCircle size={12} /> Kembalikan
+                                              ke Konseptor
+                                            </button>
+                                          </div>
+                                          {kci >= 2 ? (
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                gap: "var(--space-2)",
+                                              }}>
+                                              <button
+                                                className="btn btn-md"
+                                                style={{
+                                                  background:
+                                                    "var(--color-warning)",
+                                                  color: "#fff",
+                                                }}
+                                                disabled={kmBusy}
+                                                onClick={() =>
+                                                  handleKmReview(
+                                                    k.id,
+                                                    "reject",
+                                                    "previous",
+                                                  )
+                                                }>
+                                                <XCircle size={12} /> Kembalikan
+                                                ke{" "}
+                                                {kPrev ?? "langkah sebelumnya"}
+                                              </button>
+                                              <button
+                                                className="btn btn-ghost btn-md"
+                                                onClick={() => {
+                                                  setKmTarget(null);
+                                                  setKmNote("");
+                                                }}>
+                                                Batal
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              className="btn btn-ghost btn-md"
+                                              onClick={() => {
+                                                setKmTarget(null);
+                                                setKmNote("");
+                                              }}>
+                                              Batal
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
                                       <div
                                         style={{
                                           display: "flex",
@@ -2431,111 +2534,349 @@ export function ApprovalsPage() {
                                           flexWrap: "wrap",
                                         }}>
                                         <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-success)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={kmBusy}
-                                          onClick={() =>
-                                            handleKmReview(k.id, "approve")
-                                          }>
-                                          <CheckCircle size={12} />{" "}
-                                          {kIsLast
-                                            ? "Setujui (Selesai → Bundle)"
-                                            : "Setujui & Teruskan"}
-                                        </button>
-                                        <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-danger)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={kmBusy}
-                                          onClick={() =>
-                                            handleKmReview(
-                                              k.id,
-                                              "reject",
-                                              "konseptor",
-                                            )
-                                          }
-                                          title="Kembalikan ke konseptor untuk revisi">
-                                          <XCircle size={12} /> Kembalikan ke
-                                          Konseptor
-                                        </button>
-                                        {kci >= 2 && (
-                                          <button
-                                            className="btn btn-sm"
-                                            style={{
-                                              background:
-                                                "var(--color-warning)",
-                                              color: "#fff",
-                                            }}
-                                            disabled={kmBusy}
-                                            onClick={() =>
-                                              handleKmReview(
-                                                k.id,
-                                                "reject",
-                                                "previous",
-                                              )
-                                            }>
-                                            <XCircle size={12} /> Kembalikan ke{" "}
-                                            {kPrev ?? "langkah sebelumnya"}
-                                          </button>
-                                        )}
-                                        <button
-                                          className="btn btn-ghost btn-sm"
+                                          className="btn btn-secondary btn-sm"
                                           onClick={() => {
-                                            setKmTarget(null);
+                                            setKmTarget(k.id);
                                             setKmNote("");
                                           }}>
-                                          Batal
+                                          <Clock size={12} /> Tinjau
+                                        </button>
+                                        <button
+                                          className="btn btn-ghost btn-md"
+                                          onClick={() =>
+                                            kmExpanded && kmEditId === k.id
+                                              ? setKmEditId(null)
+                                              : startEditKm(k)
+                                          }
+                                          title="Edit KPI items pada tahap Anda">
+                                          <Pencil size={12} />{" "}
+                                          {kmExpanded && kmEditId === k.id
+                                            ? "Batal Edit"
+                                            : "Edit"}
                                         </button>
                                       </div>
-                                    </div>
-                                  ) : (
-                                    <div
+                                    )}
+                                  </td>
+                                </tr>
+                                {kmExpanded === k.id && (
+                                  <tr>
+                                    <td
+                                      colSpan={9}
                                       style={{
-                                        display: "flex",
-                                        gap: "var(--space-2)",
-                                        flexWrap: "wrap",
+                                        background: "var(--color-surface-2)",
+                                        padding: 0,
                                       }}>
-                                      <button
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => {
-                                          setKmTarget(k.id);
-                                          setKmNote("");
-                                        }}>
-                                        <Clock size={12} /> Tinjau
-                                      </button>
-                                      <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() => startEditKm(k)}
-                                        title="Edit KPI items pada tahap Anda">
-                                        <Pencil size={12} /> Edit
-                                      </button>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                              {kmExpanded === k.id && (
+                                      {kmEditId && (
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            justifyContent: "flex-end",
+                                            gap: "var(--space-2)",
+                                            padding:
+                                              "var(--space-2) var(--space-3)",
+                                          }}>
+                                          {kmEditId === k.id && (
+                                            <>
+                                              <button
+                                                className="btn btn-md"
+                                                style={{
+                                                  background:
+                                                    "var(--color-success)",
+                                                  color: "#fff",
+                                                }}
+                                                disabled={kmBusy}
+                                                onClick={() => saveEditKm(k)}>
+                                                <CheckCircle size={12} /> Simpan
+                                                KPI
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      <table
+                                        className="data-table table-expanded"
+                                        style={{ margin: 0 }}>
+                                        <thead>
+                                          <tr>
+                                            <th>No</th>
+                                            <th>Indikator Kinerja</th>
+                                            <th>Formula</th>
+                                            <th>Satuan</th>
+                                            <th className="num">Bobot</th>
+                                            <th>Target Sem I</th>
+                                            <th>{`Target Tahun ${new Date().getFullYear()}`}</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {(kmEditId === k.id
+                                            ? kmEditItems
+                                            : (k.kpiItems as Record<
+                                                string,
+                                                unknown
+                                              >[])
+                                          ).map((it, idx) => {
+                                            const editing = kmEditId === k.id;
+                                            const itStr = it as Record<
+                                              string,
+                                              string
+                                            >;
+                                            return (
+                                              <tr key={idx}>
+                                                <td>{idx + 1}</td>
+                                                <td>{itStr.indikator}</td>
+                                                <td>{itStr.formula}</td>
+                                                <td>{itStr.satuan}</td>
+                                                <td className="num">
+                                                  {itStr.bobot}
+                                                </td>
+                                                <td
+                                                  style={{
+                                                    fontWeight: editing
+                                                      ? 700
+                                                      : undefined,
+                                                  }}>
+                                                  {editing ? (
+                                                    <input
+                                                      type="text"
+                                                      className="form-input form-input-sm"
+                                                      style={{ width: 90 }}
+                                                      value={String(
+                                                        kmEditItems[idx]
+                                                          ?.target ?? "",
+                                                      )}
+                                                      onChange={(e) =>
+                                                        setKmEditItems(
+                                                          (items) =>
+                                                            items.map(
+                                                              (item, i) =>
+                                                                i === idx
+                                                                  ? {
+                                                                      ...item,
+                                                                      target:
+                                                                        e.target
+                                                                          .value,
+                                                                    }
+                                                                  : item,
+                                                            ),
+                                                        )
+                                                      }
+                                                    />
+                                                  ) : (
+                                                    itStr.target
+                                                  )}
+                                                </td>
+                                                <td
+                                                  style={{
+                                                    fontWeight: editing
+                                                      ? 700
+                                                      : undefined,
+                                                  }}>
+                                                  {editing ? (
+                                                    <input
+                                                      type="text"
+                                                      className="form-input form-input-sm"
+                                                      style={{ width: 90 }}
+                                                      value={String(
+                                                        kmEditItems[idx]
+                                                          ?.target2 ?? "",
+                                                      )}
+                                                      onChange={(e) =>
+                                                        setKmEditItems(
+                                                          (items) =>
+                                                            items.map(
+                                                              (item, i) =>
+                                                                i === idx
+                                                                  ? {
+                                                                      ...item,
+                                                                      target2:
+                                                                        e.target
+                                                                          .value,
+                                                                    }
+                                                                  : item,
+                                                            ),
+                                                        )
+                                                      }
+                                                    />
+                                                  ) : (
+                                                    itStr.target2
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            );
+                          })()
+                        : (() => {
+                            const rl = entry.data;
+                            const entries = Object.values(rl.values ?? {});
+                            const rr = rl as RealisasiKinerja & {
+                              steps?: { label: string }[];
+                              currentStepIndex?: number;
+                              stepLabel?: string;
+                            };
+                            const steps = rr.steps ?? [];
+                            const ci = rr.currentStepIndex ?? 0;
+                            const stepCount = steps.length;
+                            const isLastStep = ci >= stepCount - 1;
+                            const prevLabel = steps[ci - 1]?.label;
+                            return (
+                              <Fragment key={rl.id}>
                                 <tr>
+                                  <td>
+                                    <span
+                                      className="status-pill"
+                                      style={{
+                                        fontSize: 11,
+                                        background: "var(--color-info-tint)",
+                                        color: "var(--color-info)",
+                                        fontWeight: 700,
+                                      }}>
+                                      Realisasi
+                                    </span>
+                                  </td>
+                                  <td style={{ fontWeight: 600 }}>
+                                    {UNIT_NAMES[rl.unitCode] ?? rl.unitCode}
+                                  </td>
                                   <td
-                                    colSpan={9}
                                     style={{
-                                      background: "var(--color-surface-2)",
-                                      padding: 0,
+                                      fontSize: 13,
+                                      color: "var(--color-text-muted)",
                                     }}>
+                                    {(
+                                      rl as RealisasiKinerja & {
+                                        bidang?: string;
+                                      }
+                                    ).bidang ?? "—"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      color: "var(--color-text-muted)",
+                                    }}>
+                                    {rl.submitter}
+                                  </td>
+                                  <td>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() =>
+                                        setRealExpanded(
+                                          realExpanded === rl.id ? null : rl.id,
+                                        )
+                                      }>
+                                      {entries.length} indikator{" "}
+                                      <ChevronDown
+                                        size={12}
+                                        style={{
+                                          transform:
+                                            realExpanded === rl.id
+                                              ? "rotate(180deg)"
+                                              : "none",
+                                          transition: "transform .2s",
+                                        }}
+                                      />
+                                    </button>
+                                  </td>
+                                  <td style={{ minWidth: 200 }}>
                                     <div
                                       style={{
                                         display: "flex",
-                                        justifyContent: "flex-end",
-                                        gap: "var(--space-2)",
-                                        padding:
-                                          "var(--space-2) var(--space-3)",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        marginBottom: 3,
                                       }}>
-                                      {kmEditId === k.id ? (
-                                        <>
+                                      {steps.map((_, idx) => (
+                                        <div
+                                          key={idx}
+                                          title={steps[idx]?.label}
+                                          style={{
+                                            width: 16,
+                                            height: 16,
+                                            borderRadius: "50%",
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            background:
+                                              idx < ci
+                                                ? "var(--color-success)"
+                                                : idx === ci
+                                                  ? "var(--color-info)"
+                                                  : "var(--color-surface-2)",
+                                            color:
+                                              idx <= ci
+                                                ? "#fff"
+                                                : "var(--color-text-muted)",
+                                          }}>
+                                          {idx < ci ? "✓" : idx + 1}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        color: "var(--color-info)",
+                                        fontWeight: 600,
+                                      }}>
+                                      Langkah {ci}/{stepCount - 1}:{" "}
+                                      {rr.stepLabel ?? steps[ci]?.label ?? "—"}
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <SlaBadge
+                                      days={
+                                        (
+                                          rl as RealisasiKinerja & {
+                                            slaRemainingDays?: number;
+                                          }
+                                        ).slaRemainingDays
+                                      }
+                                    />
+                                  </td>
+                                  <td
+                                    style={{
+                                      color: "var(--color-text-muted)",
+                                      whiteSpace: "nowrap",
+                                    }}>
+                                    {new Date(
+                                      rl.submittedAt,
+                                    ).toLocaleDateString("id-ID", {
+                                      day: "2-digit",
+                                      month: "short",
+                                    })}
+                                  </td>
+                                  <td>
+                                    {realTarget === rl.id ? (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          gap: "var(--space-2)",
+                                        }}>
+                                        <textarea
+                                          className="form-textarea"
+                                          style={{
+                                            fontSize: "var(--text-xs)",
+                                            minHeight: 48,
+                                          }}
+                                          placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
+                                          value={realNote}
+                                          onChange={(e) =>
+                                            setRealNote(e.target.value)
+                                          }
+                                        />
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            gap: "var(--space-2)",
+                                            flexWrap: "wrap",
+                                          }}>
                                           <button
                                             className="btn btn-sm"
                                             style={{
@@ -2543,354 +2884,19 @@ export function ApprovalsPage() {
                                                 "var(--color-success)",
                                               color: "#fff",
                                             }}
-                                            disabled={kmBusy}
-                                            onClick={() => saveEditKm(k)}>
-                                            <CheckCircle size={12} /> Simpan KPI
+                                            disabled={realBusy}
+                                            onClick={() =>
+                                              handleRealReview(rl.id, "approve")
+                                            }>
+                                            <CheckCircle size={12} />{" "}
+                                            {isLastStep
+                                              ? "Setujui (Selesai → Bundle)"
+                                              : "Setujui & Teruskan"}
                                           </button>
-                                          <button
-                                            className="btn btn-ghost btn-sm"
-                                            onClick={() => setKmEditId(null)}>
-                                            Batal Edit
-                                          </button>
-                                        </>
-                                      ) : (
-                                        <button
-                                          className="btn btn-secondary btn-sm"
-                                          onClick={() => startEditKm(k)}>
-                                          <Pencil size={12} /> Edit
-                                        </button>
-                                      )}
-                                    </div>
-                                    <table
-                                      className="data-table compact"
-                                      style={{ margin: 0 }}>
-                                      <thead>
-                                        <tr>
-                                          <th>No</th>
-                                          <th>Indikator Kinerja</th>
-                                          <th>Formula</th>
-                                          <th>Satuan</th>
-                                          <th className="num">Bobot</th>
-                                          <th>Target Sem I</th>
-                                          <th>{`Target Tahun ${new Date().getFullYear()}`}</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {(kmEditId === k.id
-                                          ? kmEditItems
-                                          : (k.kpiItems as Record<
-                                              string,
-                                              unknown
-                                            >[])
-                                        ).map((it, idx) => {
-                                          const editing = kmEditId === k.id;
-                                          const itStr = it as Record<
-                                            string,
-                                            string
-                                          >;
-                                          return (
-                                            <tr key={idx}>
-                                              <td>{idx + 1}</td>
-                                              <td>{itStr.indikator}</td>
-                                              <td>{itStr.formula}</td>
-                                              <td>{itStr.satuan}</td>
-                                              <td className="num">
-                                                {itStr.bobot}
-                                              </td>
-                                              <td
-                                                style={{
-                                                  fontWeight: editing
-                                                    ? 700
-                                                    : undefined,
-                                                }}>
-                                                {editing ? (
-                                                  <input
-                                                    type="text"
-                                                    className="form-input form-input-sm"
-                                                    style={{ width: 90 }}
-                                                    value={String(
-                                                      kmEditItems[idx]
-                                                        ?.target ?? "",
-                                                    )}
-                                                    onChange={(e) =>
-                                                      setKmEditItems((items) =>
-                                                        items.map((item, i) =>
-                                                          i === idx
-                                                            ? {
-                                                                ...item,
-                                                                target:
-                                                                  e.target
-                                                                    .value,
-                                                              }
-                                                            : item,
-                                                        ),
-                                                      )
-                                                    }
-                                                  />
-                                                ) : (
-                                                  itStr.target
-                                                )}
-                                              </td>
-                                              <td
-                                                style={{
-                                                  fontWeight: editing
-                                                    ? 700
-                                                    : undefined,
-                                                }}>
-                                                {editing ? (
-                                                  <input
-                                                    type="text"
-                                                    className="form-input form-input-sm"
-                                                    style={{ width: 90 }}
-                                                    value={String(
-                                                      kmEditItems[idx]
-                                                        ?.target2 ?? "",
-                                                    )}
-                                                    onChange={(e) =>
-                                                      setKmEditItems((items) =>
-                                                        items.map((item, i) =>
-                                                          i === idx
-                                                            ? {
-                                                                ...item,
-                                                                target2:
-                                                                  e.target
-                                                                    .value,
-                                                              }
-                                                            : item,
-                                                        ),
-                                                      )
-                                                    }
-                                                  />
-                                                ) : (
-                                                  itStr.target2
-                                                )}
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </td>
-                                </tr>
-                              )}
-                            </Fragment>
-                          );
-                        })()
-                      : (() => {
-                          const rl = entry.data;
-                          const entries = Object.values(rl.values ?? {});
-                          const rr = rl as RealisasiKinerja & {
-                            steps?: { label: string }[];
-                            currentStepIndex?: number;
-                            stepLabel?: string;
-                          };
-                          const steps = rr.steps ?? [];
-                          const ci = rr.currentStepIndex ?? 0;
-                          const stepCount = steps.length;
-                          const isLastStep = ci >= stepCount - 1;
-                          const prevLabel = steps[ci - 1]?.label;
-                          return (
-                            <Fragment key={rl.id}>
-                              <tr>
-                                <td>
-                                  <span
-                                    className="status-pill"
-                                    style={{
-                                      fontSize: 11,
-                                      background: "var(--color-info-tint)",
-                                      color: "var(--color-info)",
-                                      fontWeight: 700,
-                                    }}>
-                                    Realisasi
-                                  </span>
-                                </td>
-                                <td style={{ fontWeight: 600 }}>
-                                  {UNIT_NAMES[rl.unitCode] ?? rl.unitCode}
-                                </td>
-                                <td
-                                  style={{
-                                    fontSize: 13,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  {(
-                                    rl as RealisasiKinerja & { bidang?: string }
-                                  ).bidang ?? "—"}
-                                </td>
-                                <td
-                                  style={{ color: "var(--color-text-muted)" }}>
-                                  {rl.submitter}
-                                </td>
-                                <td>
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() =>
-                                      setRealExpanded(
-                                        realExpanded === rl.id ? null : rl.id,
-                                      )
-                                    }>
-                                    {entries.length} indikator{" "}
-                                    <ChevronDown
-                                      size={12}
-                                      style={{
-                                        transform:
-                                          realExpanded === rl.id
-                                            ? "rotate(180deg)"
-                                            : "none",
-                                        transition: "transform .2s",
-                                      }}
-                                    />
-                                  </button>
-                                </td>
-                                <td style={{ minWidth: 200 }}>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                      marginBottom: 3,
-                                    }}>
-                                    {steps.map((_, idx) => (
-                                      <div
-                                        key={idx}
-                                        title={steps[idx]?.label}
-                                        style={{
-                                          width: 16,
-                                          height: 16,
-                                          borderRadius: "50%",
-                                          fontSize: 10,
-                                          fontWeight: 700,
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          background:
-                                            idx < ci
-                                              ? "var(--color-success)"
-                                              : idx === ci
-                                                ? "var(--color-info)"
-                                                : "var(--color-surface-2)",
-                                          color:
-                                            idx <= ci
-                                              ? "#fff"
-                                              : "var(--color-text-muted)",
-                                        }}>
-                                        {idx < ci ? "✓" : idx + 1}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: 12,
-                                      color: "var(--color-info)",
-                                      fontWeight: 600,
-                                    }}>
-                                    Langkah {ci}/{stepCount - 1}:{" "}
-                                    {rr.stepLabel ?? steps[ci]?.label ?? "—"}
-                                  </div>
-                                </td>
-                                <td>
-                                  <SlaBadge
-                                    days={
-                                      (
-                                        rl as RealisasiKinerja & {
-                                          slaRemainingDays?: number;
-                                        }
-                                      ).slaRemainingDays
-                                    }
-                                  />
-                                </td>
-                                <td
-                                  style={{
-                                    color: "var(--color-text-muted)",
-                                    whiteSpace: "nowrap",
-                                  }}>
-                                  {new Date(rl.submittedAt).toLocaleDateString(
-                                    "id-ID",
-                                    { day: "2-digit", month: "short" },
-                                  )}
-                                </td>
-                                <td>
-                                  {realTarget === rl.id ? (
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: "var(--space-2)",
-                                      }}>
-                                      <textarea
-                                        className="form-textarea"
-                                        style={{
-                                          fontSize: "var(--text-xs)",
-                                          minHeight: 48,
-                                        }}
-                                        placeholder="Catatan/komentar (wajib untuk setiap keputusan)"
-                                        value={realNote}
-                                        onChange={(e) =>
-                                          setRealNote(e.target.value)
-                                        }
-                                      />
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          gap: "var(--space-2)",
-                                          flexWrap: "wrap",
-                                        }}>
-                                        <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-success)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={realBusy}
-                                          onClick={() =>
-                                            handleRealReview(rl.id, "approve")
-                                          }>
-                                          <CheckCircle size={12} />{" "}
-                                          {isLastStep
-                                            ? "Setujui (Selesai → Bundle)"
-                                            : "Setujui & Teruskan"}
-                                        </button>
-                                        <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-danger)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={realBusy}
-                                          onClick={() =>
-                                            handleRealReview(
-                                              rl.id,
-                                              "reject",
-                                              "konseptor",
-                                            )
-                                          }
-                                          title="Masalah pada REALISASI → kembali ke penyusun (PIC)">
-                                          <XCircle size={12} /> Masalah
-                                          Realisasi → Konseptor
-                                        </button>
-                                        <button
-                                          className="btn btn-sm"
-                                          style={{
-                                            background: "var(--color-accent)",
-                                            color: "#fff",
-                                          }}
-                                          disabled={realBusy}
-                                          onClick={() =>
-                                            handleRealReview(
-                                              rl.id,
-                                              "reject",
-                                              "target",
-                                            )
-                                          }
-                                          title="Masalah pada TARGET (KM Sementara) → routing ke PIC REN untuk koreksi target">
-                                          <XCircle size={12} /> Masalah Target →
-                                          PIC REN
-                                        </button>
-                                        {ci >= 2 && (
                                           <button
                                             className="btn btn-sm"
                                             style={{
-                                              background:
-                                                "var(--color-warning)",
+                                              background: "var(--color-danger)",
                                               color: "#fff",
                                             }}
                                             disabled={realBusy}
@@ -2898,285 +2904,151 @@ export function ApprovalsPage() {
                                               handleRealReview(
                                                 rl.id,
                                                 "reject",
-                                                "previous",
+                                                "konseptor",
                                               )
-                                            }>
-                                            <XCircle size={12} /> Kembalikan ke{" "}
-                                            {prevLabel ?? "langkah sebelumnya"}
+                                            }
+                                            title="Masalah pada REALISASI → kembali ke penyusun (PIC)">
+                                            <XCircle size={12} /> Masalah
+                                            Realisasi → Konseptor
                                           </button>
-                                        )}
+                                          <button
+                                            className="btn btn-sm"
+                                            style={{
+                                              background: "var(--color-accent)",
+                                              color: "#fff",
+                                            }}
+                                            disabled={realBusy}
+                                            onClick={() =>
+                                              handleRealReview(
+                                                rl.id,
+                                                "reject",
+                                                "target",
+                                              )
+                                            }
+                                            title="Masalah pada TARGET (KM Sementara) → routing ke PIC REN untuk koreksi target">
+                                            <XCircle size={12} /> Masalah Target
+                                            → PIC REN
+                                          </button>
+                                          {ci >= 2 && (
+                                            <button
+                                              className="btn btn-sm"
+                                              style={{
+                                                background:
+                                                  "var(--color-warning)",
+                                                color: "#fff",
+                                              }}
+                                              disabled={realBusy}
+                                              onClick={() =>
+                                                handleRealReview(
+                                                  rl.id,
+                                                  "reject",
+                                                  "previous",
+                                                )
+                                              }>
+                                              <XCircle size={12} /> Kembalikan
+                                              ke{" "}
+                                              {prevLabel ??
+                                                "langkah sebelumnya"}
+                                            </button>
+                                          )}
+                                          <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => {
+                                              setRealTarget(null);
+                                              setRealNote("");
+                                            }}>
+                                            Batal
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-2)",
+                                          flexWrap: "wrap",
+                                        }}>
                                         <button
-                                          className="btn btn-ghost btn-sm"
+                                          className="btn btn-secondary btn-sm"
                                           onClick={() => {
-                                            setRealTarget(null);
+                                            setRealTarget(rl.id);
                                             setRealNote("");
                                           }}>
-                                          Batal
+                                          <Clock size={12} /> Tinjau
                                         </button>
                                       </div>
-                                    </div>
-                                  ) : (
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        gap: "var(--space-2)",
-                                        flexWrap: "wrap",
-                                      }}>
-                                      <button
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => {
-                                          setRealTarget(rl.id);
-                                          setRealNote("");
-                                        }}>
-                                        <Clock size={12} /> Tinjau
-                                      </button>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                              {realExpanded === rl.id && (
-                                <tr>
-                                  <td
-                                    colSpan={9}
-                                    style={{
-                                      background: "var(--color-surface-2)",
-                                      padding: 0,
-                                    }}>
-                                    <table
-                                      className="data-table compact"
-                                      style={{ margin: 0 }}>
-                                      <thead>
-                                        <tr>
-                                          <th>No</th>
-                                          <th>Indikator</th>
-                                          <th>Satuan</th>
-                                          <th className="num">Bobot</th>
-                                          <th className="num">Target</th>
-                                          <th className="num">Realisasi</th>
-                                          <th
-                                            className="num"
-                                            title="Saran staff/formula — informasional, tak dipakai skor">
-                                            Saran
-                                          </th>
-                                          <th
-                                            className="num"
-                                            title="Angka final yang dipakai skor dashboard — kosong = pakai hitungan otomatis">
-                                            Pencapaian Resmi (%)
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {Object.entries(rl.values ?? {}).map(
-                                          ([key, it], idx) => {
-                                            const subs = it.subIndicators ?? [];
-                                            if (subs.length > 0) {
-                                              return (
-                                                <Fragment key={key}>
-                                                  <tr>
-                                                    <td>{idx + 1}</td>
-                                                    <td
-                                                      colSpan={7}
-                                                      style={{
-                                                        fontWeight: 700,
-                                                      }}>
-                                                      {it.indikator ?? "—"}{" "}
-                                                      <span
-                                                        style={{
-                                                          fontWeight: 400,
-                                                          fontStyle: "italic",
-                                                          color:
-                                                            "var(--color-text-muted)",
-                                                        }}>
-                                                        (Komposit)
-                                                      </span>
-                                                    </td>
-                                                  </tr>
-                                                  {subs.map((si, j) => {
-                                                    const editKey = `${key}.${j}`;
-                                                    const resmiVal =
-                                                      realCapaianEdits[rl.id]?.[
-                                                        editKey
-                                                      ] ??
-                                                      si.capaianResmi ??
-                                                      "";
-                                                    return (
-                                                      <tr key={editKey}>
-                                                        <td />
-                                                        <td
-                                                          style={{
-                                                            paddingLeft:
-                                                              "var(--space-4)",
-                                                            color:
-                                                              "var(--color-text-muted)",
-                                                          }}>
-                                                          ↳ {si.nama ?? "—"}
-                                                        </td>
-                                                        <td>
-                                                          {si.satuan ?? "—"}
-                                                        </td>
-                                                        <td className="num">
-                                                          {String(
-                                                            si.bobot ?? "—",
-                                                          )}
-                                                        </td>
-                                                        <td className="num">
-                                                          {String(
-                                                            si.target2 ??
-                                                              si.target ??
-                                                              "—",
-                                                          )}
-                                                        </td>
-                                                        <td
-                                                          className="num"
-                                                          style={{
-                                                            fontWeight: 700,
-                                                          }}>
-                                                          {String(
-                                                            si.realisasi ?? "—",
-                                                          )}
-                                                        </td>
-                                                        <td
-                                                          className="num"
-                                                          style={{
-                                                            color:
-                                                              "var(--color-text-muted)",
-                                                          }}>
-                                                          {si.capaianSaran ??
-                                                            "—"}
-                                                        </td>
-                                                        <td className="num">
-                                                          <input
-                                                            type="text"
-                                                            className="form-input form-input-sm"
-                                                            style={{
-                                                              width: 70,
-                                                              textAlign:
-                                                                "right",
-                                                            }}
-                                                            value={resmiVal}
-                                                            onChange={(e) =>
-                                                              setRealCapaianEdits(
-                                                                (c) => ({
-                                                                  ...c,
-                                                                  [rl.id]: {
-                                                                    ...(c[
-                                                                      rl.id
-                                                                    ] ?? {}),
-                                                                    [editKey]:
-                                                                      e.target
-                                                                        .value,
-                                                                  },
-                                                                }),
-                                                              )
-                                                            }
-                                                            placeholder="%"
-                                                          />
-                                                        </td>
-                                                      </tr>
-                                                    );
-                                                  })}
-                                                </Fragment>
-                                              );
-                                            }
-                                            const resmiVal =
-                                              realCapaianEdits[rl.id]?.[key] ??
-                                              it.capaianResmi ??
-                                              "";
-                                            return (
-                                              <tr key={key}>
-                                                <td>{idx + 1}</td>
-                                                <td>{it.indikator ?? "—"}</td>
-                                                <td>{it.satuan ?? "—"}</td>
-                                                <td className="num">
-                                                  {String(it.bobot ?? "—")}
-                                                </td>
-                                                <td className="num">
-                                                  {String(
-                                                    it.target2 ??
-                                                      it.target ??
-                                                      "—",
-                                                  )}
-                                                </td>
-                                                <td
-                                                  className="num"
-                                                  style={{ fontWeight: 700 }}>
-                                                  {String(it.realisasi ?? "—")}
-                                                </td>
-                                                <td
-                                                  className="num"
-                                                  style={{
-                                                    color:
-                                                      "var(--color-text-muted)",
-                                                  }}>
-                                                  {it.capaianSaran ?? "—"}
-                                                </td>
-                                                <td className="num">
-                                                  <input
-                                                    type="text"
-                                                    className="form-input form-input-sm"
-                                                    style={{
-                                                      width: 70,
-                                                      textAlign: "right",
-                                                    }}
-                                                    value={resmiVal}
-                                                    onChange={(e) =>
-                                                      setRealCapaianEdits(
-                                                        (c) => ({
-                                                          ...c,
-                                                          [rl.id]: {
-                                                            ...(c[rl.id] ?? {}),
-                                                            [key]:
-                                                              e.target.value,
-                                                          },
-                                                        }),
-                                                      )
-                                                    }
-                                                    placeholder="%"
-                                                  />
-                                                </td>
-                                              </tr>
-                                            );
-                                          },
-                                        )}
-                                      </tbody>
-                                    </table>
-                                    <div
-                                      style={{
-                                        padding:
-                                          "var(--space-2) var(--space-4)",
-                                        display: "flex",
-                                        justifyContent: "flex-end",
-                                      }}>
-                                      <button
-                                        className="btn btn-secondary btn-sm"
-                                        disabled={
-                                          !realCapaianEdits[rl.id] ||
-                                          Object.keys(realCapaianEdits[rl.id])
-                                            .length === 0 ||
-                                          realCapaianBusy === rl.id
-                                        }
-                                        onClick={() =>
-                                          handleSaveCapaianResmi(rl)
-                                        }>
-                                        {realCapaianBusy === rl.id
-                                          ? "Menyimpan…"
-                                          : "Simpan Pencapaian Resmi"}
-                                      </button>
-                                    </div>
+                                    )}
                                   </td>
                                 </tr>
-                              )}
-                            </Fragment>
-                          );
-                        })(),
-                  )}
-                </tbody>
-              </table>
+                                {realExpanded === rl.id && (
+                                  <tr>
+                                    <td
+                                      colSpan={9}
+                                      style={{
+                                        background: "var(--color-surface-2)",
+                                        padding: 0,
+                                      }}>
+                                      <table
+                                        className="data-table compact"
+                                        style={{ margin: 0 }}>
+                                        <thead>
+                                          <tr>
+                                            <th>No</th>
+                                            <th>Indikator</th>
+                                            <th>Satuan</th>
+                                            <th className="num">Bobot</th>
+                                            <th className="num">Target</th>
+                                            <th className="num">Realisasi</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {Object.entries(rl.values ?? {}).map(
+                                            ([key, vRaw], idx) => {
+                                              const it = vRaw as {
+                                                indikator?: string;
+                                                satuan?: string;
+                                                bobot?: unknown;
+                                                target?: unknown;
+                                                realisasi?: unknown;
+                                              };
+                                              return (
+                                                <tr key={key}>
+                                                  <td>{idx + 1}</td>
+                                                  <td>{it.indikator ?? "—"}</td>
+                                                  <td>{it.satuan ?? "—"}</td>
+                                                  <td className="num">
+                                                    {String(it.bobot ?? "—")}
+                                                  </td>
+                                                  <td className="num">
+                                                    {String(it.target ?? "—")}
+                                                  </td>
+                                                  <td
+                                                    className="num"
+                                                    style={{ fontWeight: 700 }}>
+                                                    {String(
+                                                      it.realisasi ?? "—",
+                                                    )}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            },
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            );
+                          })(),
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </FoldCard>
       )}
-
       {/* Living-target: Koreksi Target KM Sementara — hanya PIC REN (warden target) */}
       {isPicRen && (
         <FoldCard
@@ -3409,10 +3281,9 @@ export function ApprovalsPage() {
           <div
             style={{
               marginTop: "var(--space-6)",
-              marginBottom: "var(--space-2)",
-              fontSize: "var(--text-xs)",
+              fontSize: "var(--text-sm)",
               fontWeight: 700,
-              color: "var(--color-text-muted)",
+              color: "var(--color-text)",
               textTransform: "uppercase",
               letterSpacing: "0.06em",
             }}>
@@ -3426,12 +3297,12 @@ export function ApprovalsPage() {
               alignItems: "center",
             }}>
             <button
-              className={`btn btn-sm ${kmBundleType === "draft" ? "btn-primary" : "btn-ghost"}`}
+              className={`btn btn-tab btn-sm ${kmBundleType === "draft" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setKmBundleType("draft")}>
               Bundle KM Draft
             </button>
             <button
-              className={`btn btn-sm ${kmBundleType === "final" ? "btn-primary" : "btn-ghost"}`}
+              className={`btn btn-tab btn-sm ${kmBundleType === "final" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setKmBundleType("final")}>
               Bundle KM Final
             </button>
@@ -3460,130 +3331,132 @@ export function ApprovalsPage() {
             )
           }>
           <div className="table-wrap">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Bidang</th>
-                  <th>Penyusun</th>
-                  <th>Status</th>
-                  <th>Review</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kmBundleKP.components.length === 0 && (
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
                   <tr>
-                    <td colSpan={4}>
-                      <EmptyState
-                        title="Belum ada KM"
-                        message="Belum ada KM Kantor Induk yang masuk konsolidasi tahun ini."
-                      />
-                    </td>
+                    <th>Bidang</th>
+                    <th>Penyusun</th>
+                    <th>Status</th>
+                    <th>Review</th>
                   </tr>
-                )}
-                {kmBundleKP.components.map((c) => (
-                  <Fragment key={c.id}>
+                </thead>
+                <tbody>
+                  {kmBundleKP.components.length === 0 && (
                     <tr>
-                      <td
-                        style={{
-                          fontSize: 13,
-                          color: "var(--color-text-muted)",
-                        }}>
-                        {c.bidang}
-                      </td>
-                      <td style={{ color: "var(--color-text-muted)" }}>
-                        {c.submitter}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                          style={{ fontSize: 12 }}>
-                          {c.status === "ready"
-                            ? "Siap (lolos SM RPC)"
-                            : c.status === "approved"
-                              ? "Disahkan GM"
-                              : c.status === "submitted"
-                                ? "Dalam proses review"
-                                : c.status}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() =>
-                            setKmBundleExpanded(
-                              kmBundleExpanded === c.id ? null : c.id,
-                            )
-                          }
-                          title="Tinjau detail KPI & riwayat">
-                          <ClipboardCheck size={12} /> {c.kpiItems?.length ?? 0}{" "}
-                          KPI
-                          <ChevronDown
-                            size={12}
-                            style={{
-                              transform:
-                                kmBundleExpanded === c.id
-                                  ? "rotate(180deg)"
-                                  : "none",
-                              transition: "transform .2s",
-                            }}
-                          />
-                        </button>
+                      <td colSpan={4}>
+                        <EmptyState
+                          title="Belum ada KM"
+                          message="Belum ada KM Kantor Induk yang masuk konsolidasi tahun ini."
+                        />
                       </td>
                     </tr>
-                    {kmBundleExpanded === c.id && (
+                  )}
+                  {kmBundleKP.components.map((c) => (
+                    <Fragment key={c.id}>
                       <tr>
                         <td
-                          colSpan={4}
                           style={{
-                            background: "var(--color-surface-2)",
-                            padding: 0,
+                            fontSize: 13,
+                            color: "var(--color-text-muted)",
                           }}>
-                          <div
-                            style={{
-                              padding: "var(--space-2) var(--space-3)",
-                              fontSize: 13,
-                              color: "var(--color-text-muted)",
-                            }}>
-                            Penanggung Jawab:{" "}
-                            <strong style={{ color: "var(--color-text)" }}>
-                              {c.holder ?? "—"}
-                            </strong>
-                          </div>
-                          <table
-                            className="data-table compact"
-                            style={{ margin: 0 }}>
-                            <thead>
-                              <tr>
-                                <th>No</th>
-                                <th>Indikator Kinerja</th>
-                                <th>Formula</th>
-                                <th>Satuan</th>
-                                <th className="num">Bobot</th>
-                                <th>Target Sem I</th>
-                                <th>{`Target ${new Date().getFullYear()}`}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(c.kpiItems ?? []).map((it, idx) => (
-                                <tr key={idx}>
-                                  <td>{idx + 1}</td>
-                                  <td>{it.indikator}</td>
-                                  <td>{it.formula}</td>
-                                  <td>{it.satuan}</td>
-                                  <td className="num">{it.bobot}</td>
-                                  <td>{it.target}</td>
-                                  <td>{it.target2}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                          {c.bidang}
+                        </td>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {c.submitter}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                            style={{ fontSize: 12 }}>
+                            {c.status === "ready"
+                              ? "Siap (lolos SM RPC)"
+                              : c.status === "approved"
+                                ? "Disahkan GM"
+                                : c.status === "submitted"
+                                  ? "Dalam proses review"
+                                  : c.status}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() =>
+                              setKmBundleExpanded(
+                                kmBundleExpanded === c.id ? null : c.id,
+                              )
+                            }
+                            title="Tinjau detail KPI & riwayat">
+                            <ClipboardCheck size={12} />{" "}
+                            {c.kpiItems?.length ?? 0} KPI
+                            <ChevronDown
+                              size={12}
+                              style={{
+                                transform:
+                                  kmBundleExpanded === c.id
+                                    ? "rotate(180deg)"
+                                    : "none",
+                                transition: "transform .2s",
+                              }}
+                            />
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+                      {kmBundleExpanded === c.id && (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            style={{
+                              background: "var(--color-surface-2)",
+                              padding: 0,
+                            }}>
+                            <div
+                              style={{
+                                padding: "var(--space-2) var(--space-3)",
+                                fontSize: 13,
+                                color: "var(--color-text-muted)",
+                              }}>
+                              Penanggung Jawab:{" "}
+                              <strong style={{ color: "var(--color-text)" }}>
+                                {c.holder ?? "—"}
+                              </strong>
+                            </div>
+                            <table
+                              className="data-table table-expanded"
+                              style={{ margin: 0 }}>
+                              <thead>
+                                <tr>
+                                  <th>No</th>
+                                  <th>Indikator Kinerja</th>
+                                  <th>Formula</th>
+                                  <th>Satuan</th>
+                                  <th className="num">Bobot</th>
+                                  <th>Target Sem I</th>
+                                  <th>{`Target ${new Date().getFullYear()}`}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(c.kpiItems ?? []).map((it, idx) => (
+                                  <tr key={idx}>
+                                    <td>{idx + 1}</td>
+                                    <td>{it.indikator}</td>
+                                    <td>{it.formula}</td>
+                                    <td>{it.satuan}</td>
+                                    <td className="num">{it.bobot}</td>
+                                    <td>{it.target}</td>
+                                    <td>{it.target2}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           {user?.role === "GM" && kmBundleKP.components.length > 0 && (
             <div
@@ -3606,12 +3479,13 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-2)",
+                gap: "var(--space-4)",
+                padding: "0 var(--space-7) var(--space-7)",
               }}>
               {kmBundleKP.components.some((c) => c.status === "submitted") && (
                 <div
                   style={{
-                    fontSize: "var(--text-xs)",
+                    fontSize: "var(--text-sm)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua KM Kantor Induk "siap" — GM dapat mengesahkan
@@ -3620,7 +3494,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM Kantor Induk (wajib)"
                 value={kmBundleKPNote}
                 onChange={(e) => setKmBundleKPNote(e.target.value)}
@@ -3649,6 +3523,7 @@ export function ApprovalsPage() {
               style={{
                 fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
+                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle KM Kantor Induk tahun ini telah disahkan oleh General
               Manager.
@@ -3678,208 +3553,217 @@ export function ApprovalsPage() {
             )
           }>
           <div className="table-wrap">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Unit</th>
-                  <th>Bidang / Penyusun</th>
-                  <th>Status</th>
-                  <th>Review</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kmBundleUPMK.components.length === 0 && (
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
                   <tr>
-                    <td colSpan={4}>
-                      <EmptyState
-                        title="Belum ada KM UPMK"
-                        message="Belum ada KM UPMK yang masuk konsolidasi tahun ini."
-                      />
-                    </td>
+                    <th>Unit</th>
+                    <th>Bidang / Penyusun</th>
+                    <th>Status</th>
+                    <th>Review</th>
                   </tr>
-                )}
-                {Object.entries(
-                  kmBundleUPMK.components.reduce<
-                    Record<string, KmBundleComp[]>
-                  >((acc, c) => {
-                    (acc[c.unitCode] ??= []).push(c);
-                    return acc;
-                  }, {}),
-                )
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([unitCode, items]) => {
-                    const allApproved = items.every(
-                      (c) => c.status === "approved",
-                    );
-                    const allReady = items.every(
-                      (c) => c.status === "ready" || c.status === "approved",
-                    );
-                    const anySubmitted = items.some(
-                      (c) => c.status === "submitted",
-                    );
-                    const readyCount = items.filter(
-                      (c) => c.status === "ready" || c.status === "approved",
-                    ).length;
-                    const isOpen = upmkGroupExpanded === unitCode;
-                    const aggregateLabel = allApproved
-                      ? "Disahkan GM"
-                      : allReady
-                        ? "Siap"
-                        : anySubmitted
-                          ? "Dalam review"
-                          : `${readyCount}/${items.length} siap`;
-                    const aggregateCls = allApproved
-                      ? "completed"
-                      : allReady
-                        ? "at-risk"
-                        : anySubmitted
-                          ? "in-review"
-                          : "";
-                    return (
-                      <Fragment key={unitCode}>
-                        <tr style={{ background: "var(--color-surface-2)" }}>
-                          <td colSpan={2} style={{ fontWeight: 700 }}>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              style={{ gap: "var(--space-1)" }}
-                              onClick={() =>
-                                setUpmkGroupExpanded(isOpen ? null : unitCode)
-                              }>
-                              <ChevronDown
-                                size={12}
-                                style={{
-                                  transform: isOpen ? "rotate(180deg)" : "none",
-                                  transition: "transform .2s",
-                                  flexShrink: 0,
-                                }}
-                              />
-                              {UNIT_NAMES[unitCode] ?? unitCode}
-                            </button>
-                          </td>
-                          <td>
-                            <span
-                              className={`status-pill ${aggregateCls}`}
-                              style={{ fontSize: 12 }}>
-                              {aggregateLabel}
-                            </span>
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                              fontSize: 13,
-                            }}>
-                            {items.length} bidang
-                          </td>
-                        </tr>
-                        {isOpen &&
-                          sortByBidang(items).map((c) => (
-                            <Fragment key={c.id}>
-                              <tr
-                                style={{
-                                  background: "var(--color-surface-2)",
-                                }}>
-                                <td style={{ paddingLeft: "var(--space-5)" }} />
-                                <td
+                </thead>
+                <tbody>
+                  {kmBundleUPMK.components.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          title="Belum ada KM UPMK"
+                          message="Belum ada KM UPMK yang masuk konsolidasi tahun ini."
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  {Object.entries(
+                    kmBundleUPMK.components.reduce<
+                      Record<string, KmBundleComp[]>
+                    >((acc, c) => {
+                      (acc[c.unitCode] ??= []).push(c);
+                      return acc;
+                    }, {}),
+                  )
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([unitCode, items]) => {
+                      const allApproved = items.every(
+                        (c) => c.status === "approved",
+                      );
+                      const allReady = items.every(
+                        (c) => c.status === "ready" || c.status === "approved",
+                      );
+                      const anySubmitted = items.some(
+                        (c) => c.status === "submitted",
+                      );
+                      const readyCount = items.filter(
+                        (c) => c.status === "ready" || c.status === "approved",
+                      ).length;
+                      const isOpen = upmkGroupExpanded === unitCode;
+                      const aggregateLabel = allApproved
+                        ? "Disahkan GM"
+                        : allReady
+                          ? "Siap"
+                          : anySubmitted
+                            ? "Dalam review"
+                            : `${readyCount}/${items.length} siap`;
+                      const aggregateCls = allApproved
+                        ? "completed"
+                        : allReady
+                          ? "at-risk"
+                          : anySubmitted
+                            ? "in-review"
+                            : "";
+                      return (
+                        <Fragment key={unitCode}>
+                          <tr style={{ background: "var(--color-surface-2)" }}>
+                            <td colSpan={2} style={{ fontWeight: 700 }}>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ gap: "var(--space-1)" }}
+                                onClick={() =>
+                                  setUpmkGroupExpanded(isOpen ? null : unitCode)
+                                }>
+                                <ChevronDown
+                                  size={12}
                                   style={{
-                                    fontSize: 13,
-                                    color: "var(--color-text-muted)",
+                                    transform: isOpen
+                                      ? "rotate(180deg)"
+                                      : "none",
+                                    transition: "transform .2s",
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                {UNIT_NAMES[unitCode] ?? unitCode}
+                              </button>
+                            </td>
+                            <td>
+                              <span className={`status-pill ${aggregateCls}`}>
+                                {aggregateLabel}
+                              </span>
+                            </td>
+                            <td
+                              style={{
+                                color: "var(--color-text-muted)",
+                              }}>
+                              {items.length} bidang
+                            </td>
+                          </tr>
+                          {isOpen &&
+                            sortByBidang(items).map((c) => (
+                              <Fragment key={c.id}>
+                                <tr
+                                  style={{
+                                    background: "var(--color-surface-2)",
                                   }}>
-                                  {c.bidang} · {c.submitter}
-                                </td>
-                                <td>
-                                  <span
-                                    className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                                    style={{ fontSize: 12 }}>
-                                    {c.status === "ready"
-                                      ? "Siap"
-                                      : c.status === "approved"
-                                        ? "Disahkan GM"
-                                        : "Dalam review"}
-                                  </span>
-                                </td>
-                                <td>
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() =>
-                                      setKmBundleExpanded(
-                                        kmBundleExpanded === c.id ? null : c.id,
-                                      )
-                                    }
-                                    title="Tinjau detail KPI">
-                                    <ClipboardCheck size={12} />{" "}
-                                    {c.kpiItems?.length ?? 0} KPI
-                                    <ChevronDown
-                                      size={12}
-                                      style={{
-                                        transform:
-                                          kmBundleExpanded === c.id
-                                            ? "rotate(180deg)"
-                                            : "none",
-                                        transition: "transform .2s",
-                                      }}
-                                    />
-                                  </button>
-                                </td>
-                              </tr>
-                              {kmBundleExpanded === c.id && (
-                                <tr>
                                   <td
-                                    colSpan={4}
+                                    style={{ paddingLeft: "var(--space-5)" }}
+                                  />
+                                  <td
                                     style={{
-                                      background: "var(--color-surface-2)",
-                                      padding: 0,
+                                      fontSize: 14,
+                                      color: "var(--color-text-muted)",
                                     }}>
-                                    <div
-                                      style={{
-                                        padding:
-                                          "var(--space-2) var(--space-3)",
-                                        fontSize: 13,
-                                        color: "var(--color-text-muted)",
-                                      }}>
-                                      Penanggung Jawab:{" "}
-                                      <strong
-                                        style={{ color: "var(--color-text)" }}>
-                                        {c.holder ?? "—"}
-                                      </strong>
-                                    </div>
-                                    <table
-                                      className="data-table compact"
-                                      style={{ margin: 0 }}>
-                                      <thead>
-                                        <tr>
-                                          <th>No</th>
-                                          <th>Indikator Kinerja</th>
-                                          <th>Formula</th>
-                                          <th>Satuan</th>
-                                          <th className="num">Bobot</th>
-                                          <th>Target Sem I</th>
-                                          <th>{`Target ${new Date().getFullYear()}`}</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {(c.kpiItems ?? []).map((it, idx) => (
-                                          <tr key={idx}>
-                                            <td>{idx + 1}</td>
-                                            <td>{it.indikator}</td>
-                                            <td>{it.formula}</td>
-                                            <td>{it.satuan}</td>
-                                            <td className="num">{it.bobot}</td>
-                                            <td>{it.target}</td>
-                                            <td>{it.target2}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
+                                    {c.bidang} · {c.submitter}
+                                  </td>
+                                  <td>
+                                    <span
+                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                                      style={{ fontSize: 14 }}>
+                                      {c.status === "ready"
+                                        ? "Siap"
+                                        : c.status === "approved"
+                                          ? "Disahkan GM"
+                                          : "Dalam review"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() =>
+                                        setKmBundleExpanded(
+                                          kmBundleExpanded === c.id
+                                            ? null
+                                            : c.id,
+                                        )
+                                      }
+                                      title="Tinjau detail KPI">
+                                      <ClipboardCheck size={12} />{" "}
+                                      {c.kpiItems?.length ?? 0} KPI
+                                      <ChevronDown
+                                        size={12}
+                                        style={{
+                                          transform:
+                                            kmBundleExpanded === c.id
+                                              ? "rotate(180deg)"
+                                              : "none",
+                                          transition: "transform .2s",
+                                        }}
+                                      />
+                                    </button>
                                   </td>
                                 </tr>
-                              )}
-                            </Fragment>
-                          ))}
-                      </Fragment>
-                    );
-                  })}
-              </tbody>
-            </table>
+                                {kmBundleExpanded === c.id && (
+                                  <tr>
+                                    <td
+                                      colSpan={4}
+                                      style={{
+                                        background: "var(--color-surface-2)",
+                                        padding: 0,
+                                      }}>
+                                      <div
+                                        style={{
+                                          padding:
+                                            "var(--space-2) var(--space-3)",
+                                          fontSize: 14,
+                                          color: "var(--color-text-muted)",
+                                        }}>
+                                        Penanggung Jawab:{" "}
+                                        <strong
+                                          style={{
+                                            color: "var(--color-text)",
+                                          }}>
+                                          {c.holder ?? "—"}
+                                        </strong>
+                                      </div>
+                                      <table
+                                        className="data-table table-expanded"
+                                        style={{ margin: 0 }}>
+                                        <thead>
+                                          <tr>
+                                            <th>No</th>
+                                            <th>Indikator Kinerja</th>
+                                            <th>Formula</th>
+                                            <th>Satuan</th>
+                                            <th className="num">Bobot</th>
+                                            <th>Target Sem I</th>
+                                            <th>{`Target ${new Date().getFullYear()}`}</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {(c.kpiItems ?? []).map((it, idx) => (
+                                            <tr key={idx}>
+                                              <td>{idx + 1}</td>
+                                              <td>{it.indikator}</td>
+                                              <td>{it.formula}</td>
+                                              <td>{it.satuan}</td>
+                                              <td className="num">
+                                                {it.bobot}
+                                              </td>
+                                              <td>{it.target}</td>
+                                              <td>{it.target2}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            ))}
+                        </Fragment>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
           </div>
           {user?.role === "GM" && kmBundleUPMK.components.length > 0 && (
             <div
@@ -3902,7 +3786,8 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-2)",
+                gap: "var(--space-4)",
+                padding: "0 var(--space-7) var(--space-7)",
               }}>
               {kmBundleUPMK.components.some(
                 (c) => c.status === "submitted",
@@ -3947,6 +3832,7 @@ export function ApprovalsPage() {
               style={{
                 fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
+                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle KM UPMK tahun ini telah disahkan oleh General Manager.
             </div>
@@ -3961,7 +3847,9 @@ export function ApprovalsPage() {
           accent="var(--color-accent)"
           icon={<PieChart size={14} />}
           title="Konsolidasi Nilai Parent KPI (Lintas Bidang)">
-          <div className="card-body" style={{ paddingBottom: 0 }}>
+          <div
+            className="card-body"
+            style={{ padding: "0 var(--space-7) var(--space-7)" }}>
             <ReviewPerKpiTab />
           </div>
         </FoldCard>
@@ -3992,6 +3880,7 @@ export function ApprovalsPage() {
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-3)",
+              padding: "0 var(--space-7) var(--space-7)",
             }}>
             <p
               style={{
@@ -4080,6 +3969,7 @@ export function ApprovalsPage() {
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-3)",
+              padding: "0 var(--space-7) var(--space-7)",
             }}>
             <p
               style={{
@@ -4128,177 +4018,185 @@ export function ApprovalsPage() {
               {bundle.readyCount}/{bundle.total} siap
             </span>
           }>
-          <div className="table-wrap">
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>Unit</th>
-                  <th>Bidang</th>
-                  <th>Penyusun</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bundle.components.length === 0 && (
+          <div
+            className="table-wrap"
+            style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
+              <table className="data-table compact">
+                <thead>
                   <tr>
-                    <td colSpan={4}>
-                      <EmptyState
-                        title="Belum ada realisasi"
-                        message="Belum ada realisasi yang masuk konsolidasi periode ini."
-                      />
-                    </td>
+                    <th>Unit</th>
+                    <th>Bidang</th>
+                    <th>Penyusun</th>
+                    <th>Status</th>
                   </tr>
-                )}
-                {/* KP — flat per bidang */}
-                {bundle.components
-                  .filter((c) => c.unitCode === "KP")
-                  .map((c) => (
-                    <tr key={c.id}>
-                      <td style={{ fontWeight: 600 }}>
-                        {UNIT_NAMES[c.unitCode] ?? c.unitCode}
-                      </td>
-                      <td
-                        style={{
-                          fontSize: 13,
-                          color: "var(--color-text-muted)",
-                        }}>
-                        {c.bidang}
-                      </td>
-                      <td style={{ color: "var(--color-text-muted)" }}>
-                        {c.submitter}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                          style={{ fontSize: 12 }}>
-                          {c.status === "ready"
-                            ? "Siap (lolos SM RPC)"
-                            : c.status === "approved"
-                              ? "Disetujui GM"
-                              : c.status === "submitted"
-                                ? "Dalam proses review"
-                                : c.status}
-                        </span>
+                </thead>
+                <tbody>
+                  {bundle.components.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          title="Belum ada realisasi"
+                          message="Belum ada realisasi yang masuk konsolidasi periode ini."
+                        />
                       </td>
                     </tr>
-                  ))}
-                {/* UPMK — satu baris grup per unit, expand ke sub-rows per bidang (urut BIDANG_ORDER) */}
-                {Object.entries(
-                  bundle.components
-                    .filter((c) => c.unitCode !== "KP")
-                    .reduce<Record<string, typeof bundle.components>>(
-                      (acc, c) => {
-                        (acc[c.unitCode] ??= []).push(c);
-                        return acc;
-                      },
-                      {},
-                    ),
-                )
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([unitCode, items]) => {
-                    const allApproved = items.every(
-                      (c) => c.status === "approved",
-                    );
-                    const allReady = items.every(
-                      (c) => c.status === "ready" || c.status === "approved",
-                    );
-                    const anySubmitted = items.some(
-                      (c) => c.status === "submitted",
-                    );
-                    const readyCount = items.filter(
-                      (c) => c.status === "ready" || c.status === "approved",
-                    ).length;
-                    const isOpen = upmkRealGroupExpanded === unitCode;
-                    const aggrLabel = allApproved
-                      ? "Disetujui GM"
-                      : allReady
-                        ? "Siap"
-                        : anySubmitted
-                          ? "Dalam review"
-                          : `${readyCount}/${items.length} siap`;
-                    const aggrCls = allApproved
-                      ? "completed"
-                      : allReady
-                        ? "at-risk"
-                        : anySubmitted
-                          ? "in-review"
-                          : "";
-                    return (
-                      <Fragment key={unitCode}>
-                        <tr style={{ background: "var(--color-surface-2)" }}>
-                          <td colSpan={2} style={{ fontWeight: 700 }}>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              style={{ gap: "var(--space-1)" }}
-                              onClick={() =>
-                                setUpmkRealGroupExpanded(
-                                  isOpen ? null : unitCode,
-                                )
-                              }>
-                              <ChevronDown
-                                size={12}
+                  )}
+                  {/* KP — flat per bidang */}
+                  {bundle.components
+                    .filter((c) => c.unitCode === "KP")
+                    .map((c) => (
+                      <tr key={c.id}>
+                        <td style={{ fontWeight: 600 }}>
+                          {UNIT_NAMES[c.unitCode] ?? c.unitCode}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: 13,
+                            color: "var(--color-text-muted)",
+                          }}>
+                          {c.bidang}
+                        </td>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {c.submitter}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                            style={{ fontSize: 12 }}>
+                            {c.status === "ready"
+                              ? "Siap (lolos SM RPC)"
+                              : c.status === "approved"
+                                ? "Disetujui GM"
+                                : c.status === "submitted"
+                                  ? "Dalam proses review"
+                                  : c.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  {/* UPMK — satu baris grup per unit, expand ke sub-rows per bidang (urut BIDANG_ORDER) */}
+                  {Object.entries(
+                    bundle.components
+                      .filter((c) => c.unitCode !== "KP")
+                      .reduce<Record<string, typeof bundle.components>>(
+                        (acc, c) => {
+                          (acc[c.unitCode] ??= []).push(c);
+                          return acc;
+                        },
+                        {},
+                      ),
+                  )
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([unitCode, items]) => {
+                      const allApproved = items.every(
+                        (c) => c.status === "approved",
+                      );
+                      const allReady = items.every(
+                        (c) => c.status === "ready" || c.status === "approved",
+                      );
+                      const anySubmitted = items.some(
+                        (c) => c.status === "submitted",
+                      );
+                      const readyCount = items.filter(
+                        (c) => c.status === "ready" || c.status === "approved",
+                      ).length;
+                      const isOpen = upmkRealGroupExpanded === unitCode;
+                      const aggrLabel = allApproved
+                        ? "Disetujui GM"
+                        : allReady
+                          ? "Siap"
+                          : anySubmitted
+                            ? "Dalam review"
+                            : `${readyCount}/${items.length} siap`;
+                      const aggrCls = allApproved
+                        ? "completed"
+                        : allReady
+                          ? "at-risk"
+                          : anySubmitted
+                            ? "in-review"
+                            : "";
+                      return (
+                        <Fragment key={unitCode}>
+                          <tr style={{ background: "var(--color-surface-2)" }}>
+                            <td colSpan={2} style={{ fontWeight: 700 }}>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ gap: "var(--space-1)" }}
+                                onClick={() =>
+                                  setUpmkRealGroupExpanded(
+                                    isOpen ? null : unitCode,
+                                  )
+                                }>
+                                <ChevronDown
+                                  size={12}
+                                  style={{
+                                    transform: isOpen
+                                      ? "rotate(180deg)"
+                                      : "none",
+                                    transition: "transform .2s",
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                {UNIT_NAMES[unitCode] ?? unitCode}
+                              </button>
+                            </td>
+                            <td
+                              style={{
+                                color: "var(--color-text-muted)",
+                                fontSize: 13,
+                              }}>
+                              {items.length} bidang
+                            </td>
+                            <td>
+                              <span
+                                className={`status-pill ${aggrCls}`}
+                                style={{ fontSize: 12 }}>
+                                {aggrLabel}
+                              </span>
+                            </td>
+                          </tr>
+                          {isOpen &&
+                            sortByBidang(items).map((c) => (
+                              <tr
+                                key={c.id}
                                 style={{
-                                  transform: isOpen ? "rotate(180deg)" : "none",
-                                  transition: "transform .2s",
-                                  flexShrink: 0,
-                                }}
-                              />
-                              {UNIT_NAMES[unitCode] ?? unitCode}
-                            </button>
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                              fontSize: 13,
-                            }}>
-                            {items.length} bidang
-                          </td>
-                          <td>
-                            <span
-                              className={`status-pill ${aggrCls}`}
-                              style={{ fontSize: 12 }}>
-                              {aggrLabel}
-                            </span>
-                          </td>
-                        </tr>
-                        {isOpen &&
-                          sortByBidang(items).map((c) => (
-                            <tr
-                              key={c.id}
-                              style={{ background: "var(--color-surface-2)" }}>
-                              <td style={{ paddingLeft: "var(--space-5)" }} />
-                              <td
-                                style={{
-                                  fontSize: 13,
-                                  color: "var(--color-text-muted)",
+                                  background: "var(--color-surface-2)",
                                 }}>
-                                {c.bidang}
-                              </td>
-                              <td
-                                style={{
-                                  color: "var(--color-text-muted)",
-                                  fontSize: 13,
-                                }}>
-                                {c.submitter}
-                              </td>
-                              <td>
-                                <span
-                                  className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                                  style={{ fontSize: 12 }}>
-                                  {c.status === "ready"
-                                    ? "Siap"
-                                    : c.status === "approved"
-                                      ? "Disetujui GM"
-                                      : "Dalam review"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                      </Fragment>
-                    );
-                  })}
-              </tbody>
-            </table>
+                                <td style={{ paddingLeft: "var(--space-5)" }} />
+                                <td
+                                  style={{
+                                    fontSize: 13,
+                                    color: "var(--color-text-muted)",
+                                  }}>
+                                  {c.bidang}
+                                </td>
+                                <td
+                                  style={{
+                                    color: "var(--color-text-muted)",
+                                    fontSize: 13,
+                                  }}>
+                                  {c.submitter}
+                                </td>
+                                <td>
+                                  <span
+                                    className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                                    style={{ fontSize: 12 }}>
+                                    {c.status === "ready"
+                                      ? "Siap"
+                                      : c.status === "approved"
+                                        ? "Disetujui GM"
+                                        : "Dalam review"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                        </Fragment>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
           </div>
           {user?.role === "GM" && bundle.components.length > 0 && (
             <div
@@ -4321,7 +4219,8 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-2)",
+                gap: "var(--space-4)",
+                padding: "0 var(--space-7) var(--space-7)",
               }}>
               {!bundle.canApprove && bundle.total > 0 && (
                 <div
@@ -4364,6 +4263,7 @@ export function ApprovalsPage() {
               style={{
                 fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
+                padding: "0 var(--space-7) var(--space-4)",
               }}>
               ✓ Bundle periode ini telah disetujui penuh oleh General Manager.
             </div>
@@ -4384,52 +4284,71 @@ export function ApprovalsPage() {
           style={{
             display: "flex",
             flexWrap: "wrap",
-            gap: "var(--space-2)",
-            alignItems: "center",
-            paddingBottom: "var(--space-3)",
+            flexDirection: "column",
+            gap: "var(--space-3)",
+            alignItems: "start",
+            padding: "0 var(--space-7) 0",
+            width: "100%",
           }}>
-          <button
-            className={`btn btn-sm ${trackerType === "all" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => setTrackerType("all")}>
-            Semua
-          </button>
-          <button
-            className={`btn btn-sm ${trackerType === "km" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => setTrackerType("km")}>
-            KM
-          </button>
-          <button
-            className={`btn btn-sm ${trackerType === "real" ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => setTrackerType("real")}>
-            Realisasi
-          </button>
-          <select
-            className="form-input form-input-sm"
-            value={trackerStatus}
-            onChange={(e) => setTrackerStatus(e.target.value)}>
-            <option value="all">Semua status</option>
-            {Object.entries(DOC_STATUS_LABEL).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select
-            className="form-input form-input-sm"
-            value={trackerPeriod}
-            onChange={(e) => setTrackerPeriod(e.target.value)}>
-            <option value="all">Semua periode</option>
-            {periods.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <div
+            style={{
+              display: "flex",
+              gap: "var(--space-2)",
+              marginBottom: "var(--space-3)",
+              alignItems: "center",
+            }}>
+            <button
+              className={`btn btn-sm ${trackerType === "all" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setTrackerType("all")}>
+              Semua
+            </button>
+            <button
+              className={`btn btn-sm ${trackerType === "km" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setTrackerType("km")}>
+              KM
+            </button>
+            <button
+              className={`btn btn-sm ${trackerType === "real" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setTrackerType("real")}>
+              Realisasi
+            </button>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "var(--space-2)",
+              marginBottom: "var(--space-3)",
+              alignItems: "center",
+            }}>
+            <select
+              className="form-input form-input-sm"
+              style={{ width: "200px" }}
+              value={trackerStatus}
+              onChange={(e) => setTrackerStatus(e.target.value)}>
+              <option value="all">Semua status</option>
+              {Object.entries(DOC_STATUS_LABEL).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input form-input-sm"
+              value={trackerPeriod}
+              onChange={(e) => setTrackerPeriod(e.target.value)}>
+              <option value="all">Semua periode</option>
+              {periods.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div
           className="kpi-strip-grid"
-          style={{ padding: "0 var(--space-4) var(--space-4)" }}>
+          style={{ padding: "0 var(--space-7) 0" }}>
           <div className="metric-card" style={{ maxWidth: "none" }}>
             <div className="metric-label">Total</div>
             <div className="metric-value">{filteredDocRows.length}</div>
@@ -4460,153 +4379,157 @@ export function ApprovalsPage() {
           </div>
         </div>
 
-        <div className="table-wrap">
-          <table className="data-table compact">
-            <thead>
-              <tr>
-                <th>Unit</th>
-                <th>Jenis Dokumen</th>
-                <th>Periode</th>
-                <th>Jenjang</th>
-                <th>Status</th>
-                <th>Menunggu Review</th>
-                <th>Komentar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDocRows.map((d) => (
-                <Fragment key={d.id}>
-                  <tr>
-                    <td style={{ fontWeight: 600 }}>
-                      {UNIT_NAMES[d.unitCode] ?? d.unitCode}
-                    </td>
-                    <td>
-                      {d.jenis}
-                      {d.detail ? (
-                        <span style={{ color: "var(--color-text-muted)" }}>
-                          {" "}
-                          · {d.detail}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td
-                      style={{
-                        color: "var(--color-text-muted)",
-                        whiteSpace: "nowrap",
-                      }}>
-                      {periodMap[d.periodId] ?? "—"}
-                    </td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      {d.status === "approved" ? (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            color: "var(--color-success)",
-                            fontWeight: 600,
-                          }}>
-                          ✓ Selesai ({d.stepCount}/{d.stepCount})
-                        </span>
-                      ) : d.status === "ready" ? (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            color: "var(--color-warning)",
-                            fontWeight: 600,
-                          }}>
-                          Lolos rantai → bundle
-                        </span>
-                      ) : d.status === "rejected" ? (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            color: "var(--color-danger)",
-                          }}>
-                          Dikembalikan
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            color: "var(--color-accent)",
-                            fontWeight: 600,
-                          }}>
-                          Langkah {d.stepIndex}/{Math.max(0, d.stepCount - 1)}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}
-                        style={{ fontSize: 12 }}>
-                        {DOC_STATUS_LABEL[d.status] ?? d.status}
-                      </span>
-                    </td>
-                    <td
-                      style={{
-                        color:
-                          d.status === "approved"
-                            ? "var(--color-success)"
-                            : "var(--color-text-muted)",
-                        fontSize: 13,
-                      }}>
-                      {nextApproverLabel(d.status, d.stepLabel)}
-                    </td>
-                    <td>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() =>
-                          setDocExpanded(docExpanded === d.id ? null : d.id)
-                        }
-                        title="Lihat riwayat persetujuan & komentar">
-                        <MessageSquare size={12} />{" "}
-                        {Array.isArray(d.history)
-                          ? (d.history as unknown[]).length
-                          : 0}
-                        <ChevronDown
-                          size={12}
-                          style={{
-                            transform:
-                              docExpanded === d.id ? "rotate(180deg)" : "none",
-                            transition: "transform .2s",
-                          }}
-                        />
-                      </button>
-                    </td>
-                  </tr>
-                  {docExpanded === d.id && (
+        <div className="table-wrap" style={{ marginBottom: "var(--space-4)" }}>
+          <div className="table-scroll">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>Unit</th>
+                  <th>Jenis Dokumen</th>
+                  <th>Periode</th>
+                  <th>Jenjang</th>
+                  <th>Status</th>
+                  <th>Menunggu Review</th>
+                  <th>Komentar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDocRows.map((d) => (
+                  <Fragment key={d.id}>
                     <tr>
+                      <td style={{ fontWeight: 600 }}>
+                        {UNIT_NAMES[d.unitCode] ?? d.unitCode}
+                      </td>
+                      <td>
+                        {d.jenis}
+                        {d.detail ? (
+                          <span style={{ color: "var(--color-text-muted)" }}>
+                            {" "}
+                            · {d.detail}
+                          </span>
+                        ) : null}
+                      </td>
                       <td
-                        colSpan={7}
                         style={{
-                          background: "var(--color-surface-2)",
-                          padding: 0,
+                          color: "var(--color-text-muted)",
+                          whiteSpace: "nowrap",
                         }}>
-                        <ApprovalTimeline history={d.history} />
+                        {periodMap[d.periodId] ?? "—"}
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {d.status === "approved" ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-success)",
+                              fontWeight: 600,
+                            }}>
+                            ✓ Selesai ({d.stepCount}/{d.stepCount})
+                          </span>
+                        ) : d.status === "ready" ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-warning)",
+                              fontWeight: 600,
+                            }}>
+                            Lolos rantai → bundle
+                          </span>
+                        ) : d.status === "rejected" ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "var(--color-danger)",
+                            }}>
+                            Dikembalikan
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: 14,
+                              color: "var(--color-accent)",
+                              fontWeight: 600,
+                            }}>
+                            Langkah {d.stepIndex}/{Math.max(0, d.stepCount - 1)}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}
+                          style={{ fontSize: 14 }}>
+                          {DOC_STATUS_LABEL[d.status] ?? d.status}
+                        </span>
+                      </td>
+                      <td
+                        style={{
+                          color:
+                            d.status === "approved"
+                              ? "var(--color-success)"
+                              : "var(--color-text-muted)",
+                          fontSize: 13,
+                        }}>
+                        {nextApproverLabel(d.status, d.stepLabel)}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            setDocExpanded(docExpanded === d.id ? null : d.id)
+                          }
+                          title="Lihat riwayat persetujuan & komentar">
+                          <MessageSquare size={12} />{" "}
+                          {Array.isArray(d.history)
+                            ? (d.history as unknown[]).length
+                            : 0}
+                          <ChevronDown
+                            size={12}
+                            style={{
+                              transform:
+                                docExpanded === d.id
+                                  ? "rotate(180deg)"
+                                  : "none",
+                              transition: "transform .2s",
+                            }}
+                          />
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
-              {filteredDocRows.length === 0 && (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState
-                      title={
-                        docRows.length === 0
-                          ? "Belum ada dokumen"
-                          : "Tidak ada dokumen yang cocok"
-                      }
-                      message={
-                        docRows.length === 0
-                          ? "Belum ada Kontrak Manajemen atau Realisasi yang diinput."
-                          : "Coba ubah filter jenis, status, atau periode."
-                      }
-                    />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    {docExpanded === d.id && (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          style={{
+                            background: "var(--color-surface-2)",
+                            padding: 0,
+                          }}>
+                          <ApprovalTimeline history={d.history} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+                {filteredDocRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7}>
+                      <EmptyState
+                        title={
+                          docRows.length === 0
+                            ? "Belum ada dokumen"
+                            : "Tidak ada dokumen yang cocok"
+                        }
+                        message={
+                          docRows.length === 0
+                            ? "Belum ada Kontrak Manajemen atau Realisasi yang diinput."
+                            : "Coba ubah filter jenis, status, atau periode."
+                        }
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </FoldCard>
 
@@ -4616,7 +4539,6 @@ export function ApprovalsPage() {
         className="btn btn-ghost btn-sm"
         onClick={() => setShowMonitoring((v) => !v)}
         style={{
-          marginTop: "var(--space-6)",
           color: "var(--color-text-muted)",
         }}>
         <ChevronDown
@@ -4628,7 +4550,6 @@ export function ApprovalsPage() {
         />
         Pantau semua — riwayat dokumen, timeline, RACI
       </button>
-
       {showMonitoring && (
         <div style={{ marginTop: "var(--space-4)" }}>
           {/* Workflow Timeline Card */}
@@ -4793,7 +4714,7 @@ export function ApprovalsPage() {
             const myCol = getUserRaciCol(user);
             return (
               <FoldCard
-                icon={<UsersRound size={14} />}
+                icon={<UsersRound size={16} />}
                 title="Matriks RACI"
                 right={
                   <span className="card-meta">
@@ -4804,7 +4725,7 @@ export function ApprovalsPage() {
                 {myCol && (
                   <div
                     style={{
-                      margin: "var(--space-4) var(--space-4) 0",
+                      margin: "var(--space-4) var(--space-7) 0",
                       padding: "var(--space-3) var(--space-4)",
                       borderRadius: "var(--radius-md)",
                       background: "var(--color-accent-tint)",
@@ -4824,12 +4745,12 @@ export function ApprovalsPage() {
                       Peran Anda dalam Workflow
                     </div>
                     <div
-                      style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
+                      style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>
                       {RACI_COL_LABEL[myCol]}
                     </div>
                     <div
                       style={{
-                        fontSize: "var(--text-xs)",
+                        fontSize: "var(--text-sm)",
                         color: "var(--color-text-muted)",
                       }}>
                       {RACI_COL_TANGGUNG[myCol]}
@@ -4838,7 +4759,7 @@ export function ApprovalsPage() {
                       style={{
                         fontSize: 12,
                         color: "var(--color-text-subtle)",
-                        marginTop: 2,
+                        marginTop: 6,
                       }}>
                       Kolom yang disorot (🔵) pada tabel di bawah menunjukkan
                       posisi Anda dalam matriks.
@@ -4850,7 +4771,7 @@ export function ApprovalsPage() {
                     display: "flex",
                     gap: "var(--space-3)",
                     flexWrap: "wrap",
-                    padding: "var(--space-3) var(--space-4)",
+                    padding: "var(--space-3) var(--space-7)",
                     fontSize: 12,
                   }}>
                   {[
@@ -4899,7 +4820,7 @@ export function ApprovalsPage() {
                           fontWeight: 700,
                           background: bg as string,
                           color: clr as string,
-                          fontSize: 12,
+                          fontSize: 10,
                         }}>
                         {lbl}
                       </span>
@@ -4909,130 +4830,134 @@ export function ApprovalsPage() {
                     </div>
                   ))}
                 </div>
-                <div className="table-wrap">
-                  <table className="data-table compact">
-                    <thead>
-                      <tr>
-                        <th style={{ minWidth: 220 }}>Aktivitas</th>
-                        <th
-                          style={{
-                            fontSize: 11,
-                            color: "var(--color-text-muted)",
-                            fontWeight: 500,
-                            whiteSpace: "nowrap",
-                            textAlign: "center",
-                          }}>
-                          Ruang Lingkup
-                        </th>
-                        {RACI_COLS.map((col) => (
+                <div
+                  className="table-wrap"
+                  style={{ paddingBottom: "var(--space-2)" }}>
+                  <div className="table-scroll">
+                    <table className="data-table compact">
+                      <thead>
+                        <tr>
+                          <th style={{ minWidth: 220 }}>Aktivitas</th>
                           <th
-                            key={col.key}
                             style={{
+                              fontSize: 14,
+                              color: "#e5e7eb",
+                              fontWeight: 600,
+                              whiteSpace: "nowrap",
                               textAlign: "center",
-                              minWidth: 110,
-                              background:
-                                myCol === col.key
-                                  ? "var(--color-accent-tint)"
-                                  : undefined,
-                              color:
-                                myCol === col.key
-                                  ? "var(--color-accent)"
-                                  : undefined,
-                              borderBottom:
-                                myCol === col.key
-                                  ? "2px solid var(--color-accent)"
-                                  : undefined,
                             }}>
-                            <div style={{ fontWeight: 700, fontSize: 13 }}>
-                              {myCol === col.key ? "🔵 " : ""}
-                              {col.label}
-                            </div>
-                            <div
+                            Ruang Lingkup
+                          </th>
+                          {RACI_COLS.map((col) => (
+                            <th
+                              key={col.key}
                               style={{
-                                fontSize: 11,
-                                fontWeight: 400,
+                                textAlign: "center",
+                                minWidth: 110,
+                                background:
+                                  myCol === col.key
+                                    ? "var(--color-accent-tint)"
+                                    : undefined,
                                 color:
                                   myCol === col.key
                                     ? "var(--color-accent)"
-                                    : "var(--color-text-subtle)",
-                                marginTop: 2,
-                                whiteSpace: "normal",
-                                lineHeight: 1.3,
-                              }}>
-                              {col.sublabel}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {RACI_ROWS.map((row, i) => (
-                        <tr key={i}>
-                          <td
-                            style={{
-                              fontWeight: 500,
-                              fontSize: "var(--text-xs)",
-                            }}>
-                            {row.activity}
-                          </td>
-                          <td
-                            style={{
-                              textAlign: "center",
-                              whiteSpace: "nowrap",
-                            }}>
-                            <span
-                              style={{
-                                fontSize: 11,
-                                background: "var(--color-surface-2)",
-                                color: "var(--color-text-muted)",
-                                padding: "1px 6px",
-                                borderRadius: 8,
-                              }}>
-                              {row.scope}
-                            </span>
-                          </td>
-                          {RACI_COLS.map((col) => {
-                            const v = row.values[col.key];
-                            const isMyCol = myCol === col.key;
-                            return (
-                              <td
-                                key={col.key}
-                                style={{
-                                  textAlign: "center",
-                                  background: isMyCol
-                                    ? "rgba(var(--color-accent-rgb, 14,116,144),0.04)"
                                     : undefined,
+                                borderBottom:
+                                  myCol === col.key
+                                    ? "2px solid var(--color-accent)"
+                                    : undefined,
+                              }}>
+                              <div style={{ fontWeight: 700, fontSize: 14 }}>
+                                {myCol === col.key ? "🔵 " : ""}
+                                {col.label}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  color:
+                                    myCol === col.key
+                                      ? "var(--color-accent)"
+                                      : "var(--color-text-sidebar-muted)",
+                                  marginTop: 2,
+                                  whiteSpace: "normal",
+                                  lineHeight: 1.3,
                                 }}>
-                                <span
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    minWidth: 32,
-                                    height: 22,
-                                    borderRadius: 4,
-                                    fontSize: "var(--text-xs)",
-                                    fontWeight: 700,
-                                    outline:
-                                      isMyCol && v !== "—"
-                                        ? "2px solid var(--color-accent)"
-                                        : undefined,
-                                    outlineOffset: 1,
-                                    ...RACI_VALUE_STYLE(v),
-                                  }}>
-                                  {v}
-                                </span>
-                              </td>
-                            );
-                          })}
+                                {col.sublabel}
+                              </div>
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {RACI_ROWS.map((row, i) => (
+                          <tr key={i}>
+                            <td
+                              style={{
+                                fontWeight: 500,
+                                fontSize: "var(--text-sm)",
+                              }}>
+                              {row.activity}
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "center",
+                                whiteSpace: "nowrap",
+                              }}>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  background: "var(--color-surface-2)",
+                                  color: "var(--color-text-muted)",
+                                  padding: "2px 6px",
+                                  borderRadius: 8,
+                                }}>
+                                {row.scope}
+                              </span>
+                            </td>
+                            {RACI_COLS.map((col) => {
+                              const v = row.values[col.key];
+                              const isMyCol = myCol === col.key;
+                              return (
+                                <td
+                                  key={col.key}
+                                  style={{
+                                    textAlign: "center",
+                                    background: isMyCol
+                                      ? "rgba(var(--color-accent-rgb, 14,116,144),0.04)"
+                                      : undefined,
+                                  }}>
+                                  <span
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      minWidth: 32,
+                                      height: 22,
+                                      borderRadius: 4,
+                                      fontSize: "var(--text-xs)",
+                                      fontWeight: 700,
+                                      outline:
+                                        isMyCol && v !== "—"
+                                          ? "2px solid var(--color-accent)"
+                                          : undefined,
+                                      outlineOffset: 1,
+                                      ...RACI_VALUE_STYLE(v),
+                                    }}>
+                                    {v}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
                 <div
                   style={{
-                    padding: "var(--space-3) var(--space-4)",
+                    padding: "var(--space-3) var(--space-7)",
                     fontSize: 12,
                     color: "var(--color-text-subtle)",
                     borderTop: "1px solid var(--color-border)",
@@ -5043,7 +4968,7 @@ export function ApprovalsPage() {
                   </strong>{" "}
                   Dokumen dari <strong>UPMK</strong> melewati review internal
                   (ASMAN + MUP) sebelum masuk rantai Kantor Induk. Dokumen dari{" "}
-                  <strong>Kantor Induk</strong> langsung ke rantai bidang KI.{" "}
+                  <strong>Kantor Induk</strong> langsung ke rantai bidang KI.
                   Semua dokumen (kecuali bidang RPC sendiri) wajib melalui{" "}
                   <strong>konsolidasi RPC</strong> sebelum masuk bundle GM. GM
                   menyetujui <strong>sekali untuk seluruh dokumen</strong> dalam
