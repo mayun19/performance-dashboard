@@ -48,6 +48,7 @@ type SubIndicatorItem = {
   target2?: string;
   realisasi?: number | string;
   formula?: string;
+  polaritas?: "positive" | "negative";
 };
 
 type KpiItem = {
@@ -62,6 +63,36 @@ type KpiItem = {
   realisasi?: number | string;
   masterKpiId?: string; // tautan ke KpiAssignment untuk resolusi living target (KM Sementara)
   subIndicators?: SubIndicatorItem[]; // non-kosong = item ini "komposit" — realisasi diisi per-sub
+  polaritas?: "positive" | "negative";
+};
+
+// Saran Pencapaian (%) murni tampilan — mirror ringkas resolvePolarity+computeCapaian backend
+// (common/capaian.ts), TAK perlu presisi identik krn nilainya cuma saran (capaianSaran), tak
+// pernah dibaca skoring. Target2 (target tahun) dipakai bila ada, else target Sem I.
+const suggestCapaian = (
+  targetRaw: unknown,
+  target2Raw: unknown,
+  actualRaw: unknown,
+  satuan: string,
+  polaritas?: string,
+): string => {
+  const clean = (v: unknown) =>
+    parseFloat(
+      String(v ?? "")
+        .replace(",", ".")
+        .replace(/[^0-9.-]/g, ""),
+    );
+  const t = clean(target2Raw) || clean(targetRaw);
+  const a = clean(actualRaw);
+  if (!Number.isFinite(t) || !Number.isFinite(a) || t <= 0 || a <= 0) return "";
+  const isInverse =
+    polaritas === "negative"
+      ? true
+      : polaritas === "positive"
+        ? false
+        : satuan.trim().toLowerCase() === "hari kerja";
+  const pct = isInverse ? (t / a) * 100 : (a / t) * 100;
+  return String(Math.round(Math.min(pct, 110) * 100) / 100);
 };
 
 // Fase 5: RevisionLog field='values' menyimpan seluruh blob values lama/baru — tampilkan
@@ -187,6 +218,11 @@ export function InputRealisasiPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  // Saran Pencapaian (%) — diisi otomatis (suggestCapaian) saat Realisasi diketik, boleh ditimpa
+  // manual staff. Murni informasional (capaianSaran), tidak pernah jadi skor resmi.
+  const [capaianValues, setCapaianValues] = useState<Record<string, string>>(
+    {},
+  );
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -312,6 +348,7 @@ export function InputRealisasiPage() {
           );
           setKpiList(merged);
           setValues({});
+          setCapaianValues({});
         }
       } catch (e) {
         setError((e as Error)?.message ?? "Gagal memuat data");
@@ -363,10 +400,15 @@ export function InputRealisasiPage() {
             subIndicators: kpi.subIndicators.map((si, j) => ({
               ...si,
               realisasi: values[`${i}.${j}`] ?? "",
+              capaianSaran: capaianValues[`${i}.${j}`] ?? "",
             })),
           };
         } else {
-          bucket[`kpi_${i}`] = { ...kpi, realisasi: values[String(i)] ?? "" };
+          bucket[`kpi_${i}`] = {
+            ...kpi,
+            realisasi: values[String(i)] ?? "",
+            capaianSaran: capaianValues[String(i)] ?? "",
+          };
         }
       });
       for (const [bidang, payload] of byBidang) {
@@ -382,6 +424,7 @@ export function InputRealisasiPage() {
       setPickerOpen(false);
       setSubmitted(true);
       setValues({});
+      setCapaianValues({});
       const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
       setHistory(hist as unknown[]);
       setTimeout(() => setSubmitted(false), 3000);
@@ -723,175 +766,125 @@ export function InputRealisasiPage() {
               message="Belum ada KM Sementara yang disubmit Staff RPC untuk unit Anda. Setelah KPI di-assign & dokumen KM dikirim dari menu Manajemen KPI → Dokumen KM, KPI akan muncul di sini."
             />
           ) : (
-            <div className="table-scroll able-scroll">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>No</th>
-                    <th>Bidang</th>
-                    <th>Indikator</th>
-                    <th>Formula</th>
-                    <th>Satuan</th>
-                    <th className="num">Bobot</th>
-                    <th className="num">Target Sem I</th>
-                    <th className="num">Target {CURRENT_YEAR}</th>
-                    {anyLivingTarget && (
-                      <th
-                        className="num"
-                        title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
-                        KM Sementara
-                      </th>
-                    )}
-                    <th className="num">Realisasi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpiList.map((kpi, i) => {
-                    const isComposite =
-                      !!kpi.subIndicators && kpi.subIndicators.length > 0;
-                    const hasVal = isItemFilled(kpi, i);
-                    const lt = livingTargetFor(kpi);
-                    return (
-                      <Fragment key={i}>
-                        <tr
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Bidang</th>
+                  <th>Indikator</th>
+                  <th>Formula</th>
+                  <th>Satuan</th>
+                  <th className="num">Bobot</th>
+                  <th className="num">Target Sem I</th>
+                  <th className="num">Target {CURRENT_YEAR}</th>
+                  {anyLivingTarget && (
+                    <th
+                      className="num"
+                      title="KM Sementara — target hidup bulan ini (bisa dikoreksi PIC REN sampai KM Final tiba)">
+                      KM Sementara
+                    </th>
+                  )}
+                  <th>Realisasi</th>
+                  <th title="Dihitung otomatis dari target vs realisasi, boleh ditimpa — hanya saran, evaluasi resmi tetap di reviewer">
+                    Pencapaian (saran)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpiList.map((kpi, i) => {
+                  const isComposite =
+                    !!kpi.subIndicators && kpi.subIndicators.length > 0;
+                  const hasVal = isItemFilled(kpi, i);
+                  const lt = livingTargetFor(kpi);
+                  return (
+                    <Fragment key={i}>
+                      <tr
+                        style={{
+                          background: hasVal
+                            ? "rgba(34,197,94,0.03)"
+                            : "transparent",
+                        }}>
+                        <td style={{ color: "var(--color-text-muted)" }}>
+                          {kpi.no ?? i + 1}
+                        </td>
+                        <td
                           style={{
-                            background: hasVal
-                              ? "rgba(34,197,94,0.03)"
-                              : "transparent",
+                            fontSize: 13,
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
                           }}>
-                          <td style={{ color: "var(--color-text-muted)" }}>
-                            {kpi.no ?? i + 1}
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                              whiteSpace: "nowrap",
-                            }}>
-                            {kpi.bidang ?? "—"}
-                          </td>
-                          <td style={{ maxWidth: 220, fontWeight: 500 }}>
-                            {kpi.indikator ?? "—"}
-                            {isComposite && (
-                              <span
-                                style={{
-                                  marginLeft: 6,
-                                  fontSize: 12,
-                                  fontWeight: 700,
-                                  color: "var(--color-accent)",
-                                  border: "1px solid var(--color-accent)",
-                                  borderRadius: 4,
-                                  padding: "1px 4px",
-                                }}
-                                title="Komposit — isi realisasi per sub-indikator di bawah">
-                                Komposit
-                              </span>
-                            )}
-                          </td>
-                          <td
-                            style={{
-                              fontSize: 14,
-                              color: "var(--color-text-muted)",
-                              maxWidth: 200,
-                            }}>
-                            {kpi.formula ?? "—"}
-                          </td>
-                          <td
-                            style={{
-                              color: "var(--color-text-muted)",
-                              whiteSpace: "nowrap",
-                            }}>
-                            {kpi.satuan ?? "—"}
-                          </td>
-                          <td
-                            className="num"
-                            style={{
-                              fontWeight: 700,
-                              color: "var(--color-accent)",
-                            }}>
-                            {kpi.bobot ?? "—"}
-                          </td>
-                          <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target ?? "—")}
-                          </td>
-                          <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target2 ?? "—")}
-                          </td>
-                          {anyLivingTarget && (
-                            <td
-                              className="num"
-                              style={{ whiteSpace: "nowrap" }}>
-                              {lt ? (
-                                <>
-                                  <span style={{ fontWeight: 700 }}>
-                                    {lt.frozen
-                                      ? (lt.frozenTarget ?? lt.target)
-                                      : lt.target}
-                                  </span>
-                                  <span
-                                    title={
-                                      lt.frozen
-                                        ? "Sudah dibekukan (bundle GM disetujui / deadline / restatement)"
-                                        : lt.source === "carried"
-                                          ? "Dibawa dari bulan lalu (belum diubah)"
-                                          : "Diinput/diubah bulan ini"
-                                    }
-                                    style={{
-                                      marginLeft: 4,
-                                      fontSize: 12,
-                                      fontWeight: 700,
-                                      padding: "1px 4px",
-                                      borderRadius: 4,
-                                      border: "1px solid var(--color-border)",
-                                      color: lt.frozen
-                                        ? "var(--color-text-muted)"
-                                        : lt.source === "carried"
-                                          ? "var(--color-warning)"
-                                          : "var(--color-accent)",
-                                    }}>
-                                    {lt.frozen
-                                      ? "BEKU"
-                                      : lt.source === "carried"
-                                        ? "CARRY"
-                                        : "HIDUP"}
-                                  </span>
-                                </>
-                              ) : (
-                                <span
-                                  style={{ color: "var(--color-text-subtle)" }}>
-                                  —
-                                </span>
-                              )}
-                            </td>
+                          {kpi.bidang ?? "—"}
+                        </td>
+                        <td style={{ maxWidth: 220, fontWeight: 500 }}>
+                          {kpi.indikator ?? "—"}
+                          {isComposite && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "var(--color-accent)",
+                                border: "1px solid var(--color-accent)",
+                                borderRadius: 4,
+                                padding: "1px 4px",
+                              }}
+                              title="Komposit — isi realisasi per sub-indikator di bawah">
+                              Komposit
+                            </span>
                           )}
-                          <td style={{ minWidth: 340 }}>
-                            {formOpen ? (
-                              isComposite ? (
+                        </td>
+                        <td
+                          style={{
+                            fontSize: 12,
+                            color: "var(--color-text-muted)",
+                            maxWidth: 200,
+                          }}>
+                          {kpi.formula ?? "—"}
+                        </td>
+                        <td
+                          style={{
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}>
+                          {kpi.satuan ?? "—"}
+                        </td>
+                        <td
+                          className="num"
+                          style={{
+                            fontWeight: 700,
+                            color: "var(--color-accent)",
+                          }}>
+                          {kpi.bobot ?? "—"}
+                        </td>
+                        <td className="num">
+                          {isComposite ? "— (per sub)" : (kpi.target ?? "—")}
+                        </td>
+                        <td className="num">
+                          {isComposite ? "— (per sub)" : (kpi.target2 ?? "—")}
+                        </td>
+                        {anyLivingTarget && (
+                          <td className="num" style={{ whiteSpace: "nowrap" }}>
+                            {lt ? (
+                              <>
+                                <span style={{ fontWeight: 700 }}>
+                                  {lt.frozen
+                                    ? (lt.frozenTarget ?? lt.target)
+                                    : lt.target}
+                                </span>
                                 <span
                                   style={{
-                                    fontSize: 14,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  Isi di bawah ↓
-                                </span>
-                              ) : (
-                                <input
-                                  type="text"
-                                  className="form-input form-input-sm"
-                                  style={{
-                                    borderColor: hasVal
-                                      ? "rgba(34,197,94,0.5)"
-                                      : undefined,
+                                    marginLeft: 6,
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "var(--color-accent)",
+                                    border: "1px solid var(--color-accent)",
+                                    borderRadius: 4,
+                                    padding: "1px 4px",
                                   }}
-                                  value={values[String(i)] ?? ""}
-                                  onChange={(e) =>
-                                    setValues((v) => ({
-                                      ...v,
-                                      [String(i)]: e.target.value,
-                                    }))
-                                  }
-                                  placeholder={`Target: ${kpi.target ?? "—"}`}
-                                />
-                              )
+                                  title="Komposit — isi realisasi per sub-indikator di bawah">
+                                  Komposit
+                                </span>
+                              </>
                             ) : (
                               <span
                                 style={{ color: "var(--color-text-subtle)" }}>
@@ -899,85 +892,195 @@ export function InputRealisasiPage() {
                               </span>
                             )}
                           </td>
-                        </tr>
-                        {isComposite &&
-                          kpi.subIndicators!.map((si, j) => {
-                            const subVal = values[`${i}.${j}`] ?? "";
-                            const subHasVal = subVal.trim() !== "";
-                            return (
-                              <tr
-                                key={`${i}.${j}`}
+                        )}
+                        <td style={{ minWidth: 140 }}>
+                          {formOpen ? (
+                            isComposite ? (
+                              <span
                                 style={{
-                                  background: subHasVal
-                                    ? "rgba(34,197,94,0.03)"
-                                    : "var(--color-surface-2)",
+                                  fontSize: 13,
+                                  color: "var(--color-text-muted)",
                                 }}>
-                                <td />
-                                <td />
-                                <td
-                                  style={{
-                                    paddingLeft: "var(--space-4)",
-                                    fontSize: 14,
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  ↳ {si.nama}
-                                </td>
-                                <td
-                                  style={{
-                                    fontSize: 12,
-                                    color: "var(--color-text-muted)",
-                                    maxWidth: 200,
-                                  }}>
-                                  {si.formula ?? "—"}
-                                </td>
-                                <td
-                                  style={{
-                                    color: "var(--color-text-muted)",
-                                    whiteSpace: "nowrap",
-                                  }}>
-                                  {si.satuan ?? "—"}
-                                </td>
-                                <td className="num">{si.bobot}</td>
-                                <td className="num">{si.target}</td>
-                                <td className="num">{si.target2 ?? "—"}</td>
-                                {anyLivingTarget && <td />}
-                                <td style={{ minWidth: 340 }}>
-                                  {formOpen ? (
-                                    <input
-                                      type="text"
-                                      className="form-input form-input-sm"
-                                      style={{
-                                        borderColor: subHasVal
-                                          ? "rgba(34,197,94,0.5)"
-                                          : undefined,
-                                      }}
-                                      value={subVal}
-                                      onChange={(e) =>
-                                        setValues((v) => ({
-                                          ...v,
-                                          [`${i}.${j}`]: e.target.value,
-                                        }))
-                                      }
-                                      placeholder={`Target: ${si.target ?? "—"}`}
-                                    />
-                                  ) : (
-                                    <span
-                                      style={{
-                                        color: "var(--color-text-subtle)",
-                                      }}>
-                                      {subVal || "—"}
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                Isi di bawah ↓
+                              </span>
+                            ) : (
+                              <input
+                                type="text"
+                                className="form-input form-input-sm"
+                                style={{
+                                  borderColor: hasVal
+                                    ? "rgba(34,197,94,0.5)"
+                                    : undefined,
+                                }}
+                                value={values[String(i)] ?? ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setValues((v) => ({
+                                    ...v,
+                                    [String(i)]: val,
+                                  }));
+                                  setCapaianValues((c) => ({
+                                    ...c,
+                                    [String(i)]: suggestCapaian(
+                                      kpi.target,
+                                      kpi.target2,
+                                      val,
+                                      kpi.satuan ?? "",
+                                      kpi.polaritas,
+                                    ),
+                                  }));
+                                }}
+                                placeholder={`Target: ${kpi.target ?? "—"}`}
+                              />
+                            )
+                          ) : (
+                            <span style={{ color: "var(--color-text-subtle)" }}>
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ minWidth: 100 }}>
+                          {formOpen ? (
+                            isComposite ? (
+                              <span
+                                style={{
+                                  fontSize: 13,
+                                  color: "var(--color-text-muted)",
+                                }}>
+                                —
+                              </span>
+                            ) : (
+                              <input
+                                type="text"
+                                className="form-input form-input-sm"
+                                value={capaianValues[String(i)] ?? ""}
+                                onChange={(e) =>
+                                  setCapaianValues((c) => ({
+                                    ...c,
+                                    [String(i)]: e.target.value,
+                                  }))
+                                }
+                                placeholder="%"
+                              />
+                            )
+                          ) : (
+                            <span style={{ color: "var(--color-text-subtle)" }}>
+                              —
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                      {isComposite &&
+                        kpi.subIndicators!.map((si, j) => {
+                          const subVal = values[`${i}.${j}`] ?? "";
+                          const subHasVal = subVal.trim() !== "";
+                          return (
+                            <tr
+                              key={`${i}.${j}`}
+                              style={{
+                                background: subHasVal
+                                  ? "rgba(34,197,94,0.03)"
+                                  : "var(--color-surface-2)",
+                              }}>
+                              <td />
+                              <td />
+                              <td
+                                style={{
+                                  paddingLeft: "var(--space-4)",
+                                  fontSize: 14,
+                                  color: "var(--color-text-muted)",
+                                }}>
+                                ↳ {si.nama}
+                              </td>
+                              <td
+                                style={{
+                                  fontSize: 12,
+                                  color: "var(--color-text-muted)",
+                                  maxWidth: 200,
+                                }}>
+                                {si.formula ?? "—"}
+                              </td>
+                              <td
+                                style={{
+                                  color: "var(--color-text-muted)",
+                                  whiteSpace: "nowrap",
+                                }}>
+                                {si.satuan ?? "—"}
+                              </td>
+                              <td className="num">{si.bobot}</td>
+                              <td className="num">{si.target}</td>
+                              <td className="num">{si.target2 ?? "—"}</td>
+                              {anyLivingTarget && <td />}
+                              <td style={{ minWidth: 140 }}>
+                                {formOpen ? (
+                                  <input
+                                    type="text"
+                                    className="form-input form-input-sm"
+                                    style={{
+                                      borderColor: subHasVal
+                                        ? "rgba(34,197,94,0.5)"
+                                        : undefined,
+                                    }}
+                                    value={subVal}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setValues((v) => ({
+                                        ...v,
+                                        [`${i}.${j}`]: val,
+                                      }));
+                                      setCapaianValues((c) => ({
+                                        ...c,
+                                        [`${i}.${j}`]: suggestCapaian(
+                                          si.target,
+                                          si.target2,
+                                          val,
+                                          si.satuan ?? "",
+                                          si.polaritas,
+                                        ),
+                                      }));
+                                    }}
+                                    placeholder={`Target: ${si.target ?? "—"}`}
+                                  />
+                                ) : (
+                                  <span
+                                    style={{
+                                      color: "var(--color-text-subtle)",
+                                    }}>
+                                    {subVal || "—"}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ minWidth: 100 }}>
+                                {formOpen ? (
+                                  <input
+                                    type="text"
+                                    className="form-input form-input-sm"
+                                    value={capaianValues[`${i}.${j}`] ?? ""}
+                                    onChange={(e) =>
+                                      setCapaianValues((c) => ({
+                                        ...c,
+                                        [`${i}.${j}`]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="%"
+                                  />
+                                ) : (
+                                  <span
+                                    style={{
+                                      color: "var(--color-text-subtle)",
+                                    }}>
+                                    {capaianValues[`${i}.${j}`] || "—"}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
         {formOpen && kpiList.length > 0 && (
@@ -1420,8 +1523,7 @@ export function InputRealisasiPage() {
                                 </td>
                                 <td rowSpan={d.myActions.length}>
                                   <span
-                                    className={`status-pill ${STATUS_PILL[d.status] ?? "in-review"}`}
-                                    >
+                                    className={`status-pill ${STATUS_PILL[d.status] ?? "in-review"}`}>
                                     {STATUS_LABEL[d.status] ?? d.status}
                                   </span>
                                 </td>
@@ -1429,8 +1531,7 @@ export function InputRealisasiPage() {
                             )}
                             <td>
                               <span
-                                className={`status-pill ${DECISION_ACTION_PILL[a.action] ?? "in-review"}`}
-                               >
+                                className={`status-pill ${DECISION_ACTION_PILL[a.action] ?? "in-review"}`}>
                                 {DECISION_ACTION_LABEL[a.action] ?? a.action}
                               </span>
                             </td>

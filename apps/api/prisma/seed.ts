@@ -190,36 +190,40 @@ async function main() {
   }
   console.log('  periods: 12 bulan 2026, aktif:', period.label);
 
-  // Domain snapshots — store the exact prototype DATA sections as JSON blobs
+  // Domain snapshots — store the exact prototype DATA sections as JSON blobs, TAPI HANYA saat
+  // record belum ada (bootstrap awal di DB kosong). Re-run seed.ts (mis. utk menambah akun demo
+  // baru) TIDAK BOLEH menimpa snapshot yang sudah dihitung ulang dari data realisasi live —
+  // sebelumnya `update: { data: ... }` di sini diam-diam menimpa dashboard live kembali ke
+  // data prototipe statis setiap kali seed di-re-run, meski tujuannya cuma nambah user.
   const meta = { periodId: period.id };
 
   await prisma.executiveSnapshot.upsert({
     where: { periodId_phase: { periodId: period.id, phase: 'sementara' } },
-    update: { data: DATA.executive as object },
+    update: {},
     create: { ...meta, phase: 'sementara', data: DATA.executive as object },
   });
 
   await prisma.financialSnapshot.upsert({
     where: { periodId: period.id },
-    update: { data: DATA.financial as object },
+    update: {},
     create: { ...meta, data: DATA.financial as object },
   });
 
   await prisma.operationalSnapshot.upsert({
     where: { periodId_phase: { periodId: period.id, phase: 'sementara' } },
-    update: { data: DATA.operational as object },
+    update: {},
     create: { ...meta, phase: 'sementara', data: DATA.operational as object },
   });
 
   await prisma.strategicSnapshot.upsert({
     where: { periodId: period.id },
-    update: { data: DATA.strategic as object },
+    update: {},
     create: { ...meta, data: DATA.strategic as object },
   });
 
   await prisma.humanCapitalSnapshot.upsert({
     where: { periodId: period.id },
-    update: { data: DATA.humanCapital as object },
+    update: {},
     create: { ...meta, data: DATA.humanCapital as object },
   });
 

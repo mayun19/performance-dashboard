@@ -16,6 +16,9 @@ class AssignmentDto {
   // reviewerSlots (A+B) divalidasi/normalisasi mendalam di service (sanitizeReviewerSlots);
   // di sini cukup terima objek opsional (atau null).
   @IsOptional() @IsObject() reviewerSlots?: Record<string, unknown> | null;
+  // Override target sub-indikator (KPI Komposit) — divalidasi/dinormalisasi di service
+  // (sanitizeSubIndicatorTargets); di sini cukup terima array opsional.
+  @IsOptional() @IsArray() subIndicatorTargets?: Array<{ target?: string; target2?: string }>;
 }
 
 class SubIndicatorDto {
@@ -25,6 +28,7 @@ class SubIndicatorDto {
   @IsString() target: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsString() formula?: string;
+  @IsOptional() @IsIn(['positive', 'negative']) polaritas?: string;
 }
 
 class SaveMasterDto {
@@ -41,6 +45,8 @@ class SaveMasterDto {
   @IsOptional() @IsIn(['weighted', 'sum']) aggregationMethod?: string;
   // Sub-indikator (opt-in, generik) — non-kosong menandai KPI ini "komposit".
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SubIndicatorDto) subIndicators?: SubIndicatorDto[];
+  // Polaritas indikator induk non-komposit ('positive'|'negative') — lihat catatan di service.
+  @IsOptional() @IsIn(['positive', 'negative']) polaritas?: string;
 }
 
 class ConsolidationReviewDto {

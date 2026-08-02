@@ -180,7 +180,16 @@ export interface RealisasiKinerja {
   unitCode: string;
   submitter: string;
   submitterId?: string | null;
-  values: Record<string, { indikator?: string; target?: string | number; realisasi?: string | number; satuan?: string; bobot?: string | number; masterKpiId?: string }>;
+  values: Record<string, {
+    indikator?: string; target?: string | number; target2?: string | number; realisasi?: string | number;
+    satuan?: string; bobot?: string | number; masterKpiId?: string; polaritas?: 'positive' | 'negative';
+    capaianSaran?: string; capaianResmi?: string;
+    subIndicators?: Array<{
+      nama?: string; target?: string | number; target2?: string | number; realisasi?: string | number;
+      satuan?: string; bobot?: string | number; polaritas?: 'positive' | 'negative';
+      capaianSaran?: string; capaianResmi?: string;
+    }>;
+  }>;
   status: 'draft' | 'submitted' | 'target_fix' | 'ready' | 'approved' | 'rejected';
   currentStage: number;
   reviewer?: string | null;

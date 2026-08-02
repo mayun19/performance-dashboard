@@ -207,14 +207,22 @@ export const inputKontrak = {
 export type ReviewerSlot = { role: 'ASMAN' | 'MANAJER' | 'SRMANAJER' | 'GM'; userId?: string };
 export type ReviewerSlots = { checkers: ReviewerSlot[]; approver: ReviewerSlot | null };
 
+// Override target sub-indikator (KPI Komposit) utk satu assignment — index sejajar dgn
+// SubIndicatorInput[] milik master. Kosong = warisi target template global.
+export type SubIndicatorTargetOverride = { target?: string; target2?: string };
 export type KpiAssignmentInput = {
   unitCode: string; bidang: string; holder?: string; target?: string; target2?: string;
   persenAgregasi?: number;
   reviewerSlots?: ReviewerSlots | null;
+  subIndicatorTargets?: SubIndicatorTargetOverride[] | null;
 };
 // Sub-indikator (opt-in, generik) — non-kosong menandai KPI ini "komposit". Lihat
 // kpi-master.service.ts SubIndicatorInput.
-export type SubIndicatorInput = { nama: string; satuan?: string; bobot: string; target: string; target2?: string; formula?: string };
+export type SubIndicatorInput = {
+  nama: string; satuan?: string; bobot: string; target: string; target2?: string; formula?: string;
+  // Polaritas eksplisit sub ini (hanya berlaku sub bobot>0) — lihat catatan di kpi-master.service.ts.
+  polaritas?: 'positive' | 'negative';
+};
 export const kpiMaster = {
   list: (year?: string, kmType?: 'draft' | 'final') =>
     api.get('/kpi-master', { params: { year, kmType } }).then((r) => r.data),
@@ -225,6 +233,7 @@ export const kpiMaster = {
     defaultCheckerIds?: string[]; defaultApproverId?: string;
     aggregationMethod?: 'weighted' | 'sum';
     subIndicators?: SubIndicatorInput[];
+    polaritas?: 'positive' | 'negative';
   }) => api.post('/kpi-master/save', dto).then((r) => r.data),
   delete: (id: string) => api.delete(`/kpi-master/${id}`).then((r) => r.data),
   rollup: (id: string, periodId?: string) =>
@@ -284,7 +293,7 @@ export const admin = {
 // Living-target: KM Sementara (target hidup) per (periode, assignment).
 export type PeriodTarget = {
   id: string; periodId: string; kpiAssignmentId: string;
-  target: string; source: 'fresh' | 'carried'; frozen: boolean;
+  target: string; source: 'fresh' | 'carried' | 'disbursed'; frozen: boolean;
   frozenTarget: string | null; frozenAt: string | null;
   // getForPeriod menyertakan relasi assignment (mapping ke masterKpiId/unit/bidang di UI).
   assignment?: { id: string; kpiMasterId: string; unitCode: string; bidang: string; target: string };
@@ -295,6 +304,10 @@ export const periodTarget = {
   // Koreksi KM Sementara in-cycle oleh PIC REN (bidang Perencanaan/RPC).
   update: (kpiAssignmentId: string, periodId: string, target: string, note?: string) =>
     api.patch(`/period-target/${kpiAssignmentId}`, { target, note }, { params: { periodId } }).then((r) => r.data),
+  // Disburse Target Tahun jadi alokasi 12 bulan sekaligus (PIC REN, direncanakan di muka).
+  disburse: (kpiAssignmentId: string, entries: Array<{ periodId: string; target: string }>) =>
+    api.post(`/period-target/${kpiAssignmentId}/disburse`, { entries })
+      .then((r) => r.data as { updated: number; skippedFrozen: number; total: number }),
 };
 
 export default api;
