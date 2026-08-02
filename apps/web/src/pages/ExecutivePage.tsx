@@ -868,7 +868,7 @@ export function ExecutivePage() {
             <div style={{ borderTop: "1px solid var(--color-border)" }}>
               <div
                 style={{
-                  padding: "var(--space-2) var(--space-4)",
+                  padding: "var(--space-2) var(--space-7)",
                   display: "flex",
                   alignItems: "center",
                   gap: "var(--space-2)",
