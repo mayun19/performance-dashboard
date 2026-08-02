@@ -3,7 +3,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { num, r2, scoreItems, dedupFanOutRealisasi, resolveTarget, computeCapaian, computeNilai, breakdownComposite, specimenOrder, type TargetOverrideMap } from '../common/capaian';
+import { num, r2, scoreItems, dedupFanOutRealisasi, resolveTarget, resolveCapaian, computeNilai, breakdownComposite, specimenOrder, resolvePolarity, type TargetOverrideMap } from '../common/capaian';
 
 @Injectable()
 export class ExecutiveService {
@@ -165,7 +165,7 @@ export class ExecutiveService {
         const existing = existingKpisById.get(id);
         const bobot = num(it['bobot']);
         const satuan = String(it['satuan'] ?? '');
-        const isInverse = satuan.toLowerCase() === 'hari kerja';
+        const isInverse = resolvePolarity(satuan, it['polaritas']);
         const subs = Array.isArray(it['subIndicators']) ? (it['subIndicators'] as Record<string, unknown>[]) : [];
         let target = 0, actual = 0, achievement = 0, nilai = 0;
         if (subs.length > 0) {
@@ -178,7 +178,7 @@ export class ExecutiveService {
         } else {
           target = resolveTarget(it, targetOfRecord);
           actual = num(it['realisasi']);
-          achievement = computeCapaian(target, actual, isInverse);
+          achievement = resolveCapaian(target, actual, isInverse, it['capaianResmi']);
           nilai = computeNilai(bobot, achievement);
         }
         const prevSpark = (existing?.['sparkline'] ?? Array(12).fill(0)) as number[];

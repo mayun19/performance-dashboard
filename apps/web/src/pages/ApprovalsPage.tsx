@@ -285,9 +285,9 @@ function ApprovalTimeline({ history }: { history: unknown }) {
             alignItems: "flex-start",
           }}>
           <MessageSquare
-            size={14}
+            size={12}
             style={{
-              marginTop: 4,
+              marginTop: 2,
               color: "var(--color-text-muted)",
               flexShrink: 0,
             }}
@@ -298,7 +298,7 @@ function ApprovalTimeline({ history }: { history: unknown }) {
               {e.actor ?? "—"}
               {e.role ? (
                 <span
-                  style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>
+                  style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
                   {" "}
                   ({e.role})
                 </span>
@@ -307,8 +307,7 @@ function ApprovalTimeline({ history }: { history: unknown }) {
                 <span
                   style={{
                     color: "var(--color-text-subtle)",
-                    fontWeight: 500,
-                    fontSize: 12,
+                    fontWeight: 400,
                   }}>
                   {" "}
                   ·{" "}
@@ -596,6 +595,13 @@ export function ApprovalsPage() {
   const [realExpanded, setRealExpanded] = useState<string | null>(null);
   const [realBusy, setRealBusy] = useState(false);
   const [realBulkBusy, setRealBulkBusy] = useState(false);
+  // Pencapaian Resmi (diisi reviewer saat review, menang atas hitungan otomatis — lihat
+  // common/capaian.ts resolveCapaian). Key per package: `${itemKey}` (flat) atau
+  // `${itemKey}.${subIdx}` (komposit). Kosong (tak pernah diedit) → tetap fallback otomatis.
+  const [realCapaianEdits, setRealCapaianEdits] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [realCapaianBusy, setRealCapaianBusy] = useState<string | null>(null);
   // Modal pasca-keputusan Realisasi: arahkan reviewer ke "Tinjauan Realisasi Bulanan" utk
   // melihat kembali dokumen yang baru saja diputuskan (lihat riwayat keputusan di sana).
   const [postReviewModal, setPostReviewModal] = useState<{
@@ -1903,6 +1909,54 @@ export function ApprovalsPage() {
     }
   };
 
+  // Simpan Pencapaian Resmi per package — reviewer mengoreksi/mengonfirmasi angka % resmi
+  // (menang atas hitungan otomatis, lihat common/capaian.ts resolveCapaian) sebelum menyetujui.
+  // Pakai endpoint updateValues() yang sudah ada (dipakai jg utk koreksi Realisasi reviewer),
+  // hanya berlaku selama status 'submitted' & langkah aktif milik reviewer ybs.
+  const handleSaveCapaianResmi = async (rl: RealisasiKinerja) => {
+    const edits = realCapaianEdits[rl.id];
+    if (!edits || Object.keys(edits).length === 0) return;
+    setRealCapaianBusy(rl.id);
+    try {
+      const updated: RealisasiKinerja["values"] = {};
+      for (const [key, it] of Object.entries(rl.values ?? {})) {
+        if (Array.isArray(it.subIndicators) && it.subIndicators.length > 0) {
+          updated[key] = {
+            ...it,
+            subIndicators: it.subIndicators.map((si, j) => {
+              const edited = edits[`${key}.${j}`];
+              return edited !== undefined
+                ? { ...si, capaianResmi: edited }
+                : si;
+            }),
+          };
+        } else {
+          const edited = edits[key];
+          updated[key] =
+            edited !== undefined ? { ...it, capaianResmi: edited } : it;
+        }
+      }
+      await inputRealisasi.updateValues(
+        rl.id,
+        updated,
+        "Koreksi/konfirmasi Pencapaian Resmi",
+      );
+      setRealCapaianEdits((c) => {
+        const n = { ...c };
+        delete n[rl.id];
+        return n;
+      });
+      loadReal();
+    } catch (e) {
+      alert(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Gagal menyimpan Pencapaian Resmi",
+      );
+    } finally {
+      setRealCapaianBusy(null);
+    }
+  };
+
   const startEditKm = (k: KontrakManajemen) => {
     setKmEditItems(
       (k.kpiItems as Record<string, unknown>[]).map((item) => ({
@@ -2995,7 +3049,6 @@ export function ApprovalsPage() {
           )}
         </FoldCard>
       )}
-
       {/* Living-target: Koreksi Target KM Sementara — hanya PIC REN (warden target) */}
       {isPicRen && (
         <FoldCard
@@ -3244,12 +3297,12 @@ export function ApprovalsPage() {
               alignItems: "center",
             }}>
             <button
-              className={`btn btn-sm ${kmBundleType === "draft" ? "btn-primary" : "btn-ghost"}`}
+              className={`btn btn-tab btn-sm ${kmBundleType === "draft" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setKmBundleType("draft")}>
               Bundle KM Draft
             </button>
             <button
-              className={`btn btn-sm ${kmBundleType === "final" ? "btn-primary" : "btn-ghost"}`}
+              className={`btn btn-tab btn-sm ${kmBundleType === "final" ? "btn-primary" : "btn-ghost"}`}
               onClick={() => setKmBundleType("final")}>
               Bundle KM Final
             </button>
@@ -3278,9 +3331,7 @@ export function ApprovalsPage() {
             )
           }>
           <div className="table-wrap">
-            <div
-              className="table-scroll"
-              style={{ paddingBottom: "var(--space-7)" }}>
+            <div className="table-scroll">
               <table className="data-table compact">
                 <thead>
                   <tr>
@@ -3371,7 +3422,7 @@ export function ApprovalsPage() {
                               </strong>
                             </div>
                             <table
-                              className="data-table compact"
+                              className="data-table table-expanded"
                               style={{ margin: 0 }}>
                               <thead>
                                 <tr>
@@ -3470,7 +3521,7 @@ export function ApprovalsPage() {
             <div
               className="card-body"
               style={{
-                fontSize: "var(--text-sm)",
+                fontSize: "var(--text-xs)",
                 color: "var(--color-success)",
                 padding: "0 var(--space-7) var(--space-4)",
               }}>
@@ -3501,9 +3552,7 @@ export function ApprovalsPage() {
               </span>
             )
           }>
-          <div
-            className="table-wrap"
-            style={{ paddingBottom: "var(--space-7)" }}>
+          <div className="table-wrap">
             <div className="table-scroll">
               <table className="data-table compact">
                 <thead>
@@ -3590,7 +3639,12 @@ export function ApprovalsPage() {
                                 {aggregateLabel}
                               </span>
                             </td>
-                            <td>{items.length} bidang</td>
+                            <td
+                              style={{
+                                color: "var(--color-text-muted)",
+                              }}>
+                              {items.length} bidang
+                            </td>
                           </tr>
                           {isOpen &&
                             sortByBidang(items).map((c) => (
@@ -3611,7 +3665,8 @@ export function ApprovalsPage() {
                                   </td>
                                   <td>
                                     <span
-                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
+                                      className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
+                                      style={{ fontSize: 14 }}>
                                       {c.status === "ready"
                                         ? "Siap"
                                         : c.status === "approved"
@@ -3731,8 +3786,8 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
+                gap: "var(--space-4)",
                 padding: "0 var(--space-7) var(--space-7)",
-                gap: "var(--space-2)",
               }}>
               {kmBundleUPMK.components.some(
                 (c) => c.status === "submitted",
@@ -3748,7 +3803,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM UPMK (wajib)"
                 value={kmBundleUPMKNote}
                 onChange={(e) => setKmBundleUPMKNote(e.target.value)}
@@ -3893,7 +3948,6 @@ export function ApprovalsPage() {
         </FoldCard>
       )}
 
-      {/* Kontrol Acuan Aktif KM — GM menentukan KM Draft atau KM Final yang jadi acuan realisasi periode ini */}
       {/* Kontrol Acuan Aktif KM — GM menentukan KM Draft atau KM Final yang jadi acuan realisasi periode ini */}
       {isGM && selectedPeriodForWindow && (
         <FoldCard
@@ -4165,7 +4219,7 @@ export function ApprovalsPage() {
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "var(--space-2)",
+                gap: "var(--space-4)",
                 padding: "0 var(--space-7) var(--space-7)",
               }}>
               {!bundle.canApprove && bundle.total > 0 && (
@@ -4180,7 +4234,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
                 placeholder="Catatan persetujuan/penolakan bundle (wajib)"
                 value={bundleNote}
                 onChange={(e) => setBundleNote(e.target.value)}
@@ -4259,7 +4313,6 @@ export function ApprovalsPage() {
               Realisasi
             </button>
           </div>
-
           <div
             style={{
               display: "flex",
@@ -4269,6 +4322,7 @@ export function ApprovalsPage() {
             }}>
             <select
               className="form-input form-input-sm"
+              style={{ width: "200px" }}
               value={trackerStatus}
               onChange={(e) => setTrackerStatus(e.target.value)}>
               <option value="all">Semua status</option>
@@ -4325,9 +4379,7 @@ export function ApprovalsPage() {
           </div>
         </div>
 
-        <div
-          className="table-wrap"
-          style={{ padding: "0 var(--space-7) var(--space-7)" }}>
+        <div className="table-wrap" style={{ marginBottom: "var(--space-4)" }}>
           <div className="table-scroll">
             <table className="data-table compact">
               <thead>
@@ -4368,7 +4420,7 @@ export function ApprovalsPage() {
                         {d.status === "approved" ? (
                           <span
                             style={{
-                              fontSize: 14,
+                              fontSize: 12,
                               color: "var(--color-success)",
                               fontWeight: 600,
                             }}>
@@ -4377,7 +4429,7 @@ export function ApprovalsPage() {
                         ) : d.status === "ready" ? (
                           <span
                             style={{
-                              fontSize: 14,
+                              fontSize: 12,
                               color: "var(--color-warning)",
                               fontWeight: 600,
                             }}>
@@ -4386,7 +4438,7 @@ export function ApprovalsPage() {
                         ) : d.status === "rejected" ? (
                           <span
                             style={{
-                              fontSize: 14,
+                              fontSize: 12,
                               color: "var(--color-danger)",
                             }}>
                             Dikembalikan
@@ -4404,7 +4456,8 @@ export function ApprovalsPage() {
                       </td>
                       <td>
                         <span
-                          className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}>
+                          className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}
+                          style={{ fontSize: 14 }}>
                           {DOC_STATUS_LABEL[d.status] ?? d.status}
                         </span>
                       </td>
@@ -4414,8 +4467,7 @@ export function ApprovalsPage() {
                             d.status === "approved"
                               ? "var(--color-success)"
                               : "var(--color-text-muted)",
-                          fontSize: 14,
-                          fontWeight: 500,
+                          fontSize: 13,
                         }}>
                         {nextApproverLabel(d.status, d.stepLabel)}
                       </td>
@@ -4487,9 +4539,7 @@ export function ApprovalsPage() {
         className="btn btn-ghost btn-sm"
         onClick={() => setShowMonitoring((v) => !v)}
         style={{
-          color: "var(--color-text)",
-          fontSize: 16,
-          fontWeight: 500,
+          color: "var(--color-text-muted)",
         }}>
         <ChevronDown
           size={14}
@@ -4500,7 +4550,6 @@ export function ApprovalsPage() {
         />
         Pantau semua — riwayat dokumen, timeline, RACI
       </button>
-
       {showMonitoring && (
         <div style={{ marginTop: "var(--space-4)" }}>
           {/* Workflow Timeline Card */}
