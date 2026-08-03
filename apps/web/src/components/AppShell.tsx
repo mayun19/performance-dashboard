@@ -41,6 +41,7 @@ import {
   Layers,
   type LucideIcon,
 } from "lucide-react";
+import LogoIcon from "./SVGIcons/LogoIcon";
 
 type NavItem = {
   to: string;
@@ -258,17 +259,10 @@ export function AppShell() {
       <aside className="sidebar" aria-label="Navigasi utama">
         <div className="sidebar-brand">
           {!collapsed && (
-            <img
-              className="logo sidebar-brand-img"
-              src={`/brand/${lightTheme ? "logo-new-pln-simpp-white-ic" : "logo-new-pln-simpp-dark-ic"}.svg`}
-              alt="PLN"
-              style={{
-                width: 200,
-                height: 56,
-              }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
+            <LogoIcon
+              size={200}
+              color="white"
+              darkMode={lightTheme ? false : true}
             />
           )}
           <div
@@ -349,10 +343,10 @@ export function AppShell() {
                   data-open={isOpen}>
                   <div className="nav-section-items">
                     {visibleItems.map(({ to, label, icon: Icon, end }) => {
-                       const displayLabel =
-                         to === "/input-realisasi" && isReviewerRole
-                           ? "Tinjauan Realisasi Bulanan"
-                           : label;
+                      const displayLabel =
+                        to === "/input-realisasi" && isReviewerRole
+                          ? "Tinjauan Realisasi Bulanan"
+                          : label;
                       return (
                         <NavLink
                           key={to}
