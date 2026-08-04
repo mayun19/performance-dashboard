@@ -351,6 +351,30 @@ export class InputKontrakService {
       );
     }
 
+    // Hapus juga KpiAssignment terkait (unit/bidang dokumen ini) untuk tiap masterKpiId yang
+    // ada di kpiItems — tanpa ini, KPI Master masih menganggap unit/bidang ini "di-assign",
+    // sehingga fanOut() (dipicu KpiMasterService.save() berikutnya) akan membuat ulang dokumen
+    // yang baru saja dihapus manual.
+    const items = (
+      Array.isArray(kontrak.kpiItems) ? kontrak.kpiItems : []
+    ) as Record<string, unknown>[];
+    const masterIds = [
+      ...new Set(
+        items
+          .map((it) => it["masterKpiId"])
+          .filter((v): v is string => typeof v === "string"),
+      ),
+    ];
+    if (masterIds.length > 0) {
+      await this.prisma.kpiAssignment.deleteMany({
+        where: {
+          kpiMasterId: { in: masterIds },
+          unitCode: kontrak.unitCode,
+          bidang: kontrak.bidang,
+        },
+      });
+    }
+    
     await this.prisma.kontrakManajemen.delete({ where: { id } });
     await this.prisma.auditLog.create({
       data: {
