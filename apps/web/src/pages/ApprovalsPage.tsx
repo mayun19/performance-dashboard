@@ -746,6 +746,7 @@ export function ApprovalsPage() {
       .catch(() => {});
   };
 
+
   const load = () => {
     approvalsApi
       .reports()
@@ -2289,11 +2290,11 @@ export function ApprovalsPage() {
                         ? (() => {
                             const k = entry.data;
                             const kk = k as KontrakManajemen & {
-                              steps?: { label: string }[];
+                              reviewSteps?: { label: string; kind?: string }[];
                               currentStepIndex?: number;
                               stepLabel?: string;
                             };
-                            const ksteps = kk.steps ?? [];
+                            const ksteps = kk.reviewSteps ?? [];
                             const kci = kk.currentStepIndex ?? 0;
                             const kIsLast = kci >= ksteps.length - 1;
                             const kPrev = ksteps[kci - 1]?.label;
@@ -2385,7 +2386,7 @@ export function ApprovalsPage() {
                                         color: "var(--color-accent)",
                                         fontWeight: 600,
                                       }}>
-                                      Langkah {kci}/{ksteps.length - 1}:{" "}
+                                      Langkah {kci}/{ksteps.length}:{" "}
                                       {kk.stepLabel ??
                                         ksteps[kci]?.label ??
                                         "—"}
