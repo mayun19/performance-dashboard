@@ -1,4 +1,11 @@
-export type Role = 'STAFF' | 'ASMAN' | 'MANAJER' | 'SRMANAJER' | 'GM' | 'SUPERADMIN' | 'DEVELOPER';
+export type Role =
+  | "STAFF"
+  | "ASMAN"
+  | "MANAJER"
+  | "SRMANAJER"
+  | "GM"
+  | "SUPERADMIN"
+  | "DEVELOPER";
 
 export interface RoleVariant {
   id: string;
@@ -40,7 +47,7 @@ export interface Period {
   windowOverride?: boolean;
   overrideBy?: string | null;
   overrideAt?: string | null;
-  kmReference?: 'draft' | 'final';
+  kmReference?: "draft" | "final";
 }
 
 export interface Kpi {
@@ -112,11 +119,30 @@ export interface ExecutiveData {
   initiatives: Initiative[];
   alerts: Alert[];
   efficiency: { value: number; target: number; label: string };
-  csat: { value: number; max: number; responses: number; label: string; isInverse: boolean };
-  safety: { value: number; target: number; isInverse: boolean; label: string; unit: string };
-  selfAssessmentAccuracy?: { avgGap: number; unitsWithData: number; status: string };
+  csat: {
+    value: number;
+    max: number;
+    responses: number;
+    label: string;
+    isInverse: boolean;
+  };
+  safety: {
+    value: number;
+    target: number;
+    isInverse: boolean;
+    label: string;
+    unit: string;
+  };
+  selfAssessmentAccuracy?: {
+    avgGap: number;
+    unitsWithData: number;
+    status: string;
+  };
   // Living-target dua-track: UPMK Version (self-reported) di samping KI Adjusted (unitRanking/healthScore).
-  upmkTrack?: { overall: number; unitScores: Array<{ code: string; score: number }> };
+  upmkTrack?: {
+    overall: number;
+    unitScores: Array<{ code: string; score: number }>;
+  };
 }
 
 export interface Report {
@@ -124,7 +150,7 @@ export interface Report {
   unit: string;
   periodId: string;
   currentStage: number;
-  status: 'DRAFT' | 'IN_REVIEW' | 'NEEDS_REVISION' | 'APPROVED';
+  status: "DRAFT" | "IN_REVIEW" | "NEEDS_REVISION" | "APPROVED";
   nextApprover?: string;
   history: HistoryEntry[];
   canApprove?: boolean;
@@ -180,17 +206,39 @@ export interface RealisasiKinerja {
   unitCode: string;
   submitter: string;
   submitterId?: string | null;
-  values: Record<string, {
-    indikator?: string; target?: string | number; target2?: string | number; realisasi?: string | number;
-    satuan?: string; bobot?: string | number; masterKpiId?: string; polaritas?: 'positive' | 'negative';
-    capaianSaran?: string; capaianResmi?: string;
-    subIndicators?: Array<{
-      nama?: string; target?: string | number; target2?: string | number; realisasi?: string | number;
-      satuan?: string; bobot?: string | number; polaritas?: 'positive' | 'negative';
-      capaianSaran?: string; capaianResmi?: string;
-    }>;
-  }>;
-  status: 'draft' | 'submitted' | 'target_fix' | 'ready' | 'approved' | 'rejected';
+  values: Record<
+    string,
+    {
+      indikator?: string;
+      target?: string | number;
+      target2?: string | number;
+      realisasi?: string | number;
+      satuan?: string;
+      bobot?: string | number;
+      masterKpiId?: string;
+      polaritas?: "positive" | "negative";
+      capaianSaran?: string;
+      capaianResmi?: string;
+      subIndicators?: Array<{
+        nama?: string;
+        target?: string | number;
+        target2?: string | number;
+        realisasi?: string | number;
+        satuan?: string;
+        bobot?: string | number;
+        polaritas?: "positive" | "negative";
+        capaianSaran?: string;
+        capaianResmi?: string;
+      }>;
+    }
+  >;
+  status:
+    | "draft"
+    | "submitted"
+    | "target_fix"
+    | "ready"
+    | "approved"
+    | "rejected";
   currentStage: number;
   reviewer?: string | null;
   reviewNote?: string | null;
@@ -199,15 +247,15 @@ export interface RealisasiKinerja {
   updatedAt: string;
 }
 
-export interface KontrakManajemen {
+export interface KontrakManajemenItem {
   id: string;
   periodId: string;
   unitCode: string;
   bidang: string;
   holder: string;
   kpiItems: Record<string, unknown>[];
-  status: 'draft' | 'submitted' | 'ready' | 'approved' | 'rejected';
-  kmType: 'draft' | 'final';
+  status: "draft" | "submitted" | "ready" | "approved" | "rejected";
+  kmType: "draft" | "final";
   currentStage: number;
   history?: Array<Record<string, unknown>>;
   submitter: string;
@@ -217,4 +265,32 @@ export interface KontrakManajemen {
   reviewedAt?: string | null;
   submittedAt: string;
   updatedAt: string;
+}
+
+export interface KontrakManajemen {
+  data: KontrakManajemenItem[];
+  pagination: {
+    currentPage: number;
+    perPage: number;
+    totalData: number;
+    totalPage: number;
+  };
+}
+
+export default interface PaginationProps {
+  indexOfFirstProject: number;
+  indexOfLastProject: number;
+  currentPage: number;
+  page: {
+    total: number;
+    total_page: number;
+    per_page: number;
+  };
+  paginate: (v: number) => void;
+  onChangeDisplayed?: (params: number) => void;
+  perPage: number;
+  parentClasses?: string;
+  masterData?: boolean;
+  customText?: string;
+  customButton?: string;
 }

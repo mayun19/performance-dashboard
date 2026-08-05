@@ -29,7 +29,8 @@ import ReviewerPickerModal from "../components/ReviewerPickerModal";
 import type { ReviewerCandidate } from "../components/ReviewerPickerModal";
 import DisburseTargetModal from "../components/DisburseTargetModal";
 import { strictNum, satuanCategory } from "../lib/satuan";
-import type { KontrakManajemen } from "../lib/types";
+import type { KontrakManajemen, KontrakManajemenItem } from "../lib/types";
+import Pagination from "@/components/Pagination";
 
 const UNIT_OPTIONS = [
   { code: "KP", name: "Kantor Induk" },
@@ -2278,8 +2279,11 @@ const STATUS_PILL: Record<string, string> = {
 function DokumenKmTab() {
   const { user } = useAuth();
   const [kmTypeFilter, setKmTypeFilter] = useState<"draft" | "final">("draft");
-  const [kontrakList, setKontrakList] = useState<KontrakManajemen[]>([]);
-  const [approvedList, setApprovedList] = useState<KontrakManajemen[]>([]);
+  const [kontrakList, setKontrakList] = useState<KontrakManajemen>({
+    data: [],
+    pagination: { currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 },
+  });
+  const [approvedList, setApprovedList] = useState<KontrakManajemenItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -2298,6 +2302,8 @@ function DokumenKmTab() {
   const [docDefaults, setDocDefaults] = useState<
     Record<string, { checkerIds: string[]; approverId: string | null }>
   >({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const perPage = 10;
 
   useEffect(() => {
     if (user?.unit) setSelectedUnit(user.unit);
@@ -2308,22 +2314,33 @@ function DokumenKmTab() {
   const loadData = async () => {
     try {
       const unitFilter = user?.role === "GM" ? selectedUnit : undefined;
-      const data = await inputKontrak.list(unitFilter, undefined, kmTypeFilter);
-      setKontrakList(data as KontrakManajemen[]);
+      const res = await inputKontrak.list(
+        unitFilter,
+        undefined,
+        kmTypeFilter,
+        currentPage,
+        perPage,
+      );
+
+      setKontrakList(res);
     } catch (e) {
       setError((e as Error)?.message ?? "Gagal memuat data");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedUnit, kmTypeFilter]);
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUnit, kmTypeFilter]);
+  }, [selectedUnit, kmTypeFilter, currentPage]);
   useEffect(() => {
     inputKontrak
       .approved(undefined, undefined, kmTypeFilter)
-      .then((d) => setApprovedList(d as KontrakManajemen[]))
+      .then((d) => setApprovedList(d as KontrakManajemenItem[]))
       .catch(() => {});
   }, [submitted, kmTypeFilter]);
 
@@ -2344,10 +2361,10 @@ function DokumenKmTab() {
     user?.role === "STAFF" &&
     user?.unit === "KP" &&
     user?.bidang === RPC_BIDANG;
-  const canActOnRow = (k: KontrakManajemen) =>
+  const canActOnRow = (k: KontrakManajemenItem) =>
     isRpcStaff || k.submitterId === user?.id;
 
-  const filterKm = (list: KontrakManajemen[]) => {
+  const filterKm = (list: KontrakManajemenItem[]) => {
     if (canSeeAllKm) return list;
     return list.filter((k) => {
       if (k.submitterId === user?.id) return true;
@@ -2356,12 +2373,30 @@ function DokumenKmTab() {
       return true;
     });
   };
-  const visibleKontrak = filterKm(kontrakList);
+
+  const visibleKontrak = filterKm(kontrakList?.data ?? []);
+  console.log("visibleKontrak", visibleKontrak, kontrakList);
   const visibleApproved = filterKm(approvedList);
   const draftCount = visibleKontrak.filter((k) => k.status === "draft").length;
   const submittedCount = visibleKontrak.filter(
     (k) => k.status === "submitted",
   ).length;
+  const totalCountKontrak = kontrakList.pagination.totalData;
+
+  // NEW — pagination helpers for the Pagination component
+  const paginate = (page: number) => {
+    const totalPage = kontrakList.pagination.totalPage;
+    if (page < 1 || page > totalPage) return;
+    setCurrentPage(page);
+  };
+  const indexOfFirstProject =
+    kontrakList.pagination.totalData === 0
+      ? 0
+      : (currentPage - 1) * perPage + 1;
+  const indexOfLastProject = Math.min(
+    currentPage * perPage,
+    kontrakList.pagination.totalData,
+  );
 
   // Dokumen yang siap dikirim (draft/rejected & user berwenang).
   const submittableDocs = visibleKontrak.filter(
@@ -2432,7 +2467,7 @@ function DokumenKmTab() {
   // Hapus dokumen KM draft/rejected — backend menolak status submitted/approved. Sama seperti
   // fan-out otomatis, dokumen ini bisa muncul lagi kalau Definisi KPI-nya masih ada; hapus di
   // sini murni membuang dokumen kosong/keliru, bukan alternatif menghapus KPI Master-nya.
-  const handleDeleteKm = async (k: KontrakManajemen) => {
+  const handleDeleteKm = async (k: KontrakManajemenItem) => {
     if (
       !confirm(
         `Hapus dokumen KM ${UNIT_NAMES[k.unitCode] ?? k.unitCode} — ${k.bidang}? Tindakan ini tidak bisa dibatalkan.`,
@@ -2488,7 +2523,7 @@ function DokumenKmTab() {
   const canCreateKm = user?.unit === "KP";
 
   if (loading) return <SkeletonTable rows={4} cols={6} />;
-  if (error && kontrakList.length === 0)
+  if (error && kontrakList.data.length === 0)
     return <ErrorState title="Gagal memuat data" message={error} />;
 
   return (
@@ -2630,7 +2665,7 @@ function DokumenKmTab() {
               <FileText size={14} />
               Daftar Dokumen KM
             </div>
-            <span className="card-meta">{visibleKontrak.length} dokumen</span>
+            <span className="card-meta">{totalCountKontrak} dokumen</span>
           </div>
           <div
             className="table-wrap"
@@ -2685,7 +2720,7 @@ function DokumenKmTab() {
                           </span>
                           {k.status === "submitted" &&
                             (() => {
-                              const kk = k as KontrakManajemen & {
+                              const kk = k as KontrakManajemenItem & {
                                 steps?: { label: string }[];
                                 currentStepIndex?: number;
                               };
@@ -2838,6 +2873,29 @@ function DokumenKmTab() {
                 </tbody>
               </table>
             </div>
+            {/* NEW — pagination controls */}
+            {kontrakList.pagination.totalPage > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "end",
+                  paddingTop: "var(--space-5)",
+                }}>
+                <Pagination
+                  currentPage={currentPage}
+                  paginate={paginate}
+                  perPage={kontrakList.pagination.perPage}
+                  page={{
+                    total: kontrakList.pagination.totalData,
+                    total_page: kontrakList.pagination.totalPage,
+                    per_page: kontrakList.pagination.perPage,
+                  }}
+                  indexOfFirstProject={indexOfFirstProject}
+                  indexOfLastProject={indexOfLastProject}
+                  customText="dokumen KM"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2993,7 +3051,7 @@ function DokumenKmTab() {
             ? [defaultReviewers.approverId]
             : undefined
         }
-        bidang={kontrakList.find((k) => k.id === submitTargetId)?.bidang}
+        bidang={kontrakList.data.find((k) => k.id === submitTargetId)?.bidang}
       />
     </>
   );

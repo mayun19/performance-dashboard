@@ -29,15 +29,51 @@ export class InputKontrakService {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
-  async getList(unitCode?: string, periodId?: string, kmType?: string) {
-    return this.prisma.kontrakManajemen.findMany({
-      where: {
-        ...(unitCode ? { unitCode } : {}),
-        ...(periodId ? { periodId } : {}),
-        ...(kmType ? { kmType } : {}),
+  async getList(
+    unitCode?: string,
+    periodId?: string,
+    kmType?: string,
+    currentPage?: number,
+    perPage?: number,
+  ) {
+    const where = {
+      ...(unitCode ? { unitCode } : {}),
+      ...(periodId ? { periodId } : {}),
+      ...(kmType ? { kmType } : {}),
+    };
+
+    // Tak dipaginasi bila currentPage/perPage tak dikirim — pertahankan perilaku lama untuk
+    // caller existing (mis. fan-out doc list, bulk-submit readiness check) yang mengharapkan
+    // array penuh, bukan { data, pagination }.
+    if (!currentPage && !perPage) {
+      return this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: { submittedAt: "desc" },
+      });
+    }
+
+    const page = currentPage ?? 1;
+    const limit = perPage ?? 20;
+    const skip = (page - 1) * limit;
+    const [data, totalData] = await Promise.all([
+      this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: { submittedAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.kontrakManajemen.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        currentPage: page,
+        perPage: limit,
+        totalData,
+        totalPage: Math.ceil(totalData / limit),
       },
-      orderBy: { submittedAt: "desc" },
-    });
+    };
   }
 
   async getById(id: string) {
@@ -374,7 +410,7 @@ export class InputKontrakService {
         },
       });
     }
-    
+
     await this.prisma.kontrakManajemen.delete({ where: { id } });
     await this.prisma.auditLog.create({
       data: {
