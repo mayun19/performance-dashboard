@@ -377,8 +377,15 @@ export type SubIndicatorInput = {
   polaritas?: "positive" | "negative";
 };
 export const kpiMaster = {
-  list: (year?: string, kmType?: "draft" | "final") =>
-    api.get("/kpi-master", { params: { year, kmType } }).then((r) => r.data),
+  list: (
+    year?: string,
+    kmType?: "draft" | "final",
+    currentPage?: number,
+    perPage?: number,
+  ) =>
+    api
+      .get("/kpi-master", { params: { year, kmType, currentPage, perPage } })
+      .then((r) => r.data),
   getById: (id: string) => api.get(`/kpi-master/${id}`).then((r) => r.data),
   save: (dto: {
     id?: string;

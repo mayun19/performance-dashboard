@@ -267,14 +267,16 @@ export interface KontrakManajemenItem {
   updatedAt: string;
 }
 
+export interface PaginationPropsList {
+  currentPage: number;
+  perPage: number;
+  totalData: number;
+  totalPage: number;
+}
+
 export interface KontrakManajemen {
   data: KontrakManajemenItem[];
-  pagination: {
-    currentPage: number;
-    perPage: number;
-    totalData: number;
-    totalPage: number;
-  };
+  pagination: PaginationPropsList;
 }
 
 export default interface PaginationProps {

@@ -29,8 +29,13 @@ import ReviewerPickerModal from "../components/ReviewerPickerModal";
 import type { ReviewerCandidate } from "../components/ReviewerPickerModal";
 import DisburseTargetModal from "../components/DisburseTargetModal";
 import { strictNum, satuanCategory } from "../lib/satuan";
-import type { KontrakManajemen, KontrakManajemenItem } from "../lib/types";
+import type {
+  KontrakManajemen,
+  KontrakManajemenItem,
+  PaginationPropsList,
+} from "../lib/types";
 import Pagination from "@/components/Pagination";
+import { usePaginationHelpers } from "@/hooks/usePaginationHelpers";
 
 const UNIT_OPTIONS = [
   { code: "KP", name: "Kantor Induk" },
@@ -199,7 +204,7 @@ type AssignmentRow = Omit<Assignment, "bidang"> & {
   id: string;
   bidang: string;
 };
-type KpiMasterRow = {
+type KpiMasterRowItem = {
   id: string;
   year: string;
   kmType: "draft" | "final";
@@ -223,6 +228,12 @@ type KpiMasterRow = {
   subIndicators: SubIndicatorInput[] | null;
   polaritas?: "positive" | "negative";
 };
+
+type KpiMasterRow = {
+  data: KpiMasterRowItem[];
+  pagination: PaginationPropsList;
+};
+
 const emptySubIndicator = (): SubIndicatorInput => ({
   nama: "",
   satuan: "",
@@ -297,7 +308,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     user?.role === "DEVELOPER" ||
     (user?.unit === "KP" && user?.bidang === RPC_BIDANG);
 
-  const [masters, setMasters] = useState<KpiMasterRow[]>([]);
+  const [masters, setMasters] = useState<KpiMasterRow>({
+    data: [],
+    pagination: { currentPage: 1, perPage: 10, totalData: 0, totalPage: 1 },
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -351,6 +365,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  //Pagination setup
+  const [currentPage, setCurrentPage] = useState(1);
+  const perPage = 10;
+
   // Sub-indikator (opt-in, generik) — KPI apa pun boleh ditandai "komposit" & diisi sub-indikator
   // di sini; tidak dibatasi ke nama indikator tertentu. Non-kosong → bobotKm assignment jadi
   // turunan (Σ bobot sub), realisasi diisi per-sub belakangan di Input Realisasi.
@@ -376,14 +394,14 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const load = () => {
     setLoading(true);
     kpiMaster
-      .list()
-      .then((d) => setMasters(d as KpiMasterRow[]))
+      .list(undefined, undefined, currentPage, perPage)
+      .then((d) => setMasters(d))
       .catch((e) => setError((e as Error)?.message ?? "Gagal memuat data"))
       .finally(() => setLoading(false));
   };
   useEffect(() => {
     load();
-  }, []);
+  }, [currentPage]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -406,7 +424,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setExpandedBidangRow(null);
   };
 
-  const handleEdit = (m: KpiMasterRow) => {
+  const handleEdit = (m: KpiMasterRowItem) => {
     setEditingId(m.id);
     setKmType(m.kmType);
     setAggregationMethod(m.aggregationMethod ?? "weighted");
@@ -754,8 +772,12 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     }
   };
 
+  const totalDataMaster = masters.pagination.totalData;
+  const { paginate, indexOfFirstProject, indexOfLastProject } =
+    usePaginationHelpers(masters.pagination, currentPage, setCurrentPage);
+
   if (loading) return <SkeletonTable rows={4} cols={5} />;
-  if (error && masters.length === 0 && !showForm)
+  if (error && totalDataMaster === 0 && !showForm)
     return <ErrorState title="Gagal memuat data" message={error} />;
 
   return (
@@ -1909,9 +1931,9 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
           <div className="card-title">
             <Layers size={14} /> Daftar KPI Master
           </div>
-          <span className="card-meta">{masters.length} KPI</span>
+          <span className="card-meta">{totalDataMaster} KPI</span>
         </div>
-        {masters.length === 0 ? (
+        {totalDataMaster === 0 ? (
           <EmptyState
             title="Belum ada KPI Master"
             message="Klik 'KPI Master Baru' untuk mendefinisikan KPI dan meng-assign-nya ke banyak unit/bidang."
@@ -1935,7 +1957,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {masters.map((m) => (
+                  {masters.data.map((m) => (
                     <Fragment key={m.id}>
                       <tr>
                         <td style={{ fontWeight: 600 }}>
@@ -2244,6 +2266,28 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                 </tbody>
               </table>
             </div>
+            {masters.pagination.totalPage > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "end",
+                  paddingTop: "var(--space-5)",
+                }}>
+                <Pagination
+                  currentPage={currentPage}
+                  paginate={paginate}
+                  perPage={masters.pagination.perPage}
+                  page={{
+                    total: masters.pagination.totalData,
+                    total_page: masters.pagination.totalPage,
+                    per_page: masters.pagination.perPage,
+                  }}
+                  indexOfFirstProject={indexOfFirstProject}
+                  indexOfLastProject={indexOfLastProject}
+                  customText="dokumen KM"
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2375,7 +2419,6 @@ function DokumenKmTab() {
   };
 
   const visibleKontrak = filterKm(kontrakList?.data ?? []);
-  console.log("visibleKontrak", visibleKontrak, kontrakList);
   const visibleApproved = filterKm(approvedList);
   const draftCount = visibleKontrak.filter((k) => k.status === "draft").length;
   const submittedCount = visibleKontrak.filter(
@@ -2384,19 +2427,8 @@ function DokumenKmTab() {
   const totalCountKontrak = kontrakList.pagination.totalData;
 
   // NEW — pagination helpers for the Pagination component
-  const paginate = (page: number) => {
-    const totalPage = kontrakList.pagination.totalPage;
-    if (page < 1 || page > totalPage) return;
-    setCurrentPage(page);
-  };
-  const indexOfFirstProject =
-    kontrakList.pagination.totalData === 0
-      ? 0
-      : (currentPage - 1) * perPage + 1;
-  const indexOfLastProject = Math.min(
-    currentPage * perPage,
-    kontrakList.pagination.totalData,
-  );
+  const { paginate, indexOfFirstProject, indexOfLastProject } =
+    usePaginationHelpers(kontrakList.pagination, currentPage, setCurrentPage);
 
   // Dokumen yang siap dikirim (draft/rejected & user berwenang).
   const submittableDocs = visibleKontrak.filter(

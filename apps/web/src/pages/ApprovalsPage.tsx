@@ -12,7 +12,12 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { usePeriod } from "../context/PeriodContext";
 import { useNotif } from "../context/NotifContext";
-import type { Report, KontrakManajemen, RealisasiKinerja } from "../lib/types";
+import type {
+  Report,
+  KontrakManajemen,
+  RealisasiKinerja,
+  KontrakManajemenItem,
+} from "../lib/types";
 import {
   CheckCircle,
   XCircle,
@@ -579,7 +584,7 @@ export function ApprovalsPage() {
       user.unit === "KP") ||
       user.role === "SUPERADMIN" ||
       user.role === "DEVELOPER");
-  const [kmList, setKmList] = useState<KontrakManajemen[]>([]);
+  const [kmList, setKmList] = useState<KontrakManajemenItem[]>([]);
   const [kmNote, setKmNote] = useState("");
   const [kmTarget, setKmTarget] = useState<string | null>(null);
   const [kmExpanded, setKmExpanded] = useState<string | null>(null);
@@ -621,7 +626,10 @@ export function ApprovalsPage() {
   const [tfxBusy, setTfxBusy] = useState(false);
 
   // Semua dokumen yang diinput manual (KM + Realisasi) — untuk kartu ringkasan & registri
-  const [allKm, setAllKm] = useState<KontrakManajemen[]>([]);
+  const [allKm, setAllKm] = useState<KontrakManajemen>({
+    data: [],
+    pagination: { currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 },
+  });;
   const [allReal, setAllReal] = useState<RealisasiKinerja[]>([]);
   const [periodMap, setPeriodMap] = useState<Record<string, string>>({});
 
@@ -758,7 +766,7 @@ export function ApprovalsPage() {
     if (!canReview) return;
     inputKontrak
       .reviewList()
-      .then((d) => setKmList(d as KontrakManajemen[]))
+      .then((d) => setKmList(d))
       .catch(() => {});
   };
 
@@ -774,7 +782,7 @@ export function ApprovalsPage() {
   const loadDocs = () => {
     inputKontrak
       .list()
-      .then((d) => setAllKm(d as KontrakManajemen[]))
+      .then((d) => setAllKm(d))
       .catch(() => {});
     inputRealisasi
       .history()
@@ -1957,7 +1965,7 @@ export function ApprovalsPage() {
     }
   };
 
-  const startEditKm = (k: KontrakManajemen) => {
+  const startEditKm = (k: KontrakManajemenItem) => {
     setKmEditItems(
       (k.kpiItems as Record<string, unknown>[]).map((item) => ({
         ...(item as object),
@@ -1967,7 +1975,7 @@ export function ApprovalsPage() {
     setKmExpanded(k.id);
   };
 
-  const saveEditKm = async (k: KontrakManajemen) => {
+  const saveEditKm = async (k: KontrakManajemenItem) => {
     setKmBusy(true);
     try {
       await inputKontrak.updateValues(k.id, kmEditItems);
@@ -2098,8 +2106,12 @@ export function ApprovalsPage() {
     (user?.role === "STAFF" && myBidang === "Perencanaan & Project Control");
   const scopeByBidang = isGM || isRpcKonsolidasi || !myBidang;
   const scopeKm = scopeByBidang
-    ? allKm
-    : allKm.filter((k) => k.bidang === myBidang);
+    ? Array.isArray(allKm)
+      ? allKm
+      : allKm.data
+    : Array.isArray(allKm)
+      ? allKm.filter((k) => k.bidang === myBidang)
+      : allKm.data.filter((k) => k.bidang === myBidang);
   const scopeReal = scopeByBidang
     ? allReal
     : allReal.filter(
@@ -2128,9 +2140,9 @@ export function ApprovalsPage() {
       periodId: k.periodId,
       status: k.status,
       reviewer: k.reviewer,
-      history: (k as KontrakManajemen & { history?: unknown }).history,
+      history: (k as KontrakManajemenItem & { history?: unknown }).history,
       ...stepInfo(
-        k as KontrakManajemen & { steps?: unknown; currentStepIndex?: number },
+        k as KontrakManajemenItem & { steps?: unknown; currentStepIndex?: number },
       ),
     })),
     ...scopeReal.map((r) => ({
@@ -2168,7 +2180,7 @@ export function ApprovalsPage() {
   // "KM atau Realisasi". Digabung & diurutkan dari yang paling mendesak (SLA terkecil/telat
   // dulu); item tanpa data SLA jatuh ke bawah.
   type QueueEntry =
-    | { kind: "km"; data: KontrakManajemen }
+    | { kind: "km"; data: KontrakManajemenItem }
     | { kind: "real"; data: RealisasiKinerja };
   const slaOf = (e: QueueEntry) => {
     const d = (e.data as { slaRemainingDays?: number | null }).slaRemainingDays;
@@ -2288,7 +2300,7 @@ export function ApprovalsPage() {
                       entry.kind === "km"
                         ? (() => {
                             const k = entry.data;
-                            const kk = k as KontrakManajemen & {
+                            const kk = k as KontrakManajemenItem & {
                               reviewSteps?: { label: string; kind?: string }[];
                               reviewStepIndex?: number;
                               currentStepIndex?: number;
@@ -2400,7 +2412,7 @@ export function ApprovalsPage() {
                                     <SlaBadge
                                       days={
                                         (
-                                          k as KontrakManajemen & {
+                                          k as KontrakManajemenItem & {
                                             slaRemainingDays?: number;
                                           }
                                         ).slaRemainingDays
