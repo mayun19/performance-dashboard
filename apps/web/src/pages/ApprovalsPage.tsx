@@ -2300,7 +2300,6 @@ export function ApprovalsPage() {
                             const kIsLast = kci >= ksteps.length - 1;
                             const kPrev = ksteps[kci - 1]?.label;
 
-                           
                             return (
                               <Fragment key={k.id}>
                                 <tr>
@@ -2356,13 +2355,6 @@ export function ApprovalsPage() {
                                         marginBottom: 3,
                                       }}>
                                       {ksteps.map((_, idx) => {
-                                         console.log(
-                                           "data checker",
-                                           idx < kci,
-                                           idx <= kci,
-                                           idx,
-                                           kci,
-                                         );
                                         return (
                                           <div
                                             key={idx}
