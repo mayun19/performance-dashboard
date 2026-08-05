@@ -2289,14 +2289,17 @@ export function ApprovalsPage() {
                         ? (() => {
                             const k = entry.data;
                             const kk = k as KontrakManajemen & {
-                              steps?: { label: string }[];
+                              reviewSteps?: { label: string; kind?: string }[];
+                              reviewStepIndex?: number;
                               currentStepIndex?: number;
                               stepLabel?: string;
                             };
-                            const ksteps = kk.steps ?? [];
-                            const kci = kk.currentStepIndex ?? 0;
+                            const ksteps = kk.reviewSteps ?? [];
+                            const kci = kk.reviewStepIndex ?? 0;
+                            const kcsi = kk.currentStepIndex ?? 0;
                             const kIsLast = kci >= ksteps.length - 1;
                             const kPrev = ksteps[kci - 1]?.label;
+
                             return (
                               <Fragment key={k.id}>
                                 <tr>
@@ -2351,33 +2354,35 @@ export function ApprovalsPage() {
                                         gap: 4,
                                         marginBottom: 3,
                                       }}>
-                                      {ksteps.map((_, idx) => (
-                                        <div
-                                          key={idx}
-                                          title={ksteps[idx]?.label}
-                                          style={{
-                                            width: 16,
-                                            height: 16,
-                                            borderRadius: "50%",
-                                            fontSize: 10,
-                                            fontWeight: 700,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            background:
-                                              idx < kci
-                                                ? "var(--color-success)"
-                                                : idx === kci
-                                                  ? "var(--color-accent)"
-                                                  : "var(--color-surface-2)",
-                                            color:
-                                              idx <= kci
-                                                ? "#fff"
-                                                : "var(--color-text-muted)",
-                                          }}>
-                                          {idx < kci ? "✓" : idx + 1}
-                                        </div>
-                                      ))}
+                                      {ksteps.map((_, idx) => {
+                                        return (
+                                          <div
+                                            key={idx}
+                                            title={ksteps[idx]?.label}
+                                            style={{
+                                              width: 16,
+                                              height: 16,
+                                              borderRadius: "50%",
+                                              fontSize: 10,
+                                              fontWeight: 700,
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              background:
+                                                idx < kci
+                                                  ? "var(--color-success)"
+                                                  : idx === kci
+                                                    ? "var(--color-accent)"
+                                                    : "var(--color-surface-2)",
+                                              color:
+                                                idx <= kci
+                                                  ? "#fff"
+                                                  : "var(--color-text-muted)",
+                                            }}>
+                                            {idx < kci ? "✓" : idx + 1}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                     <div
                                       style={{
@@ -2385,7 +2390,7 @@ export function ApprovalsPage() {
                                         color: "var(--color-accent)",
                                         fontWeight: 600,
                                       }}>
-                                      Langkah {kci}/{ksteps.length - 1}:{" "}
+                                      Langkah {kcsi}/{ksteps.length}:{" "}
                                       {kk.stepLabel ??
                                         ksteps[kci]?.label ??
                                         "—"}

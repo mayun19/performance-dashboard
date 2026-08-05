@@ -1,7 +1,6 @@
 import { useEffect, useState, Fragment } from "react";
 import { kpiMaster, inputKontrak } from "../lib/api";
 import type {
-  ReviewerSlot,
   ReviewerSlots,
   SubIndicatorInput,
   SubIndicatorTargetOverride,
