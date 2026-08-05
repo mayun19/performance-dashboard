@@ -24,7 +24,7 @@ const Pagination = (props: PaginationProps) => {
           variant={isActive ? "primary-blue" : "primary-grey"}
           style={{
             minWidth: 32,
-            fontWeight: isActive ? 700 : 500,
+            fontWeight: 700,
           }}>
           {pageNumber}
         </Button>
@@ -39,7 +39,8 @@ const Pagination = (props: PaginationProps) => {
         display: "inline-flex",
         alignItems: "center",
         padding: "0 var(--space-2)",
-        fontSize: "var(--text-sm)",
+        fontSize: "var(--text-md)",
+        fontWeight: 600,
         color: "var(--color-text-muted)",
       }}>
       …
