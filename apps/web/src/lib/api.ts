@@ -283,9 +283,10 @@ export const inputKontrak = {
   reviewList: () => api.get("/input-kontrak/review/list").then((r) => r.data),
   reviewerCandidates: () =>
     api.get("/input-kontrak/reviewer-candidates").then((r) => r.data),
-  approved: (unitCode?: string, year?: string, kmType?: "draft" | "final") =>
+  approved: (unitCode?: string, year?: string, kmType?: "draft" | "final", currentPage?: number,
+    perPage?: number) =>
     api
-      .get("/input-kontrak/approved", { params: { unitCode, year, kmType } })
+      .get("/input-kontrak/approved", { params: { unitCode, year, kmType, currentPage, perPage } })
       .then((r) => r.data),
   forRealisasi: (
     unitCode?: string,

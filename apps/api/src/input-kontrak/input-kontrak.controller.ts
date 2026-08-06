@@ -95,8 +95,16 @@ export class InputKontrakController {
     @Query("unitCode") unitCode?: string,
     @Query("year") year?: string,
     @Query("kmType") kmType?: string,
+    @Query("currentPage") currentPage?: string,
+    @Query("perPage") perPage?: string,
   ) {
-    return this.svc.getApproved(unitCode, year, kmType);
+    return this.svc.getApproved(
+      unitCode,
+      year,
+      kmType,
+      currentPage ? Number(currentPage) : undefined,
+      perPage ? Number(perPage) : undefined
+    );
   }
 
   // Acuan Input Realisasi: KM Sementara begitu disubmit (paralel dgn alur review-nya sendiri).

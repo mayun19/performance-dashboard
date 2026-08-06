@@ -2327,7 +2327,10 @@ function DokumenKmTab() {
     data: [],
     pagination: { currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 },
   });
-  const [approvedList, setApprovedList] = useState<KontrakManajemenItem[]>([]);
+  const [approvedList, setApprovedList] = useState<KontrakManajemen>({
+    data: [],
+    pagination: { currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 },
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -2347,6 +2350,7 @@ function DokumenKmTab() {
     Record<string, { checkerIds: string[]; approverId: string | null }>
   >({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [approvedCurrentPage, setApprovedCurrentPage] = useState(1);
   const perPage = 10;
 
   useEffect(() => {
@@ -2383,10 +2387,10 @@ function DokumenKmTab() {
   }, [selectedUnit, kmTypeFilter, currentPage]);
   useEffect(() => {
     inputKontrak
-      .approved(undefined, undefined, kmTypeFilter)
-      .then((d) => setApprovedList(d as KontrakManajemenItem[]))
+      .approved(undefined, undefined, kmTypeFilter, currentPage, perPage)
+      .then((d) => setApprovedList(d))
       .catch(() => {});
-  }, [submitted, kmTypeFilter]);
+  }, [submitted, kmTypeFilter, currentPage]);
 
   const myBidang = user?.bidang ?? null;
   const myUnit = user?.unit ?? null;
@@ -2419,16 +2423,28 @@ function DokumenKmTab() {
   };
 
   const visibleKontrak = filterKm(kontrakList?.data ?? []);
-  const visibleApproved = filterKm(approvedList);
+  const visibleApproved = filterKm(approvedList?.data ?? []);
   const draftCount = visibleKontrak.filter((k) => k.status === "draft").length;
   const submittedCount = visibleKontrak.filter(
     (k) => k.status === "submitted",
   ).length;
   const totalCountKontrak = kontrakList.pagination.totalData;
+  const totalCountApprovedContract = approvedList.pagination.totalData;
+  const totalPageApprovedContract = approvedList.pagination.totalPage;
 
   // NEW — pagination helpers for the Pagination component
   const { paginate, indexOfFirstProject, indexOfLastProject } =
     usePaginationHelpers(kontrakList.pagination, currentPage, setCurrentPage);
+
+  const {
+    paginate: paginateApproved,
+    indexOfFirstProject: indexOfFirstApproved,
+    indexOfLastProject: indexOfLastApproved,
+  } = usePaginationHelpers(
+    approvedList.pagination,
+    approvedCurrentPage,
+    setApprovedCurrentPage,
+  );
 
   // Dokumen yang siap dikirim (draft/rejected & user berwenang).
   const submittableDocs = visibleKontrak.filter(
@@ -2940,10 +2956,10 @@ function DokumenKmTab() {
             Kontrak Manajemen Disetujui (Sah)
           </div>
           <span className="card-meta">
-            {visibleApproved.length} kontrak · disahkan GM · read-only
+            {totalCountApprovedContract} kontrak · disahkan GM · read-only
           </span>
         </div>
-        {visibleApproved.length === 0 ? (
+        {totalCountApprovedContract === 0 ? (
           <div className="card-body">
             <EmptyState
               title="Belum ada KM disetujui"
@@ -2951,7 +2967,9 @@ function DokumenKmTab() {
             />
           </div>
         ) : (
-          <div className="table-wrap">
+          <div
+            className="table-wrap"
+            style={{ padding: "0 var(--space-7) var(--space-7)" }}>
             <div className="table-scroll">
               <table className="data-table compact">
                 <thead>
@@ -3066,6 +3084,28 @@ function DokumenKmTab() {
                 </tbody>
               </table>
             </div>
+            {totalPageApprovedContract > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "end",
+                  paddingTop: "var(--space-5)",
+                }}>
+                <Pagination
+                  currentPage={currentPage}
+                  paginate={paginateApproved}
+                  perPage={approvedList.pagination.perPage}
+                  page={{
+                    total: approvedList.pagination.totalData,
+                    total_page: approvedList.pagination.totalPage,
+                    per_page: approvedList.pagination.perPage,
+                  }}
+                  indexOfFirstProject={indexOfFirstApproved}
+                  indexOfLastProject={indexOfLastApproved}
+                  customText="dokumen KM"
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

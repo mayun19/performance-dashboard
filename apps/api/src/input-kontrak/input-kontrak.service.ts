@@ -53,7 +53,7 @@ export class InputKontrakService {
     }
 
     const page = currentPage ?? 1;
-    const limit = perPage ?? 20;
+    const limit = perPage ?? 10;
     const skip = (page - 1) * limit;
     const [data, totalData] = await Promise.all([
       this.prisma.kontrakManajemen.findMany({
@@ -84,7 +84,13 @@ export class InputKontrakService {
   // KM bersifat TAHUNAN: acuan realisasi dicocokkan per-tahun (bukan per-bulan),
   // sehingga realisasi bulan apa pun pada tahun yg sama memakai KM tahun itu.
   // `kmType` memfilter dokumen Draft vs Final — dua registri terpisah, tidak dicampur.
-  async getApproved(unitCode?: string, year?: string, kmType?: string) {
+  async getApproved(
+    unitCode?: string,
+    year?: string,
+    kmType?: string,
+    currentPage?: number,
+    perPage?: number,
+  ) {
     let periodIdsInYear: string[] | undefined;
     if (year) {
       const periods = await this.prisma.period.findMany({
@@ -93,15 +99,43 @@ export class InputKontrakService {
       });
       periodIdsInYear = periods.map((p) => p.id);
     }
-    return this.prisma.kontrakManajemen.findMany({
-      where: {
-        status: "approved",
-        ...(unitCode ? { unitCode } : {}),
-        ...(periodIdsInYear ? { periodId: { in: periodIdsInYear } } : {}),
-        ...(kmType ? { kmType } : {}),
+
+    const where = {
+      status: "approved",
+      ...(unitCode ? { unitCode } : {}),
+      ...(periodIdsInYear ? { periodId: { in: periodIdsInYear } } : {}),
+      ...(kmType ? { kmType } : {}),
+    };
+
+    if (!currentPage && !perPage) {
+      return this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: [{ unitCode: "asc" }, { reviewedAt: "desc" }],
+      });
+    }
+
+    const page = currentPage ?? 1;
+    const limit = perPage ?? 10;
+    const skip = (page - 1) * limit;
+    const [data, totalData] = await Promise.all([
+      this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: [{ unitCode: "asc" }, { reviewedAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.kontrakManajemen.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        currentPage: page,
+        perPage: limit,
+        totalData,
+        totalPage: Math.ceil(totalData / limit),
       },
-      orderBy: [{ unitCode: "asc" }, { reviewedAt: "desc" }],
-    });
+    };
   }
 
   // KM yang bisa dipakai sebagai acuan Input Realisasi — KM Sementara berjalan PARALEL
