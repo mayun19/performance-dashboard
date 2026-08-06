@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
 import ReviewerPickerModal from "../components/ReviewerPickerModal";
-import type { KontrakManajemen, KontrakManajemenItem, Period } from "../lib/types";
+import type { KontrakManajemenItem, Period } from "../lib/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const RPC_BIDANG = "Perencanaan & Project Control";
