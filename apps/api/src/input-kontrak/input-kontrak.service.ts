@@ -20,6 +20,7 @@ import {
   CHECKER_ROLES,
   APPROVER_ROLES,
   type ReviewerParticipant,
+  KpiItemForNotif,
 } from "../common/workflow-steps";
 
 @Injectable()
@@ -249,6 +250,31 @@ export class InputKontrakService {
     return result;
   }
 
+  private extractIndikatorLabel(kpiItems: unknown, maxShown = 2): string {
+    const items: KpiItemForNotif[] = Array.isArray(kpiItems)
+      ? (kpiItems as KpiItemForNotif[])
+      : [];
+
+    const names = items
+      .map((it) => it.indikator)
+      .filter((v): v is string => typeof v === "string" && v.trim() !== "");
+
+    if (names.length === 0) return "";
+    if (names.length === 1) return `, indikator "${names[0]}",`;
+
+    if (names.length <= maxShown) {
+      const list = names.map((n) => `"${n}"`).join(", ");
+      return `, ${names.length} indikator (${list}),`;
+    }
+
+    const shown = names
+      .slice(0, maxShown)
+      .map((n) => `"${n}"`)
+      .join(", ");
+    const sisa = names.length - maxShown;
+    return `, ${names.length} indikator (${shown}, +${sisa} lainnya),`;
+  }
+
   // Notifikasi ke pemegang langkah berjalan.
   private async notifyStep(
     kontrakId: string,
@@ -257,6 +283,7 @@ export class InputKontrakService {
     unitCode: string,
     bidang: string,
     actorName: string,
+    kpiItems?: unknown,
   ) {
     const step = steps[stepIndex];
     if (!step) return;
@@ -264,12 +291,15 @@ export class InputKontrakService {
       where: stepRecipientWhere(step),
     });
     if (recipients.length === 0) return;
+    const indikatorPart = this.extractIndikatorLabel(kpiItems);
+    console.log("[DEBUG notifyStep] kpiItems:", JSON.stringify(kpiItems));
+    console.log("[DEBUG notifyStep] indikatorPart:", indikatorPart);
     await this.prisma.notification.createMany({
       data: recipients.map((u) => ({
         userId: u.id,
         type: "approval",
         title: "Usulan Kontrak Manajemen Menunggu Review",
-        msg: `${actorName} meneruskan usulan KM ${uname(unitCode)} — ${bidang} untuk review: ${step.label}.`,
+        msg: `${actorName} meneruskan usulan KM ${uname(unitCode)} — ${bidang}${indikatorPart} untuk review: ${step.label}.`,
         route: "/approvals?type=km",
         targetId: kontrakId,
         unread: true,
@@ -396,6 +426,7 @@ export class InputKontrakService {
       kontrak.unitCode,
       kontrak.bidang,
       user.name,
+      kontrak.kpiItems,
     );
     await this.prisma.auditLog.create({
       data: {
@@ -554,14 +585,16 @@ export class InputKontrakService {
           k.unitCode,
           k.bidang,
           user.name,
+          k.kpiItems,
         );
       } else if (k.submitterId) {
+        const indikatorPart = this.extractIndikatorLabel(k.kpiItems);
         await this.prisma.notification.create({
           data: {
             userId: k.submitterId,
             type: "alert",
             title: "Usulan KM Dikembalikan ke Konseptor",
-            msg: `${user.name} (${steps[curIdx]?.label}) mengembalikan usulan KM ${uname(k.unitCode)} — ${k.bidang}: ${note}`,
+            msg: `${user.name} (${steps[curIdx]?.label}) mengembalikan usulan KM ${uname(k.unitCode)} — ${k.bidang}${indikatorPart} dengan catatan: ${note}`,
             route: "/input-kontrak",
             targetId: id,
             unread: true,
@@ -647,6 +680,7 @@ export class InputKontrakService {
         k.unitCode,
         k.bidang,
         user.name,
+        k.kpiItems,
       );
     }
     await this.prisma.auditLog.create({
