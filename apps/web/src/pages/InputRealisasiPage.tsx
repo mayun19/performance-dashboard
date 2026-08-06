@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
 import ReviewerPickerModal from "../components/ReviewerPickerModal";
-import type { KontrakManajemen, Period } from "../lib/types";
+import type { KontrakManajemen, KontrakManajemenItem, Period } from "../lib/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const RPC_BIDANG = "Perencanaan & Project Control";
@@ -330,7 +330,7 @@ export function InputRealisasiPage() {
         if (kmRes.status === "fulfilled") {
           // Acuan realisasi = KPI dari KM yang sudah DISUBMIT Staff RPC (KM Sementara berjalan
           // paralel dengan alur review-nya sendiri — bukan menunggu approval penuh).
-          const kontrak = kmRes.value as KontrakManajemen[];
+          const kontrak = kmRes.value as KontrakManajemenItem[];
           let merged: KpiItem[] = kontrak.flatMap((k) =>
             (k.kpiItems as KpiItem[]).map((it) => ({
               ...it,
