@@ -29,15 +29,51 @@ export class InputKontrakService {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
-  async getList(unitCode?: string, periodId?: string, kmType?: string) {
-    return this.prisma.kontrakManajemen.findMany({
-      where: {
-        ...(unitCode ? { unitCode } : {}),
-        ...(periodId ? { periodId } : {}),
-        ...(kmType ? { kmType } : {}),
+  async getList(
+    unitCode?: string,
+    periodId?: string,
+    kmType?: string,
+    currentPage?: number,
+    perPage?: number,
+  ) {
+    const where = {
+      ...(unitCode ? { unitCode } : {}),
+      ...(periodId ? { periodId } : {}),
+      ...(kmType ? { kmType } : {}),
+    };
+
+    // Tak dipaginasi bila currentPage/perPage tak dikirim — pertahankan perilaku lama untuk
+    // caller existing (mis. fan-out doc list, bulk-submit readiness check) yang mengharapkan
+    // array penuh, bukan { data, pagination }.
+    if (!currentPage && !perPage) {
+      return this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: { submittedAt: "desc" },
+      });
+    }
+
+    const page = currentPage ?? 1;
+    const limit = perPage ?? 10;
+    const skip = (page - 1) * limit;
+    const [data, totalData] = await Promise.all([
+      this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: { submittedAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.kontrakManajemen.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        currentPage: page,
+        perPage: limit,
+        totalData,
+        totalPage: Math.ceil(totalData / limit),
       },
-      orderBy: { submittedAt: "desc" },
-    });
+    };
   }
 
   async getById(id: string) {
@@ -48,7 +84,13 @@ export class InputKontrakService {
   // KM bersifat TAHUNAN: acuan realisasi dicocokkan per-tahun (bukan per-bulan),
   // sehingga realisasi bulan apa pun pada tahun yg sama memakai KM tahun itu.
   // `kmType` memfilter dokumen Draft vs Final — dua registri terpisah, tidak dicampur.
-  async getApproved(unitCode?: string, year?: string, kmType?: string) {
+  async getApproved(
+    unitCode?: string,
+    year?: string,
+    kmType?: string,
+    currentPage?: number,
+    perPage?: number,
+  ) {
     let periodIdsInYear: string[] | undefined;
     if (year) {
       const periods = await this.prisma.period.findMany({
@@ -57,15 +99,43 @@ export class InputKontrakService {
       });
       periodIdsInYear = periods.map((p) => p.id);
     }
-    return this.prisma.kontrakManajemen.findMany({
-      where: {
-        status: "approved",
-        ...(unitCode ? { unitCode } : {}),
-        ...(periodIdsInYear ? { periodId: { in: periodIdsInYear } } : {}),
-        ...(kmType ? { kmType } : {}),
+
+    const where = {
+      status: "approved",
+      ...(unitCode ? { unitCode } : {}),
+      ...(periodIdsInYear ? { periodId: { in: periodIdsInYear } } : {}),
+      ...(kmType ? { kmType } : {}),
+    };
+
+    if (!currentPage && !perPage) {
+      return this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: [{ unitCode: "asc" }, { reviewedAt: "desc" }],
+      });
+    }
+
+    const page = currentPage ?? 1;
+    const limit = perPage ?? 10;
+    const skip = (page - 1) * limit;
+    const [data, totalData] = await Promise.all([
+      this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: [{ unitCode: "asc" }, { reviewedAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.kontrakManajemen.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        currentPage: page,
+        perPage: limit,
+        totalData,
+        totalPage: Math.ceil(totalData / limit),
       },
-      orderBy: [{ unitCode: "asc" }, { reviewedAt: "desc" }],
-    });
+    };
   }
 
   // KM yang bisa dipakai sebagai acuan Input Realisasi — KM Sementara berjalan PARALEL
@@ -374,7 +444,7 @@ export class InputKontrakService {
         },
       });
     }
-    
+
     await this.prisma.kontrakManajemen.delete({ where: { id } });
     await this.prisma.auditLog.create({
       data: {

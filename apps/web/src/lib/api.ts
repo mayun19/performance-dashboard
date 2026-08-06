@@ -1,7 +1,8 @@
-import axios from 'axios';
+import axios from "axios";
+import { KontrakManajemen } from "./types";
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: "/api",
   withCredentials: true,
 });
 
@@ -9,13 +10,18 @@ let refreshing: Promise<void> | null = null;
 const queue: Array<() => void> = [];
 
 // Auth endpoints that should never trigger the refresh-and-retry logic
-const AUTH_ENDPOINTS = ['/auth/login', '/auth/refresh', '/auth/logout', '/auth/me'];
+const AUTH_ENDPOINTS = [
+  "/auth/login",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/me",
+];
 
 api.interceptors.response.use(
   (r) => r,
   async (err) => {
     const original = err.config;
-    const url: string = original?.url ?? '';
+    const url: string = original?.url ?? "";
 
     // Skip refresh logic for auth endpoints — just let them fail
     if (AUTH_ENDPOINTS.some((e) => url.includes(e))) {
@@ -26,14 +32,19 @@ api.interceptors.response.use(
       original._retry = true;
       if (!refreshing) {
         refreshing = api
-          .post('/auth/refresh')
-          .then(() => { queue.forEach((r) => r()); queue.length = 0; })
+          .post("/auth/refresh")
+          .then(() => {
+            queue.forEach((r) => r());
+            queue.length = 0;
+          })
           .catch(() => {
             queue.length = 0;
             // Dispatch an event so the app can react without a hard reload
-            window.dispatchEvent(new CustomEvent('auth:expired'));
+            window.dispatchEvent(new CustomEvent("auth:expired"));
           })
-          .finally(() => { refreshing = null; });
+          .finally(() => {
+            refreshing = null;
+          });
       }
       await new Promise<void>((res) => queue.push(res));
       return api(original);
@@ -44,71 +55,75 @@ api.interceptors.response.use(
 
 export const auth = {
   login: (email: string, password: string) =>
-    api.post('/auth/login', { email, password }).then((r) => r.data),
-  logout: () => api.post('/auth/logout'),
-  me: () => api.get('/auth/me').then((r) => r.data),
+    api.post("/auth/login", { email, password }).then((r) => r.data),
+  logout: () => api.post("/auth/logout"),
+  me: () => api.get("/auth/me").then((r) => r.data),
 };
 
 export const meta = {
-  period: () => api.get('/meta/period').then((r) => r.data),
-  periods: () => api.get('/meta/periods').then((r) => r.data),
-  roleVariants: () => api.get('/meta/role-variants').then((r) => r.data),
+  period: () => api.get("/meta/period").then((r) => r.data),
+  periods: () => api.get("/meta/periods").then((r) => r.data),
+  roleVariants: () => api.get("/meta/role-variants").then((r) => r.data),
 };
 
 export const executive = {
   // phase (living-target): 'sementara' | 'final'; kosong = auto (final bila ada, else sementara).
-  summary: (periodId?: string, phase?: 'sementara' | 'final') =>
-    api.get('/executive/summary', { params: { periodId, phase } }).then((r) => r.data),
+  summary: (periodId?: string, phase?: "sementara" | "final") =>
+    api
+      .get("/executive/summary", { params: { periodId, phase } })
+      .then((r) => r.data),
 };
 
 export const financial = {
   get: (periodId?: string) =>
-    api.get('/financial', { params: { periodId } }).then((r) => r.data),
+    api.get("/financial", { params: { periodId } }).then((r) => r.data),
 };
 
 export const operational = {
-  get: (periodId?: string, phase?: 'sementara' | 'final') =>
-    api.get('/operational', { params: { periodId, phase } }).then((r) => r.data),
+  get: (periodId?: string, phase?: "sementara" | "final") =>
+    api
+      .get("/operational", { params: { periodId, phase } })
+      .then((r) => r.data),
 };
 
 export const strategic = {
   get: (periodId?: string) =>
-    api.get('/strategic', { params: { periodId } }).then((r) => r.data),
+    api.get("/strategic", { params: { periodId } }).then((r) => r.data),
 };
 
 export const humanCapital = {
   get: (periodId?: string) =>
-    api.get('/human-capital', { params: { periodId } }).then((r) => r.data),
+    api.get("/human-capital", { params: { periodId } }).then((r) => r.data),
 };
 
 export const risk = {
   get: (periodId?: string) =>
-    api.get('/risk', { params: { periodId } }).then((r) => r.data),
+    api.get("/risk", { params: { periodId } }).then((r) => r.data),
 };
 
 export const prosesBisnis = {
   get: (periodId?: string) =>
-    api.get('/proses-bisnis', { params: { periodId } }).then((r) => r.data),
+    api.get("/proses-bisnis", { params: { periodId } }).then((r) => r.data),
 };
 
 export const organisasi = {
   get: (periodId?: string) =>
-    api.get('/organisasi', { params: { periodId } }).then((r) => r.data),
+    api.get("/organisasi", { params: { periodId } }).then((r) => r.data),
 };
 
 export const gcgEsg = {
   get: (periodId?: string) =>
-    api.get('/gcg-esg', { params: { periodId } }).then((r) => r.data),
+    api.get("/gcg-esg", { params: { periodId } }).then((r) => r.data),
 };
 
 export const peta = {
   get: (periodId?: string) =>
-    api.get('/peta', { params: { periodId } }).then((r) => r.data),
+    api.get("/peta", { params: { periodId } }).then((r) => r.data),
 };
 
 export const approvals = {
   reports: (periodId?: string) =>
-    api.get('/approvals/reports', { params: { periodId } }).then((r) => r.data),
+    api.get("/approvals/reports", { params: { periodId } }).then((r) => r.data),
   advance: (id: string, note?: string) =>
     api.post(`/approvals/reports/${id}/advance`, { note }).then((r) => r.data),
   return: (id: string, note: string) =>
@@ -117,101 +132,235 @@ export const approvals = {
 
 // Fase 5 (audit simetris): baris jejak revisi level-NILAI (bukan level-langkah — itu di history).
 export type RevisionLogEntry = {
-  id: string; entity: 'period_target' | 'input_realisasi'; targetId: string; periodId: string;
-  actor: string; actorId: string | null; field: string | null;
-  oldValue: unknown; newValue: unknown; note: string | null; createdAt: string;
+  id: string;
+  entity: "period_target" | "input_realisasi";
+  targetId: string;
+  periodId: string;
+  actor: string;
+  actorId: string | null;
+  field: string | null;
+  oldValue: unknown;
+  newValue: unknown;
+  note: string | null;
+  createdAt: string;
 };
 
 export const inputRealisasi = {
   history: (unitCode?: string, periodId?: string) =>
-    api.get('/input-realisasi/history', { params: { unitCode, periodId } }).then((r) => r.data),
+    api
+      .get("/input-realisasi/history", { params: { unitCode, periodId } })
+      .then((r) => r.data),
   myDecisions: (periodId?: string) =>
-    api.get('/input-realisasi/my-decisions', { params: { periodId } }).then((r) => r.data),
-  submit: (unitCode: string, bidang: string, values: Record<string, unknown>, checkerIds: string[], approverIds: string[], periodId?: string) =>
-    api.put('/input-realisasi/submit', { unitCode, bidang, values, checkerIds, approverIds, periodId }).then((r) => r.data),
-  reviewList: () =>
-    api.get('/input-realisasi/review/list').then((r) => r.data),
+    api
+      .get("/input-realisasi/my-decisions", { params: { periodId } })
+      .then((r) => r.data),
+  submit: (
+    unitCode: string,
+    bidang: string,
+    values: Record<string, unknown>,
+    checkerIds: string[],
+    approverIds: string[],
+    periodId?: string,
+  ) =>
+    api
+      .put("/input-realisasi/submit", {
+        unitCode,
+        bidang,
+        values,
+        checkerIds,
+        approverIds,
+        periodId,
+      })
+      .then((r) => r.data),
+  reviewList: () => api.get("/input-realisasi/review/list").then((r) => r.data),
   reviewerCandidates: (unitCode?: string, bidang?: string) =>
-    api.get('/input-realisasi/reviewer-candidates', { params: { unitCode, bidang } }).then((r) => r.data),
+    api
+      .get("/input-realisasi/reviewer-candidates", {
+        params: { unitCode, bidang },
+      })
+      .then((r) => r.data),
   // returnTo 'target' (living-target): routing masalah target ke PIC REN → status target_fix.
-  review: (id: string, action: 'approve' | 'reject', note?: string, returnTo?: 'konseptor' | 'previous' | 'target') =>
-    api.post(`/input-realisasi/${id}/review`, { action, note, returnTo }).then((r) => r.data),
+  review: (
+    id: string,
+    action: "approve" | "reject",
+    note?: string,
+    returnTo?: "konseptor" | "previous" | "target",
+  ) =>
+    api
+      .post(`/input-realisasi/${id}/review`, { action, note, returnTo })
+      .then((r) => r.data),
   // Setujui semua paket yang menunggu di langkah user sekaligus.
   bulkApprove: (note: string) =>
-    api.post('/input-realisasi/review/bulk-approve', { note }).then((r) => r.data as { total: number; approved: number; failed: number }),
+    api
+      .post("/input-realisasi/review/bulk-approve", { note })
+      .then(
+        (r) => r.data as { total: number; approved: number; failed: number },
+      ),
   // PIC REN mengoreksi KM Sementara untuk package berstatus target_fix, lalu package balik ke PIC.
-  resolveTargetFix: (id: string, updates: Array<{ kpiAssignmentId: string; target: string }>, note: string) =>
-    api.post(`/input-realisasi/${id}/resolve-target-fix`, { updates, note }).then((r) => r.data),
+  resolveTargetFix: (
+    id: string,
+    updates: Array<{ kpiAssignmentId: string; target: string }>,
+    note: string,
+  ) =>
+    api
+      .post(`/input-realisasi/${id}/resolve-target-fix`, { updates, note })
+      .then((r) => r.data),
   updateValues: (id: string, values: Record<string, unknown>, note?: string) =>
-    api.patch(`/input-realisasi/${id}/values`, { values, note }).then((r) => r.data),
+    api
+      .patch(`/input-realisasi/${id}/values`, { values, note })
+      .then((r) => r.data),
   // Fase 5 (audit simetris): timeline revisi gabungan — koreksi nilai realisasi (KI) +
   // koreksi target KM Sementara (PIC REN) untuk package ini, terurut terbaru dulu.
   revisions: (id: string) =>
-    api.get(`/input-realisasi/${id}/revisions`).then((r) => r.data as RevisionLogEntry[]),
+    api
+      .get(`/input-realisasi/${id}/revisions`)
+      .then((r) => r.data as RevisionLogEntry[]),
   delete: (id: string) =>
     api.delete(`/input-realisasi/${id}`).then((r) => r.data),
   bundle: (periodId?: string) =>
-    api.get('/input-realisasi/bundle', { params: { periodId } }).then((r) => r.data),
-  reviewBundle: (action: 'approve' | 'reject', note: string, periodId?: string) =>
-    api.post('/input-realisasi/bundle/review', { action, note, periodId }).then((r) => r.data),
+    api
+      .get("/input-realisasi/bundle", { params: { periodId } })
+      .then((r) => r.data),
+  reviewBundle: (
+    action: "approve" | "reject",
+    note: string,
+    periodId?: string,
+  ) =>
+    api
+      .post("/input-realisasi/bundle/review", { action, note, periodId })
+      .then((r) => r.data),
   uploadEvidence: (id: string, files: File[]) => {
     const form = new FormData();
-    files.forEach((f) => form.append('files', f));
-    return api.post(`/input-realisasi/${id}/evidence`, form).then((r) => r.data);
+    files.forEach((f) => form.append("files", f));
+    return api
+      .post(`/input-realisasi/${id}/evidence`, form)
+      .then((r) => r.data);
   },
   deleteEvidence: (id: string, fileId: string) =>
     api.delete(`/input-realisasi/${id}/evidence/${fileId}`).then((r) => r.data),
-  evidenceUrl: (id: string, fileId: string) => `/api/input-realisasi/${id}/evidence/${fileId}`,
+  evidenceUrl: (id: string, fileId: string) =>
+    `/api/input-realisasi/${id}/evidence/${fileId}`,
 };
 
 export const inputKontrak = {
-  list: (unitCode?: string, periodId?: string, kmType?: 'draft' | 'final') =>
-    api.get('/input-kontrak', { params: { unitCode, periodId, kmType } }).then((r) => r.data),
-  getById: (id: string) =>
-    api.get(`/input-kontrak/${id}`).then((r) => r.data),
+  list: (
+    unitCode?: string,
+    periodId?: string,
+    kmType?: "draft" | "final",
+    currentPage?: number,
+    perPage?: number,
+  ) =>
+    api
+      .get("/input-kontrak", {
+        params: { unitCode, periodId, kmType, currentPage, perPage },
+      })
+      .then((r) => r.data as KontrakManajemen),
+  getById: (id: string) => api.get(`/input-kontrak/${id}`).then((r) => r.data),
   save: (
     unitCode: string,
     bidang: string,
     holder: string,
     kpiItems: Record<string, unknown>[],
     id?: string,
-    kmType: 'draft' | 'final' = 'draft',
+    kmType: "draft" | "final" = "draft",
   ) =>
-    api.post('/input-kontrak/save', { id, unitCode, bidang, holder, kpiItems, kmType }).then((r) => r.data),
+    api
+      .post("/input-kontrak/save", {
+        id,
+        unitCode,
+        bidang,
+        holder,
+        kpiItems,
+        kmType,
+      })
+      .then((r) => r.data),
   submit: (id: string, checkerIds: string[], approverIds: string[]) =>
-    api.post(`/input-kontrak/${id}/submit`, { checkerIds, approverIds }).then((r) => r.data),
+    api
+      .post(`/input-kontrak/${id}/submit`, { checkerIds, approverIds })
+      .then((r) => r.data),
   delete: (id: string) =>
     api.delete(`/input-kontrak/${id}`).then((r) => r.data),
-  reviewList: () =>
-    api.get('/input-kontrak/review/list').then((r) => r.data),
+  reviewList: () => api.get("/input-kontrak/review/list").then((r) => r.data),
   reviewerCandidates: () =>
-    api.get('/input-kontrak/reviewer-candidates').then((r) => r.data),
-  approved: (unitCode?: string, year?: string, kmType?: 'draft' | 'final') =>
-    api.get('/input-kontrak/approved', { params: { unitCode, year, kmType } }).then((r) => r.data),
-  forRealisasi: (unitCode?: string, year?: string, kmType?: 'draft' | 'final') =>
-    api.get('/input-kontrak/for-realisasi', { params: { unitCode, year, kmType } }).then((r) => r.data),
-  review: (id: string, action: 'approve' | 'reject', note?: string, returnTo?: 'konseptor' | 'previous') =>
-    api.post(`/input-kontrak/${id}/review`, { action, note, returnTo }).then((r) => r.data),
+    api.get("/input-kontrak/reviewer-candidates").then((r) => r.data),
+  approved: (unitCode?: string, year?: string, kmType?: "draft" | "final", currentPage?: number,
+    perPage?: number) =>
+    api
+      .get("/input-kontrak/approved", { params: { unitCode, year, kmType, currentPage, perPage } })
+      .then((r) => r.data),
+  forRealisasi: (
+    unitCode?: string,
+    year?: string,
+    kmType?: "draft" | "final",
+  ) =>
+    api
+      .get("/input-kontrak/for-realisasi", {
+        params: { unitCode, year, kmType },
+      })
+      .then((r) => r.data),
+  review: (
+    id: string,
+    action: "approve" | "reject",
+    note?: string,
+    returnTo?: "konseptor" | "previous",
+  ) =>
+    api
+      .post(`/input-kontrak/${id}/review`, { action, note, returnTo })
+      .then((r) => r.data),
   // Setujui semua dokumen yang menunggu di langkah user sekaligus.
   bulkApprove: (note: string) =>
-    api.post('/input-kontrak/review/bulk-approve', { note }).then((r) => r.data as { total: number; approved: number; failed: number }),
-  bundle: (scope: 'KP' | 'UPMK' = 'KP', year?: string, kmType: 'draft' | 'final' = 'draft') =>
-    api.get('/input-kontrak/bundle', { params: { scope, year, kmType } }).then((r) => r.data),
-  reviewBundle: (scope: 'KP' | 'UPMK', action: 'approve' | 'reject', note: string, year?: string, kmType: 'draft' | 'final' = 'draft') =>
-    api.post('/input-kontrak/bundle/review', { scope, action, note, year, kmType }).then((r) => r.data),
+    api
+      .post("/input-kontrak/review/bulk-approve", { note })
+      .then(
+        (r) => r.data as { total: number; approved: number; failed: number },
+      ),
+  bundle: (
+    scope: "KP" | "UPMK" = "KP",
+    year?: string,
+    kmType: "draft" | "final" = "draft",
+  ) =>
+    api
+      .get("/input-kontrak/bundle", { params: { scope, year, kmType } })
+      .then((r) => r.data),
+  reviewBundle: (
+    scope: "KP" | "UPMK",
+    action: "approve" | "reject",
+    note: string,
+    year?: string,
+    kmType: "draft" | "final" = "draft",
+  ) =>
+    api
+      .post("/input-kontrak/bundle/review", {
+        scope,
+        action,
+        note,
+        year,
+        kmType,
+      })
+      .then((r) => r.data),
   updateValues: (id: string, kpiItems: Record<string, unknown>[]) =>
     api.patch(`/input-kontrak/${id}/values`, { kpiItems }).then((r) => r.data),
 };
 
 // Slot alur reviewer per-assignment (Kombinasi A+B): peran + opsi override orang.
-export type ReviewerSlot = { role: 'ASMAN' | 'MANAJER' | 'SRMANAJER' | 'GM'; userId?: string };
-export type ReviewerSlots = { checkers: ReviewerSlot[]; approver: ReviewerSlot | null };
+export type ReviewerSlot = {
+  role: "ASMAN" | "MANAJER" | "SRMANAJER" | "GM";
+  userId?: string;
+};
+export type ReviewerSlots = {
+  checkers: ReviewerSlot[];
+  approver: ReviewerSlot | null;
+};
 
 // Override target sub-indikator (KPI Komposit) utk satu assignment — index sejajar dgn
 // SubIndicatorInput[] milik master. Kosong = warisi target template global.
 export type SubIndicatorTargetOverride = { target?: string; target2?: string };
 export type KpiAssignmentInput = {
-  unitCode: string; bidang: string; holder?: string; target?: string; target2?: string;
+  unitCode: string;
+  bidang: string;
+  holder?: string;
+  target?: string;
+  target2?: string;
   persenAgregasi?: number;
   reviewerSlots?: ReviewerSlots | null;
   subIndicatorTargets?: SubIndicatorTargetOverride[] | null;
@@ -219,42 +368,81 @@ export type KpiAssignmentInput = {
 // Sub-indikator (opt-in, generik) — non-kosong menandai KPI ini "komposit". Lihat
 // kpi-master.service.ts SubIndicatorInput.
 export type SubIndicatorInput = {
-  nama: string; satuan?: string; bobot: string; target: string; target2?: string; formula?: string;
+  nama: string;
+  satuan?: string;
+  bobot: string;
+  target: string;
+  target2?: string;
+  formula?: string;
   // Polaritas eksplisit sub ini (hanya berlaku sub bobot>0) — lihat catatan di kpi-master.service.ts.
-  polaritas?: 'positive' | 'negative';
+  polaritas?: "positive" | "negative";
 };
 export const kpiMaster = {
-  list: (year?: string, kmType?: 'draft' | 'final') =>
-    api.get('/kpi-master', { params: { year, kmType } }).then((r) => r.data),
+  list: (
+    year?: string,
+    kmType?: "draft" | "final",
+    currentPage?: number,
+    perPage?: number,
+  ) =>
+    api
+      .get("/kpi-master", { params: { year, kmType, currentPage, perPage } })
+      .then((r) => r.data),
   getById: (id: string) => api.get(`/kpi-master/${id}`).then((r) => r.data),
   save: (dto: {
-    id?: string; kmType?: 'draft' | 'final'; indikator: string; formula?: string;
-    satuan?: string; bobotKm?: string; targetParent?: string; assignments: KpiAssignmentInput[];
-    defaultCheckerIds?: string[]; defaultApproverId?: string;
-    aggregationMethod?: 'weighted' | 'sum';
+    id?: string;
+    kmType?: "draft" | "final";
+    indikator: string;
+    formula?: string;
+    satuan?: string;
+    bobotKm?: string;
+    targetParent?: string;
+    assignments: KpiAssignmentInput[];
+    defaultCheckerIds?: string[];
+    defaultApproverId?: string;
+    aggregationMethod?: "weighted" | "sum";
     subIndicators?: SubIndicatorInput[];
-    polaritas?: 'positive' | 'negative';
-  }) => api.post('/kpi-master/save', dto).then((r) => r.data),
+    polaritas?: "positive" | "negative";
+  }) => api.post("/kpi-master/save", dto).then((r) => r.data),
   delete: (id: string) => api.delete(`/kpi-master/${id}`).then((r) => r.data),
   rollup: (id: string, periodId?: string) =>
-    api.get(`/kpi-master/${id}/rollup`, { params: { periodId } }).then((r) => r.data),
+    api
+      .get(`/kpi-master/${id}/rollup`, { params: { periodId } })
+      .then((r) => r.data),
   reviewPerKpi: (periodId?: string) =>
-    api.get('/kpi-master/review/per-kpi', { params: { periodId } }).then((r) => r.data),
-  reviewConsolidation: (kpiMasterId: string, action: 'approve' | 'reject', note?: string, periodId?: string) =>
-    api.post('/kpi-master/review/consolidation', { kpiMasterId, action, note, periodId }).then((r) => r.data),
+    api
+      .get("/kpi-master/review/per-kpi", { params: { periodId } })
+      .then((r) => r.data),
+  reviewConsolidation: (
+    kpiMasterId: string,
+    action: "approve" | "reject",
+    note?: string,
+    periodId?: string,
+  ) =>
+    api
+      .post("/kpi-master/review/consolidation", {
+        kpiMasterId,
+        action,
+        note,
+        periodId,
+      })
+      .then((r) => r.data),
   defaultsForKm: (kmId: string) =>
-    api.get(`/kpi-master/defaults-for-km/${kmId}`).then((r) => r.data as { checkerIds: string[]; approverId: string | null }),
+    api
+      .get(`/kpi-master/defaults-for-km/${kmId}`)
+      .then(
+        (r) => r.data as { checkerIds: string[]; approverId: string | null },
+      ),
 };
 
 export const notifications = {
-  list: () => api.get('/notifications').then((r) => r.data),
+  list: () => api.get("/notifications").then((r) => r.data),
   markRead: (id: string) => api.post(`/notifications/${id}/read`),
-  markAllRead: () => api.post('/notifications/read-all'),
+  markAllRead: () => api.post("/notifications/read-all"),
 };
 
 export const audit = {
   logs: (page = 1, limit = 20) =>
-    api.get('/audit', { params: { page, limit } }).then((r) => r.data),
+    api.get("/audit", { params: { page, limit } }).then((r) => r.data),
 };
 
 export const kpi = {
@@ -263,51 +451,98 @@ export const kpi = {
 
 export const kinerja = {
   rekap: (periodId?: string, mode?: string) =>
-    api.get('/kinerja/rekap', { params: { periodId, mode } }).then((r) => r.data),
-  latestPeriod: () =>
-    api.get('/kinerja/latest-period').then((r) => r.data),
+    api
+      .get("/kinerja/rekap", { params: { periodId, mode } })
+      .then((r) => r.data),
+  latestPeriod: () => api.get("/kinerja/latest-period").then((r) => r.data),
 };
 
 export const admin = {
-  resetTestData: () => api.delete('/admin/reset-test-data').then((r) => r.data),
+  resetTestData: () => api.delete("/admin/reset-test-data").then((r) => r.data),
   togglePeriodWindow: (periodId: string, enabled: boolean) =>
-    api.patch(`/admin/periods/${periodId}/window-override`, { enabled }).then((r) => r.data),
-  setKmReference: (periodId: string, kmReference: 'draft' | 'final') =>
-    api.patch(`/admin/periods/${periodId}/km-reference`, { kmReference }).then((r) => r.data),
-  whatsappLogs: () => api.get('/admin/whatsapp-sim/logs').then((r) => r.data),
+    api
+      .patch(`/admin/periods/${periodId}/window-override`, { enabled })
+      .then((r) => r.data),
+  setKmReference: (periodId: string, kmReference: "draft" | "final") =>
+    api
+      .patch(`/admin/periods/${periodId}/km-reference`, { kmReference })
+      .then((r) => r.data),
+  whatsappLogs: () => api.get("/admin/whatsapp-sim/logs").then((r) => r.data),
   whatsappPreview: (periodId: string) =>
-    api.get('/admin/whatsapp-sim/preview', { params: { periodId } }).then((r) => r.data),
-  whatsappRun: () => api.post('/admin/whatsapp-sim/run').then((r) => r.data),
-  backfillKpiMasterPreview: () => api.get('/admin/backfill-kpi-master/preview').then((r) => r.data),
-  backfillKpiMasterRun: () => api.post('/admin/backfill-kpi-master/run').then((r) => r.data),
+    api
+      .get("/admin/whatsapp-sim/preview", { params: { periodId } })
+      .then((r) => r.data),
+  whatsappRun: () => api.post("/admin/whatsapp-sim/run").then((r) => r.data),
+  backfillKpiMasterPreview: () =>
+    api.get("/admin/backfill-kpi-master/preview").then((r) => r.data),
+  backfillKpiMasterRun: () =>
+    api.post("/admin/backfill-kpi-master/run").then((r) => r.data),
   // Deadline konvergensi bulanan lewat → force-freeze KM Sementara (target-of-record PIC REN menang).
-  forceFreeze: (periodId: string) => api.post(`/admin/periods/${periodId}/force-freeze`).then((r) => r.data),
+  forceFreeze: (periodId: string) =>
+    api.post(`/admin/periods/${periodId}/force-freeze`).then((r) => r.data),
   // Fase 6: backfill KM Sementara (materialisasi PeriodTarget) utk periode tertentu — perlu
   // dijalankan sebelum restatement KM Final agar periode lama ikut direstate (bukan dilewati).
   backfillPeriodTargetPreview: (periodId: string) =>
-    api.get('/admin/backfill-period-target/preview', { params: { periodId } }).then((r) => r.data),
+    api
+      .get("/admin/backfill-period-target/preview", { params: { periodId } })
+      .then((r) => r.data),
   backfillPeriodTargetRun: (periodId: string) =>
-    api.post('/admin/backfill-period-target/run', undefined, { params: { periodId } }).then((r) => r.data),
+    api
+      .post("/admin/backfill-period-target/run", undefined, {
+        params: { periodId },
+      })
+      .then((r) => r.data),
 };
 
 // Living-target: KM Sementara (target hidup) per (periode, assignment).
 export type PeriodTarget = {
-  id: string; periodId: string; kpiAssignmentId: string;
-  target: string; source: 'fresh' | 'carried' | 'disbursed'; frozen: boolean;
-  frozenTarget: string | null; frozenAt: string | null;
+  id: string;
+  periodId: string;
+  kpiAssignmentId: string;
+  target: string;
+  source: "fresh" | "carried" | "disbursed";
+  frozen: boolean;
+  frozenTarget: string | null;
+  frozenAt: string | null;
   // getForPeriod menyertakan relasi assignment (mapping ke masterKpiId/unit/bidang di UI).
-  assignment?: { id: string; kpiMasterId: string; unitCode: string; bidang: string; target: string };
+  assignment?: {
+    id: string;
+    kpiMasterId: string;
+    unitCode: string;
+    bidang: string;
+    target: string;
+  };
 };
 export const periodTarget = {
   list: (periodId: string) =>
-    api.get('/period-target', { params: { periodId } }).then((r) => r.data as PeriodTarget[]),
+    api
+      .get("/period-target", { params: { periodId } })
+      .then((r) => r.data as PeriodTarget[]),
   // Koreksi KM Sementara in-cycle oleh PIC REN (bidang Perencanaan/RPC).
-  update: (kpiAssignmentId: string, periodId: string, target: string, note?: string) =>
-    api.patch(`/period-target/${kpiAssignmentId}`, { target, note }, { params: { periodId } }).then((r) => r.data),
+  update: (
+    kpiAssignmentId: string,
+    periodId: string,
+    target: string,
+    note?: string,
+  ) =>
+    api
+      .patch(
+        `/period-target/${kpiAssignmentId}`,
+        { target, note },
+        { params: { periodId } },
+      )
+      .then((r) => r.data),
   // Disburse Target Tahun jadi alokasi 12 bulan sekaligus (PIC REN, direncanakan di muka).
-  disburse: (kpiAssignmentId: string, entries: Array<{ periodId: string; target: string }>) =>
-    api.post(`/period-target/${kpiAssignmentId}/disburse`, { entries })
-      .then((r) => r.data as { updated: number; skippedFrozen: number; total: number }),
+  disburse: (
+    kpiAssignmentId: string,
+    entries: Array<{ periodId: string; target: string }>,
+  ) =>
+    api
+      .post(`/period-target/${kpiAssignmentId}/disburse`, { entries })
+      .then(
+        (r) =>
+          r.data as { updated: number; skippedFrozen: number; total: number },
+      ),
 };
 
 export default api;

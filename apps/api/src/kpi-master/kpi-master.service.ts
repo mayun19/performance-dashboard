@@ -1,16 +1,30 @@
-import { Injectable, Inject, ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
-import { PrismaService } from '../prisma/prisma.service';
-import { Prisma, Role, User } from '@prisma/client';
-import { CHECKER_ROLES, APPROVER_ROLES, RPC_BIDANG, stepRecipientWhere } from '../common/workflow-steps';
+import {
+  Injectable,
+  Inject,
+  ForbiddenException,
+  BadRequestException,
+  NotFoundException,
+} from "@nestjs/common";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { Cache } from "cache-manager";
+import { PrismaService } from "../prisma/prisma.service";
+import { Prisma, Role, User } from "@prisma/client";
+import {
+  CHECKER_ROLES,
+  APPROVER_ROLES,
+  RPC_BIDANG,
+  stepRecipientWhere,
+} from "../common/workflow-steps";
 
 // Slot alur reviewer per-assignment (Kombinasi A+B): peran + opsi override orang.
 export type ReviewerSlot = {
-  role: 'ASMAN' | 'MANAJER' | 'SRMANAJER' | 'GM';
+  role: "ASMAN" | "MANAJER" | "SRMANAJER" | "GM";
   userId?: string; // ada → override orang spesifik (A); kosong → resolve peran (B)
 };
-export type ReviewerSlots = { checkers: ReviewerSlot[]; approver: ReviewerSlot | null };
+export type ReviewerSlots = {
+  checkers: ReviewerSlot[];
+  approver: ReviewerSlot | null;
+};
 
 export interface AssignmentInput {
   unitCode: string;
@@ -64,13 +78,23 @@ export interface SaveMasterInput {
 // saat submit Input Realisasi (sama seperti item non-komposit, pola existing).
 type FannedItem = {
   masterKpiId: string;
-  indikator: string; formula: string; satuan: string;
-  bobot: string; target: string; target2: string; polaritas: string;
+  indikator: string;
+  formula: string;
+  satuan: string;
+  bobot: string;
+  target: string;
+  target2: string;
+  polaritas: string;
   subIndicators?: SubIndicatorInput[];
 };
 
 // Item KM legacy dikumpulkan utk backfill (Fase F) — belum bertag masterKpiId.
-type BackfillGroupItem = { docId: string; unitCode: string; bidang: string; item: Record<string, unknown> };
+type BackfillGroupItem = {
+  docId: string;
+  unitCode: string;
+  bidang: string;
+  item: Record<string, unknown>;
+};
 
 @Injectable()
 export class KpiMasterService {
@@ -82,24 +106,65 @@ export class KpiMasterService {
   // Default: sembunyikan versi 'superseded' (riwayat) — hanya tampilkan versi yang masih
   // hidup (berlaku sekarang ATAU pending berlaku bulan berikutnya). includeSuperseded=true
   // untuk melihat seluruh riwayat versi.
-  async list(year?: string, kmType?: string, includeSuperseded = false) {
+  async list(
+    year?: string,
+    kmType?: string,
+    includeSuperseded = false,
+    currentPage?: number,
+    perPage?: number,
+  ) {
     const activePeriod = await this.prisma.period.findFirst({
       where: { isActive: true },
     });
-    const masters = await this.prisma.kpiMaster.findMany({
-      where: {
-        ...(year ? { year } : {}),
-        ...(kmType ? { kmType } : {}),
-        ...(includeSuperseded ? {} : { status: { not: "superseded" } }),
+
+    const where = {
+      ...(year ? { year } : {}),
+      ...(kmType ? { kmType } : {}),
+      ...(includeSuperseded ? {} : { status: { not: "superseded" } }),
+    };
+
+    const include = {
+      assignments: {
+        orderBy: [{ unitCode: "asc" as const }, { bidang: "asc" as const }],
       },
-      include: {
-        assignments: { orderBy: [{ unitCode: "asc" }, { bidang: "asc" }] },
+    };
+
+    if (!currentPage && !perPage) {
+      const master = await this.prisma.kpiMaster.findMany({
+        where,
+        include,
+        orderBy: { createdAt: "desc" },
+      });
+      return master.map((m) =>
+        this.withVersionFlags(m, activePeriod?.yearMonth),
+      );
+    }
+
+    const page = currentPage ?? 1;
+    const limit = perPage ?? 20;
+    const skip = (page - 1) * limit;
+    const [masters, totalData] = await Promise.all([
+      this.prisma.kpiMaster.findMany({
+        where,
+        include,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.kpiMaster.count({ where }),
+    ]);
+
+    return {
+      data: masters.map((m) =>
+        this.withVersionFlags(m, activePeriod?.yearMonth),
+      ),
+      pagination: {
+        currentPage: page,
+        perPage: limit,
+        totalData,
+        totalPage: Math.ceil(totalData / limit),
       },
-      orderBy: { createdAt: "desc" },
-    });
-    return masters.map((m) =>
-      this.withVersionFlags(m, activePeriod?.yearMonth),
-    );
+    };
   }
 
   private withVersionFlags<
