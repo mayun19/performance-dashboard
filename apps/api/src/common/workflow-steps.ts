@@ -1,25 +1,34 @@
-import { Role, Prisma } from '@prisma/client';
+import { Role, Prisma } from "@prisma/client";
 
 export const UNIT_NAMES: Record<string, string> = {
-  KP: 'Kantor Induk', UPMK1: 'UPMK I', UPMK2: 'UPMK II',
-  UPMK3: 'UPMK III', UPMK4: 'UPMK IV', UPMK5: 'UPMK V',
+  KP: "Kantor Induk",
+  UPMK1: "UPMK I",
+  UPMK2: "UPMK II",
+  UPMK3: "UPMK III",
+  UPMK4: "UPMK IV",
+  UPMK5: "UPMK V",
 };
 export const uname = (u: string) => UNIT_NAMES[u] ?? u;
 
-export const RPC_BIDANG = 'Perencanaan & Project Control';
-export const OMP_BIDANG = 'Operasi Manajemen Proyek';
-export const QAQC_BIDANG = 'QA/QC';
-export const KKU_BIDANG = 'Keuangan, Komunikasi & Umum';
-export const K3L_BIDANG = 'K3L';
-export const MRO_BIDANG = 'MRO';
+export const RPC_BIDANG = "Perencanaan & Project Control";
+export const OMP_BIDANG = "Operasi Manajemen Proyek";
+export const QAQC_BIDANG = "QA/QC";
+export const KKU_BIDANG = "Keuangan, Komunikasi & Umum";
+export const K3L_BIDANG = "K3L";
+export const MRO_BIDANG = "MRO";
 
 // Bagian internal UPMK (unit non-KP) — tiap UPMK punya 3 bagian, masing-masing dgn Staff PIC
 // & ASMAN sendiri. Berbeda dari 6 bidang Kantor Induk di atas; jangan dicampur.
-export const UPMK_BAGIAN_PEMBANGKIT = 'Bagian Pembangkit';
-export const UPMK_BAGIAN_JARINGAN = 'Bagian Jaringan';
-export const UPMK_BAGIAN_KKU = 'Bagian KKU';
-export const UPMK_BAGIAN_K3L = 'Bagian K3L';
-export const UPMK_BAGIAN_LIST = [UPMK_BAGIAN_PEMBANGKIT, UPMK_BAGIAN_JARINGAN, UPMK_BAGIAN_KKU, UPMK_BAGIAN_K3L];
+export const UPMK_BAGIAN_PEMBANGKIT = "Bagian Pembangkit";
+export const UPMK_BAGIAN_JARINGAN = "Bagian Jaringan";
+export const UPMK_BAGIAN_KKU = "Bagian KKU";
+export const UPMK_BAGIAN_K3L = "Bagian K3L";
+export const UPMK_BAGIAN_LIST = [
+  UPMK_BAGIAN_PEMBANGKIT,
+  UPMK_BAGIAN_JARINGAN,
+  UPMK_BAGIAN_KKU,
+  UPMK_BAGIAN_K3L,
+];
 
 // Langkah alur. Tiga mode pencocokan (diperiksa berurutan di stepMatches):
 //   1. userId  → langkah ditujukan ke ORANG spesifik (alur reviewer pilihan submitter).
@@ -30,14 +39,20 @@ export interface Step {
   variant?: string; // kode jabatan (roleVariant) — pembeda sub-posisi dalam satu bidang
   bidang?: string;
   unit?: string;
-  userId?: string;   // pengguna spesifik (alur checker/approver terpilih)
+  userId?: string; // pengguna spesifik (alur checker/approver terpilih)
   userName?: string; // nama untuk tampilan/riwayat
   label: string;
-  kind?: 'submitter' | 'checker' | 'approver'; // peran langkah pada alur terpilih
+  kind?: "submitter" | "checker" | "approver"; // peran langkah pada alur terpilih
 }
 
 // User minimal untuk pencocokan langkah (req.user menyertakan roleVariant).
-export type WorkflowUser = { id?: string; role: Role; bidang?: string | null; unit?: string | null; roleVariant?: { code: string } | null };
+export type WorkflowUser = {
+  id?: string;
+  role: Role;
+  bidang?: string | null;
+  unit?: string | null;
+  roleVariant?: { code: string } | null;
+};
 
 // ===== Alur reviewer terpilih (Fase 2) =====
 // Submitter memilih daftar Checker (berurutan) + satu Approver. Kandidat dibatasi role.
@@ -45,15 +60,25 @@ export const CHECKER_ROLES: Role[] = [Role.ASMAN, Role.MANAJER];
 export const APPROVER_ROLES: Role[] = [Role.SRMANAJER, Role.GM];
 
 const ROLE_LABEL: Record<string, string> = {
-  STAFF: 'Staff', ASMAN: 'ASMAN', MANAJER: 'Manajer', SRMANAJER: 'Senior Manajer', GM: 'General Manager',
+  STAFF: "Staff",
+  ASMAN: "ASMAN",
+  MANAJER: "Manajer",
+  SRMANAJER: "Senior Manajer",
+  GM: "General Manager",
 };
 
 // Peserta alur minimal untuk membangun langkah.
-export type ReviewerParticipant = { id: string; name: string; role: Role; unit?: string | null; bidang?: string | null };
+export type ReviewerParticipant = {
+  id: string;
+  name: string;
+  role: Role;
+  unit?: string | null;
+  bidang?: string | null;
+};
 
 function participantLabel(p: ReviewerParticipant): string {
   const roleTxt = ROLE_LABEL[p.role] ?? p.role;
-  const unitTxt = p.unit && p.unit !== 'KP' ? ` ${uname(p.unit)}` : '';
+  const unitTxt = p.unit && p.unit !== "KP" ? ` ${uname(p.unit)}` : "";
   return `${p.name} — ${roleTxt}${unitTxt}`;
 }
 
@@ -68,14 +93,35 @@ export function buildReviewerSteps(
   approvers: ReviewerParticipant[],
 ): Step[] {
   const steps: Step[] = [
-    { role: submitter.role, userId: submitter.id, userName: submitter.name, kind: 'submitter', label: `Penyusun — ${submitter.name}` },
+    {
+      role: submitter.role,
+      userId: submitter.id,
+      userName: submitter.name,
+      kind: "submitter",
+      label: `Penyusun — ${submitter.name}`,
+    },
   ];
   checkers.forEach((c, i) => {
-    steps.push({ role: c.role, userId: c.id, userName: c.name, kind: 'checker', label: `Checker ${i + 1}: ${participantLabel(c)}` });
+    steps.push({
+      role: c.role,
+      userId: c.id,
+      userName: c.name,
+      kind: "checker",
+      label: `Checker ${i + 1}: ${participantLabel(c)}`,
+    });
   });
   approvers.forEach((a, i) => {
-    const label = approvers.length > 1 ? `Approver ${i + 1}: ${participantLabel(a)}` : `Approver: ${participantLabel(a)}`;
-    steps.push({ role: a.role, userId: a.id, userName: a.name, kind: 'approver', label });
+    const label =
+      approvers.length > 1
+        ? `Approver ${i + 1}: ${participantLabel(a)}`
+        : `Approver: ${participantLabel(a)}`;
+    steps.push({
+      role: a.role,
+      userId: a.id,
+      userName: a.name,
+      kind: "approver",
+      label,
+    });
   });
   return steps;
 }
@@ -90,21 +136,26 @@ export function validateReviewerSelection(
   approvers: ReviewerParticipant[] | undefined,
   srmanajerAvailableForBidang: boolean,
 ): string | null {
-  if (!checkers || checkers.length === 0) return 'Pilih minimal satu Checker';
-  if (!approvers || approvers.length === 0) return 'Pilih minimal satu Approver';
+  if (!checkers || checkers.length === 0) return "Pilih minimal satu Checker";
+  if (!approvers || approvers.length === 0)
+    return "Pilih minimal satu Approver";
   const ids = new Set<string>();
   for (const c of checkers) {
-    if (!CHECKER_ROLES.includes(c.role)) return `Checker "${c.name}" harus ASMAN atau Manajer`;
-    if (c.id === submitterId) return 'Checker tidak boleh sama dengan penyusun';
+    if (!CHECKER_ROLES.includes(c.role))
+      return `Checker "${c.name}" harus ASMAN atau Manajer`;
+    if (c.id === submitterId) return "Checker tidak boleh sama dengan penyusun";
     if (ids.has(c.id)) return `Checker "${c.name}" terpilih ganda`;
     ids.add(c.id);
   }
   for (const a of approvers) {
-    if (!APPROVER_ROLES.includes(a.role)) return 'Approver harus Senior Manajer atau General Manager';
-    if (a.id === submitterId) return 'Approver tidak boleh sama dengan penyusun';
-    if (ids.has(a.id)) return `Approver "${a.name}" tidak boleh merangkap sebagai Checker atau terpilih ganda`;
+    if (!APPROVER_ROLES.includes(a.role))
+      return "Approver harus Senior Manajer atau General Manager";
+    if (a.id === submitterId)
+      return "Approver tidak boleh sama dengan penyusun";
+    if (ids.has(a.id))
+      return `Approver "${a.name}" tidak boleh merangkap sebagai Checker atau terpilih ganda`;
     if (a.role === Role.GM && srmanajerAvailableForBidang) {
-      return 'General Manager hanya dapat dipilih sebagai Approver untuk bidang tanpa Senior Manajer (mis. K3L, MRO) — persetujuan GM final tetap di tahap Bundle.';
+      return "General Manager hanya dapat dipilih sebagai Approver untuk bidang tanpa Senior Manajer (mis. K3L, MRO) — persetujuan GM final tetap di tahap Bundle.";
     }
     ids.add(a.id);
   }
@@ -114,67 +165,166 @@ export function validateReviewerSelection(
 // Rantai sub-jabatan dalam-bidang (sesudah Staff PIC, sebelum konsolidasi RPC).
 const KI_CHAIN: Record<string, Step[]> = {
   [OMP_BIDANG]: [
-    { role: Role.ASMAN, variant: 'asman_elektromekanik', label: 'ASMAN Elektromekanik' },
-    { role: Role.ASMAN, variant: 'asman_jaringan', label: 'ASMAN Jaringan' },
-    { role: Role.MANAJER, variant: 'man_operasi_pembangkit', label: 'Manajer Operasi Proyek Pembangkit' },
-    { role: Role.MANAJER, variant: 'man_operasi_jaringan', label: 'Manajer Operasi Proyek Jaringan' },
-    { role: Role.SRMANAJER, variant: 'sm_omp', label: 'SM Operasi Manajemen Proyek' },
+    {
+      role: Role.ASMAN,
+      variant: "asman_elektromekanik",
+      label: "ASMAN Elektromekanik",
+    },
+    { role: Role.ASMAN, variant: "asman_jaringan", label: "ASMAN Jaringan" },
+    {
+      role: Role.MANAJER,
+      variant: "man_operasi_pembangkit",
+      label: "Manajer Operasi Proyek Pembangkit",
+    },
+    {
+      role: Role.MANAJER,
+      variant: "man_operasi_jaringan",
+      label: "Manajer Operasi Proyek Jaringan",
+    },
+    {
+      role: Role.SRMANAJER,
+      variant: "sm_omp",
+      label: "SM Operasi Manajemen Proyek",
+    },
   ],
   [QAQC_BIDANG]: [
-    { role: Role.MANAJER, variant: 'man_qaqc_pembangkit', label: 'Manajer QA/QC Pembangkit' },
-    { role: Role.MANAJER, variant: 'man_qaqc_jaringan', label: 'Manajer QA/QC Jaringan' },
-    { role: Role.SRMANAJER, variant: 'sm_qaqc', label: 'SM QA/QC' },
+    {
+      role: Role.MANAJER,
+      variant: "man_qaqc_pembangkit",
+      label: "Manajer QA/QC Pembangkit",
+    },
+    {
+      role: Role.MANAJER,
+      variant: "man_qaqc_jaringan",
+      label: "Manajer QA/QC Jaringan",
+    },
+    { role: Role.SRMANAJER, variant: "sm_qaqc", label: "SM QA/QC" },
   ],
   [RPC_BIDANG]: [
-    { role: Role.MANAJER, variant: 'man_project_control', label: 'Manajer Project Control' },
-    { role: Role.MANAJER, variant: 'man_perencanaan', label: 'Manajer Perencanaan' },
-    { role: Role.SRMANAJER, variant: 'sm_pc', label: 'SM Perencanaan & Project Control' },
+    {
+      role: Role.MANAJER,
+      variant: "man_project_control",
+      label: "Manajer Project Control",
+    },
+    {
+      role: Role.MANAJER,
+      variant: "man_perencanaan",
+      label: "Manajer Perencanaan",
+    },
+    {
+      role: Role.SRMANAJER,
+      variant: "sm_pc",
+      label: "SM Perencanaan & Project Control",
+    },
   ],
   [KKU_BIDANG]: [
-    { role: Role.MANAJER, variant: 'man_keuangan', label: 'Manajer Keuangan' },
-    { role: Role.MANAJER, variant: 'man_akuntansi', label: 'Manajer Akuntansi' },
-    { role: Role.MANAJER, variant: 'man_aset_properti', label: 'Manajer Aset & Properti' },
-    { role: Role.SRMANAJER, variant: 'sm_kku', label: 'SM Keuangan, Komunikasi & Umum' },
+    { role: Role.MANAJER, variant: "man_keuangan", label: "Manajer Keuangan" },
+    {
+      role: Role.MANAJER,
+      variant: "man_akuntansi",
+      label: "Manajer Akuntansi",
+    },
+    {
+      role: Role.MANAJER,
+      variant: "man_aset_properti",
+      label: "Manajer Aset & Properti",
+    },
+    {
+      role: Role.SRMANAJER,
+      variant: "sm_kku",
+      label: "SM Keuangan, Komunikasi & Umum",
+    },
   ],
   [K3L_BIDANG]: [
-    { role: Role.ASMAN, variant: 'asman_k3l', label: 'ASMAN K3L' },
+    { role: Role.ASMAN, variant: "asman_k3l", label: "ASMAN K3L" },
   ],
   [MRO_BIDANG]: [
-    { role: Role.ASMAN, variant: 'asman_risiko', label: 'ASMAN Manajemen Risiko & Kepatuhan' },
+    {
+      role: Role.ASMAN,
+      variant: "asman_risiko",
+      label: "ASMAN Manajemen Risiko & Kepatuhan",
+    },
   ],
 };
 
 // Konsolidasi RPC (ringkas) untuk dokumen bidang LAIN: Staff RPC → MAN Perencanaan → SM RPC.
 const RPC_TAIL: Step[] = [
-  { role: Role.STAFF, bidang: RPC_BIDANG, unit: 'KP', label: 'Staff Kinerja Perencanaan (RPC)' },
-  { role: Role.MANAJER, variant: 'man_perencanaan', bidang: RPC_BIDANG, unit: 'KP', label: 'Manajer Perencanaan (RPC)' },
-  { role: Role.SRMANAJER, variant: 'sm_pc', bidang: RPC_BIDANG, unit: 'KP', label: 'SM Perencanaan & Project Control' },
+  {
+    role: Role.STAFF,
+    bidang: RPC_BIDANG,
+    unit: "KP",
+    label: "Staff Kinerja Perencanaan (RPC)",
+  },
+  {
+    role: Role.MANAJER,
+    variant: "man_perencanaan",
+    bidang: RPC_BIDANG,
+    unit: "KP",
+    label: "Manajer Perencanaan (RPC)",
+  },
+  {
+    role: Role.SRMANAJER,
+    variant: "sm_pc",
+    bidang: RPC_BIDANG,
+    unit: "KP",
+    label: "SM Perencanaan & Project Control",
+  },
 ];
 
 // Mesin alur. Indeks 0 = PIC/Staff penyusun; 1..n = jenjang review hingga SM RPC.
 //   mode 'realisasi': UPMK punya segmen internal (Staff/ASMAN/MUP) → rantai bidang KI penuh → RPC.
 //   mode 'km': KM disusun Kantor Induk → selalu rantai bidang KI.
-export function buildSteps(unitCode: string, bidang: string, mode: 'realisasi' | 'km' = 'realisasi'): Step[] {
-  const isUPMK = mode === 'realisasi' && unitCode !== 'KP';
-  const isUpmkKm = mode === 'km' && unitCode !== 'KP';
-  let chain = (KI_CHAIN[bidang] ?? []).map((s) => ({ ...s, bidang, unit: 'KP' }));
+export function buildSteps(
+  unitCode: string,
+  bidang: string,
+  mode: "realisasi" | "km" = "realisasi",
+): Step[] {
+  const isUPMK = mode === "realisasi" && unitCode !== "KP";
+  const isUpmkKm = mode === "km" && unitCode !== "KP";
+  let chain = (KI_CHAIN[bidang] ?? []).map((s) => ({
+    ...s,
+    bidang,
+    unit: "KP",
+  }));
   // Dokumen UPMK ber-bidang RPC: cukup Manajer Perencanaan (lewati Manajer Project Control).
-  if (bidang === RPC_BIDANG && unitCode !== 'KP') {
-    chain = chain.filter((s) => s.variant !== 'man_project_control');
+  if (bidang === RPC_BIDANG && unitCode !== "KP") {
+    chain = chain.filter((s) => s.variant !== "man_project_control");
   }
   const steps: Step[] = [];
 
   if (isUPMK) {
-    steps.push({ role: Role.STAFF, unit: unitCode, label: `Staff Kinerja ${uname(unitCode)}` });
-    steps.push({ role: Role.ASMAN, unit: unitCode, label: `ASMAN ${uname(unitCode)}` });
-    steps.push({ role: Role.MANAJER, unit: unitCode, label: `Manajer (MUP) ${uname(unitCode)}` });
+    steps.push({
+      role: Role.STAFF,
+      unit: unitCode,
+      label: `Staff Kinerja ${uname(unitCode)}`,
+    });
+    steps.push({
+      role: Role.ASMAN,
+      unit: unitCode,
+      label: `ASMAN ${uname(unitCode)}`,
+    });
+    steps.push({
+      role: Role.MANAJER,
+      unit: unitCode,
+      label: `Manajer (MUP) ${uname(unitCode)}`,
+    });
     steps.push(...chain);
   } else if (isUpmkKm) {
     // KM UPMK dibuat & dikirim oleh Staff RPC (KP); step 0 = Staff RPC bukan Staff bidang yang dipilih.
-    steps.push({ role: Role.STAFF, bidang: RPC_BIDANG, unit: 'KP', label: 'Staff Kinerja Perencanaan (RPC)' });
+    steps.push({
+      role: Role.STAFF,
+      bidang: RPC_BIDANG,
+      unit: "KP",
+      label: "Staff Kinerja Perencanaan (RPC)",
+    });
     steps.push(...chain);
   } else {
-    steps.push({ role: Role.STAFF, bidang, unit: 'KP', label: `Staff Kinerja ${bidang}` });
+    steps.push({
+      role: Role.STAFF,
+      bidang,
+      unit: "KP",
+      label: `Staff Kinerja ${bidang}`,
+    });
     steps.push(...chain);
   }
 
@@ -190,9 +340,12 @@ export function buildSteps(unitCode: string, bidang: string, mode: 'realisasi' |
   return steps;
 }
 
-export function stepMatches(step: Step | undefined, user: WorkflowUser): boolean {
+export function stepMatches(
+  step: Step | undefined,
+  user: WorkflowUser,
+): boolean {
   if (!step) return false;
-  if (step.userId) return user.id === step.userId;             // pencocokan by orang spesifik
+  if (step.userId) return user.id === step.userId; // pencocokan by orang spesifik
   if (step.variant) return user.roleVariant?.code === step.variant; // pencocokan by jabatan
   if (user.role !== step.role) return false;
   if (step.bidang && user.bidang !== step.bidang) return false;
@@ -203,9 +356,11 @@ export function stepMatches(step: Step | undefined, user: WorkflowUser): boolean
 // Klausa Prisma untuk mencari penerima notifikasi langkah.
 export function stepRecipientWhere(step: Step): Prisma.UserWhereInput {
   if (step.userId) return { id: step.userId, isActive: true };
-  if (step.variant) return { isActive: true, roleVariant: { code: step.variant } };
+  if (step.variant)
+    return { isActive: true, roleVariant: { code: step.variant } };
   return {
-    role: step.role, isActive: true,
+    role: step.role,
+    isActive: true,
     ...(step.bidang ? { bidang: step.bidang } : {}),
     ...(step.unit ? { unit: step.unit } : {}),
   };
@@ -213,6 +368,15 @@ export function stepRecipientWhere(step: Step): Prisma.UserWhereInput {
 
 const SLA_DAYS_PER_STEP = 2;
 export function slaRemainingDays(r: { submittedAt: Date }): number {
-  const deadline = new Date(r.submittedAt).getTime() + SLA_DAYS_PER_STEP * 86400000;
+  const deadline =
+    new Date(r.submittedAt).getTime() + SLA_DAYS_PER_STEP * 86400000;
   return Math.ceil((deadline - Date.now()) / 86400000);
+}
+
+// Bentuk minimal satu item KPI di dalam kpiItems (JSON field, Prisma tidak strict-type ini).
+// Hanya field yang benar-benar dipakai di sini yang dideklarasikan — field lain (bobot,
+// satuan, target, dll) tetap ada di data tapi tidak relevan untuk notifikasi.
+export interface KpiItemForNotif {
+  indikator?: string;
+  masterKpiId?: string;
 }

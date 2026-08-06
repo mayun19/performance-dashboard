@@ -4463,7 +4463,7 @@ export function ApprovalsPage() {
                         ) : (
                           <span
                             style={{
-                              fontSize: 14,
+                              fontSize: 12,
                               color: "var(--color-accent)",
                               fontWeight: 600,
                             }}>
