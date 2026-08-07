@@ -2387,10 +2387,16 @@ function DokumenKmTab() {
   }, [selectedUnit, kmTypeFilter, currentPage]);
   useEffect(() => {
     inputKontrak
-      .approved(undefined, undefined, kmTypeFilter, currentPage, perPage)
+      .approved(
+        undefined,
+        undefined,
+        kmTypeFilter,
+        approvedCurrentPage,
+        perPage,
+      )
       .then((d) => setApprovedList(d))
       .catch(() => {});
-  }, [submitted, kmTypeFilter, currentPage]);
+  }, [submitted, kmTypeFilter, approvedCurrentPage]);
 
   const myBidang = user?.bidang ?? null;
   const myUnit = user?.unit ?? null;
@@ -3092,7 +3098,7 @@ function DokumenKmTab() {
                   paddingTop: "var(--space-5)",
                 }}>
                 <Pagination
-                  currentPage={currentPage}
+                  currentPage={approvedCurrentPage}
                   paginate={paginateApproved}
                   perPage={approvedList.pagination.perPage}
                   page={{
