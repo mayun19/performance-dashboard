@@ -3777,7 +3777,7 @@ export function ApprovalsPage() {
               ) && (
                 <div
                   style={{
-                    fontSize: "var(--text-xs)",
+                    fontSize: "var(--text-sm)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua KM UPMK "siap" — GM dapat mengesahkan setelah
@@ -3786,7 +3786,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM UPMK (wajib)"
                 value={kmBundleUPMKNote}
                 onChange={(e) => setKmBundleUPMKNote(e.target.value)}
@@ -4208,7 +4208,7 @@ export function ApprovalsPage() {
               {!bundle.canApprove && bundle.total > 0 && (
                 <div
                   style={{
-                    fontSize: "var(--text-xs)",
+                    fontSize: "var(--text-sm)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua komponen "siap" — GM dapat menyetujui setelah
@@ -4217,7 +4217,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
                 placeholder="Catatan persetujuan/penolakan bundle (wajib)"
                 value={bundleNote}
                 onChange={(e) => setBundleNote(e.target.value)}
