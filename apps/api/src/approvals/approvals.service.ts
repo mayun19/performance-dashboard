@@ -37,6 +37,7 @@ export interface DocRow {
   stepLabel: string;
   stepIndex: number;
   stepCount: number;
+  kpiItems?: Record<string, unknown>[];
 }
 
 @Injectable()
@@ -231,6 +232,12 @@ export class ApprovalsService {
         status: k.status,
         reviewer: k.reviewer,
         history: k.history,
+        ...this.stepInfo(
+          k as unknown as { steps?: unknown; currentStepIndex?: number },
+        ),
+        kpiItems: Array.isArray(k.kpiItems)
+          ? (k.kpiItems as Record<string, unknown>[])
+          : [],
         ...this.stepInfo(
           k as unknown as { steps?: unknown; currentStepIndex?: number },
         ),

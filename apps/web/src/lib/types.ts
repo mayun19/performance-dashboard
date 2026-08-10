@@ -310,4 +310,5 @@ export interface DocRow {
   stepLabel: string;
   stepIndex: number;
   stepCount: number;
+  kpiItems?: Record<string, unknown>[];
 }

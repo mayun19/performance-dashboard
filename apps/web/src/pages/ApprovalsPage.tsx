@@ -2184,15 +2184,6 @@ export function ApprovalsPage() {
     return "—";
   };
 
-  // Tracker "Semua Dokumen Persetujuan" — hasil docRows disaring oleh jenis/status/periode.
-  // const filteredDocRows = docRows.filter((d) => {
-  //   if (trackerType === "km" && d.jenis !== "Kontrak Manajemen") return false;
-  //   if (trackerType === "real" && d.jenis !== "Realisasi Kinerja") return false;
-  //   if (trackerStatus !== "all" && d.status !== trackerStatus) return false;
-  //   if (trackerPeriod !== "all" && d.periodId !== trackerPeriod) return false;
-  //   return true;
-  // });
-
   console.log("data list", filteredDocRows);
   // Antrean tunggal — checker/approver berpikir "apa yang harus saya proses", bukan
   // "KM atau Realisasi". Digabung & diurutkan dari yang paling mendesak (SLA terkecil/telat
