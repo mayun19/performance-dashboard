@@ -296,3 +296,18 @@ export default interface PaginationProps {
   customText?: string;
   customButton?: string;
 }
+export type DocJenis = "Kontrak Manajemen" | "Realisasi Kinerja";
+
+export interface DocRow {
+  id: string;
+  jenis: DocJenis;
+  detail: string;
+  unitCode: string;
+  periodId: string;
+  status: string;
+  reviewer: string | null;
+  history: unknown;
+  stepLabel: string;
+  stepIndex: number;
+  stepCount: number;
+}

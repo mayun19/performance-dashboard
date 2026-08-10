@@ -17,6 +17,7 @@ import type {
   KontrakManajemen,
   RealisasiKinerja,
   KontrakManajemenItem,
+  DocRow,
 } from "../lib/types";
 import {
   CheckCircle,
@@ -629,7 +630,7 @@ export function ApprovalsPage() {
   const [allKm, setAllKm] = useState<KontrakManajemen>({
     data: [],
     pagination: { currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 },
-  });;
+  });
   const [allReal, setAllReal] = useState<RealisasiKinerja[]>([]);
   const [periodMap, setPeriodMap] = useState<Record<string, string>>({});
 
@@ -743,6 +744,8 @@ export function ApprovalsPage() {
   >(null);
   // Draft dan Final adalah dua bundle KM independen — tab ini menentukan mana yang ditinjau GM.
   const [kmBundleType, setKmBundleType] = useState<"draft" | "final">("draft");
+  const [filteredDocRows, setFilteredDocRows] = useState<DocRow[]>([]);
+
   const loadKmBundle = () => {
     inputKontrak
       .bundle("KP", undefined, kmBundleType)
@@ -810,6 +813,17 @@ export function ApprovalsPage() {
     loadBundle();
     loadKmBundle();
   }, [periodId, kmBundleType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    approvalsApi
+      .documents({
+        type: trackerType,
+        status: trackerStatus,
+        periodId: trackerPeriod,
+      })
+      .then(setFilteredDocRows)
+      .catch(() => {});
+  }, [trackerType, trackerStatus, trackerPeriod]);
 
   // Package berstatus 'target_fix' (menunggu koreksi target PIC REN) — SEMUA periode, bukan
   // hanya periode yang sedang dipilih di navbar (finding: koreksi Januari harus tetap tampil
@@ -2142,7 +2156,10 @@ export function ApprovalsPage() {
       reviewer: k.reviewer,
       history: (k as KontrakManajemenItem & { history?: unknown }).history,
       ...stepInfo(
-        k as KontrakManajemenItem & { steps?: unknown; currentStepIndex?: number },
+        k as KontrakManajemenItem & {
+          steps?: unknown;
+          currentStepIndex?: number;
+        },
       ),
     })),
     ...scopeReal.map((r) => ({
@@ -2168,14 +2185,15 @@ export function ApprovalsPage() {
   };
 
   // Tracker "Semua Dokumen Persetujuan" — hasil docRows disaring oleh jenis/status/periode.
-  const filteredDocRows = docRows.filter((d) => {
-    if (trackerType === "km" && d.jenis !== "Kontrak Manajemen") return false;
-    if (trackerType === "real" && d.jenis !== "Realisasi Kinerja") return false;
-    if (trackerStatus !== "all" && d.status !== trackerStatus) return false;
-    if (trackerPeriod !== "all" && d.periodId !== trackerPeriod) return false;
-    return true;
-  });
+  // const filteredDocRows = docRows.filter((d) => {
+  //   if (trackerType === "km" && d.jenis !== "Kontrak Manajemen") return false;
+  //   if (trackerType === "real" && d.jenis !== "Realisasi Kinerja") return false;
+  //   if (trackerStatus !== "all" && d.status !== trackerStatus) return false;
+  //   if (trackerPeriod !== "all" && d.periodId !== trackerPeriod) return false;
+  //   return true;
+  // });
 
+  console.log("data list", filteredDocRows);
   // Antrean tunggal — checker/approver berpikir "apa yang harus saya proses", bukan
   // "KM atau Realisasi". Digabung & diurutkan dari yang paling mendesak (SLA terkecil/telat
   // dulu); item tanpa data SLA jatuh ke bawah.
