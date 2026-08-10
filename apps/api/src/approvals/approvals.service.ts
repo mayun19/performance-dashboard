@@ -38,6 +38,17 @@ export interface DocRow {
   stepIndex: number;
   stepCount: number;
   kpiItems?: Record<string, unknown>[];
+  submittedAt?: Date;
+}
+
+export interface PaginatedDocRows {
+  data: DocRow[];
+  pagination: {
+    currentPage: number;
+    perPage: number;
+    totalData: number;
+    totalPage: number;
+  };
 }
 
 @Injectable()
@@ -201,7 +212,9 @@ export class ApprovalsService {
     type: "all" | "km" | "real" = "all",
     status?: string,
     periodId?: string,
-  ): Promise<DocRow[]> {
+    currentPage?: number,
+    perPage?: number,
+  ): Promise<DocRow[] | PaginatedDocRows> {
     const scopeAll = this.canSeeAllBidang(user);
     const bidangFilter = scopeAll ? {} : { bidang: user.bidang as string };
     const statusFilter = status && status !== "all" ? { status } : {};
@@ -241,6 +254,10 @@ export class ApprovalsService {
         ...this.stepInfo(
           k as unknown as { steps?: unknown; currentStepIndex?: number },
         ),
+        submittedAt: k.submittedAt,
+        ...this.stepInfo(
+          k as unknown as { steps?: unknown; currentStepIndex?: number },
+        ),
       }),
     );
 
@@ -257,9 +274,37 @@ export class ApprovalsService {
         ...this.stepInfo(
           r as unknown as { steps?: unknown; currentStepIndex?: number },
         ),
+        submittedAt: r.submittedAt,
+        ...this.stepInfo(
+          r as unknown as { steps?: unknown; currentStepIndex?: number },
+        ),
       }),
     );
 
-    return [...kmDocs, ...realDocs];
+    // Merge both jenis and sort by submittedAt desc — same ordering each source query used
+    // individually, now applied across the combined set.
+    const merged = [...kmDocs, ...realDocs].sort(
+      (a, b) =>
+        (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0),
+    );
+
+    // Tak dipaginasi bila currentPage/perPage tak dikirim — pertahankan perilaku lama untuk
+    // caller existing (mis. FE yang belum diupdate) yang mengharapkan array penuh.
+    if (!currentPage && !perPage) return merged;
+
+    const page = currentPage ?? 1;
+    const limit = perPage ?? 10;
+    const skip = (page - 1) * limit;
+    const totalData = merged.length;
+
+    return {
+      data: merged.slice(skip, skip + limit),
+      pagination: {
+        currentPage: page,
+        perPage: limit,
+        totalData,
+        totalPage: Math.ceil(totalData / limit),
+      },
+    };
   }
 }

@@ -124,8 +124,13 @@ export const peta = {
 export const approvals = {
   reports: (periodId?: string) =>
     api.get("/approvals/reports", { params: { periodId } }).then((r) => r.data),
-  documents: (params: { type?: string; status?: string; periodId?: string }) =>
-    api.get("/approvals/documents", { params }).then((r) => r.data),
+  documents: (params: {
+    type?: string;
+    status?: string;
+    periodId?: string;
+    currentPage?: number;
+    perPage?: number;
+  }) => api.get("/approvals/documents", { params }).then((r) => r.data),
   advance: (id: string, note?: string) =>
     api.post(`/approvals/reports/${id}/advance`, { note }).then((r) => r.data),
   return: (id: string, note: string) =>

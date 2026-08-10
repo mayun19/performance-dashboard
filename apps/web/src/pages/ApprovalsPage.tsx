@@ -18,6 +18,7 @@ import type {
   RealisasiKinerja,
   KontrakManajemenItem,
   DocRow,
+  PaginatedDocRows,
 } from "../lib/types";
 import {
   CheckCircle,
@@ -745,6 +746,10 @@ export function ApprovalsPage() {
   // Draft dan Final adalah dua bundle KM independen — tab ini menentukan mana yang ditinjau GM.
   const [kmBundleType, setKmBundleType] = useState<"draft" | "final">("draft");
   const [filteredDocRows, setFilteredDocRows] = useState<DocRow[]>([]);
+  const [docPagination, setDocPagination] = useState<
+    PaginatedDocRows["pagination"] | null
+  >(null);
+  const [docPage, setDocPage] = useState(1);
 
   const loadKmBundle = () => {
     inputKontrak
@@ -820,10 +825,16 @@ export function ApprovalsPage() {
         type: trackerType,
         status: trackerStatus,
         periodId: trackerPeriod,
+        currentPage: docPage,
+        perPage: 10,
       })
-      .then(setFilteredDocRows)
+      .then((res: PaginatedDocRows) => {
+        setFilteredDocRows(res.data);
+        setDocPagination(res.pagination);
+      })
       .catch(() => {});
-  }, [trackerType, trackerStatus, trackerPeriod]);
+  }, [trackerType, trackerStatus, trackerPeriod, docPage]);
+  useEffect(() => setDocPage(1), [trackerType, trackerStatus, trackerPeriod]);
 
   // Package berstatus 'target_fix' (menunggu koreksi target PIC REN) — SEMUA periode, bukan
   // hanya periode yang sedang dipilih di navbar (finding: koreksi Januari harus tetap tampil

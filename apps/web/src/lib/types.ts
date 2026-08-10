@@ -312,3 +312,13 @@ export interface DocRow {
   stepCount: number;
   kpiItems?: Record<string, unknown>[];
 }
+
+export interface PaginatedDocRows {
+  data: DocRow[];
+  pagination: {
+    currentPage: number;
+    perPage: number;
+    totalData: number;
+    totalPage: number;
+  };
+}

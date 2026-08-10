@@ -33,8 +33,17 @@ export class ApprovalsController {
     @Query("type") type: "all" | "km" | "real" = "all",
     @Query("status") status?: string,
     @Query("periodId") periodId?: string,
+    @Query("currentPage") currentPage?: string,
+    @Query("perPage") perPage?: string,
   ) {
-    return this.svc.getDocuments(user, type, status, periodId);
+    return this.svc.getDocuments(
+      user,
+      type,
+      status,
+      periodId,
+      currentPage ? Number(currentPage) : undefined,
+      perPage ? Number(perPage) : undefined,
+    );
   }
 
   @Post("reports/:id/advance")
