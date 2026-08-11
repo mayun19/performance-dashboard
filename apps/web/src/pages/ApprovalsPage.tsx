@@ -279,7 +279,7 @@ function ApprovalTimeline({ history }: { history: unknown }) {
   return (
     <div
       style={{
-        padding: "var(--space-3) var(--space-4)",
+        padding: "var(--space-3) var(--space-6)",
         display: "flex",
         flexDirection: "column",
         gap: "var(--space-2)",
@@ -3340,7 +3340,7 @@ export function ApprovalsPage() {
                       <tr>
                         <td
                           style={{
-                            fontSize: 13,
+                            
                             color: "var(--color-text-muted)",
                           }}>
                           {c.bidang}
@@ -3351,7 +3351,7 @@ export function ApprovalsPage() {
                         <td>
                           <span
                             className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                            style={{ fontSize: 12 }}>
+                            >
                             {c.status === "ready"
                               ? "Siap (lolos SM RPC)"
                               : c.status === "approved"
@@ -4432,7 +4432,7 @@ export function ApprovalsPage() {
                               style={{
                                 fontSize: 14,
                                 color: "var(--color-success)",
-                                fontWeight: 600,
+                                fontWeight: 500,
                               }}>
                               ✓ Selesai ({d.stepCount}/{d.stepCount})
                             </span>
@@ -4441,7 +4441,7 @@ export function ApprovalsPage() {
                               style={{
                                 fontSize: 14,
                                 color: "var(--color-warning)",
-                                fontWeight: 600,
+                                fontWeight: 500,
                               }}>
                               Lolos rantai → bundle
                             </span>
@@ -4450,6 +4450,7 @@ export function ApprovalsPage() {
                               style={{
                                 fontSize: 14,
                                 color: "var(--color-danger)",
+                                fontWeight: 500,
                               }}>
                               Dikembalikan
                             </span>
@@ -4458,7 +4459,7 @@ export function ApprovalsPage() {
                               style={{
                                 fontSize: 14,
                                 color: "var(--color-accent)",
-                                fontWeight: 600,
+                                fontWeight: 500,
                               }}>
                               Langkah {d.stepIndex}/
                               {Math.max(0, d.stepCount - 1)}
@@ -4563,7 +4564,7 @@ export function ApprovalsPage() {
                       {docExpanded === d.id && (
                         <tr>
                           <td
-                            colSpan={7}
+                            colSpan={8}
                             style={{
                               background: "var(--color-surface-2)",
                               padding: 0,
@@ -4577,7 +4578,7 @@ export function ApprovalsPage() {
                 })}
                 {filteredDocRows.length === 0 && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <EmptyState
                         title={
                           filteredDocRows.length === 0
