@@ -17,6 +17,8 @@ import type {
   KontrakManajemen,
   RealisasiKinerja,
   KontrakManajemenItem,
+  DocRow,
+  PaginatedDocRows,
 } from "../lib/types";
 import {
   CheckCircle,
@@ -41,6 +43,8 @@ import { SkeletonTable, EmptyState, ErrorState } from "../components/LoadState";
 // Konsolidasi nilai parent KPI lintas-bidang (dulu tab "Review per-KPI" di Manajemen KPI) —
 // GM tak lagi punya akses menu Manajemen KPI (rpcOnly), jadi kartu ini dipindah ke sini.
 import { ReviewPerKpiTab } from "./KpiMasterPage";
+import { usePaginationHelpers } from "@/hooks/usePaginationHelpers";
+import Pagination from "@/components/Pagination";
 
 // Badge SLA approval (Task 6): hari tersisa hingga deadline tahap berjalan.
 function SlaBadge({ days }: { days?: number | null }) {
@@ -275,7 +279,7 @@ function ApprovalTimeline({ history }: { history: unknown }) {
   return (
     <div
       style={{
-        padding: "var(--space-3) var(--space-4)",
+        padding: "var(--space-3) var(--space-6)",
         display: "flex",
         flexDirection: "column",
         gap: "var(--space-2)",
@@ -629,7 +633,7 @@ export function ApprovalsPage() {
   const [allKm, setAllKm] = useState<KontrakManajemen>({
     data: [],
     pagination: { currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 },
-  });;
+  });
   const [allReal, setAllReal] = useState<RealisasiKinerja[]>([]);
   const [periodMap, setPeriodMap] = useState<Record<string, string>>({});
 
@@ -743,6 +747,16 @@ export function ApprovalsPage() {
   >(null);
   // Draft dan Final adalah dua bundle KM independen — tab ini menentukan mana yang ditinjau GM.
   const [kmBundleType, setKmBundleType] = useState<"draft" | "final">("draft");
+  const [filteredDocRows, setFilteredDocRows] = useState<DocRow[]>([]);
+  const [docKpiExpanded, setDocKpiExpanded] = useState<string | null>(null);
+  const [docPagination, setDocPagination] = useState<
+    PaginatedDocRows["pagination"]
+  >({ currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 });
+  const [docPage, setDocPage] = useState(1);
+
+  const { paginate, indexOfFirstProject, indexOfLastProject } =
+    usePaginationHelpers(docPagination, docPage, setDocPage);
+
   const loadKmBundle = () => {
     inputKontrak
       .bundle("KP", undefined, kmBundleType)
@@ -810,6 +824,23 @@ export function ApprovalsPage() {
     loadBundle();
     loadKmBundle();
   }, [periodId, kmBundleType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    approvalsApi
+      .documents({
+        type: trackerType,
+        status: trackerStatus,
+        periodId: trackerPeriod,
+        currentPage: docPage,
+        perPage: 10,
+      })
+      .then((res: PaginatedDocRows) => {
+        setFilteredDocRows(res.data);
+        setDocPagination(res.pagination);
+      })
+      .catch(() => {});
+  }, [trackerType, trackerStatus, trackerPeriod, docPage]);
+  useEffect(() => setDocPage(1), [trackerType, trackerStatus, trackerPeriod]);
 
   // Package berstatus 'target_fix' (menunggu koreksi target PIC REN) — SEMUA periode, bukan
   // hanya periode yang sedang dipilih di navbar (finding: koreksi Januari harus tetap tampil
@@ -2094,71 +2125,9 @@ export function ApprovalsPage() {
   }
 
   if (error) return <ErrorState title="Gagal memuat laporan" message={error} />;
-
-  // B2-4: dokumen di-scope ke bidang user (GM / tanpa bidang = lintas-bidang).
-  // Role konsolidasi RPC (SO RPC, Manajer Perencanaan, SM RPC) boleh melihat lintas bidang & UPMK.
   const isGM = user?.role === "GM";
-  const myBidang = user?.bidang ?? null;
-  const vc = user?.roleVariant?.code;
-  const isRpcKonsolidasi =
-    vc === "man_perencanaan" ||
-    vc === "sm_pc" ||
-    (user?.role === "STAFF" && myBidang === "Perencanaan & Project Control");
-  const scopeByBidang = isGM || isRpcKonsolidasi || !myBidang;
-  const scopeKm = scopeByBidang
-    ? Array.isArray(allKm)
-      ? allKm
-      : allKm.data
-    : Array.isArray(allKm)
-      ? allKm.filter((k) => k.bidang === myBidang)
-      : allKm.data.filter((k) => k.bidang === myBidang);
-  const scopeReal = scopeByBidang
-    ? allReal
-    : allReal.filter(
-        (r) =>
-          (r as RealisasiKinerja & { bidang?: string }).bidang === myBidang,
-      );
-
   const myTasks = kmList.length + realList.length;
 
-  // Registri semua dokumen persetujuan nyata (KM + Realisasi) lintas unit
-  const stepInfo = (rec: { steps?: unknown; currentStepIndex?: number }) => {
-    const steps = (rec.steps as { label: string }[] | undefined) ?? [];
-    const idx = rec.currentStepIndex ?? 0;
-    return {
-      stepLabel: steps[idx]?.label ?? "—",
-      stepIndex: idx,
-      stepCount: steps.length,
-    };
-  };
-  const docRows = [
-    ...scopeKm.map((k) => ({
-      id: k.id,
-      jenis: "Kontrak Manajemen",
-      detail: k.bidang,
-      unitCode: k.unitCode,
-      periodId: k.periodId,
-      status: k.status,
-      reviewer: k.reviewer,
-      history: (k as KontrakManajemenItem & { history?: unknown }).history,
-      ...stepInfo(
-        k as KontrakManajemenItem & { steps?: unknown; currentStepIndex?: number },
-      ),
-    })),
-    ...scopeReal.map((r) => ({
-      id: r.id,
-      jenis: "Realisasi Kinerja",
-      detail: (r as RealisasiKinerja & { bidang?: string }).bidang ?? "",
-      unitCode: r.unitCode,
-      periodId: r.periodId,
-      status: r.status,
-      reviewer: r.reviewer,
-      history: (r as RealisasiKinerja & { history?: unknown }).history,
-      ...stepInfo(
-        r as RealisasiKinerja & { steps?: unknown; currentStepIndex?: number },
-      ),
-    })),
-  ];
   const nextApproverLabel = (status: string, stepLabel: string): string => {
     if (status === "approved") return "✓ Disahkan GM";
     if (status === "ready") return "Menunggu konsolidasi & GM";
@@ -2167,15 +2136,12 @@ export function ApprovalsPage() {
     return "—";
   };
 
-  // Tracker "Semua Dokumen Persetujuan" — hasil docRows disaring oleh jenis/status/periode.
-  const filteredDocRows = docRows.filter((d) => {
-    if (trackerType === "km" && d.jenis !== "Kontrak Manajemen") return false;
-    if (trackerType === "real" && d.jenis !== "Realisasi Kinerja") return false;
-    if (trackerStatus !== "all" && d.status !== trackerStatus) return false;
-    if (trackerPeriod !== "all" && d.periodId !== trackerPeriod) return false;
-    return true;
-  });
+  const totalDataApproval = docPagination.totalData;
+  const totalPageApproval = docPagination.totalPage;
 
+  const hasOpenKpiRow = filteredDocRows.some(
+    (d) => d.kpiItems && d.kpiItems.length > 0 && docKpiExpanded === d.id,
+  );
   // Antrean tunggal — checker/approver berpikir "apa yang harus saya proses", bukan
   // "KM atau Realisasi". Digabung & diurutkan dari yang paling mendesak (SLA terkecil/telat
   // dulu); item tanpa data SLA jatuh ke bawah.
@@ -3374,7 +3340,7 @@ export function ApprovalsPage() {
                       <tr>
                         <td
                           style={{
-                            fontSize: 13,
+                            
                             color: "var(--color-text-muted)",
                           }}>
                           {c.bidang}
@@ -3385,7 +3351,7 @@ export function ApprovalsPage() {
                         <td>
                           <span
                             className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                            style={{ fontSize: 12 }}>
+                            >
                             {c.status === "ready"
                               ? "Siap (lolos SM RPC)"
                               : c.status === "approved"
@@ -3811,7 +3777,7 @@ export function ApprovalsPage() {
               ) && (
                 <div
                   style={{
-                    fontSize: "var(--text-xs)",
+                    fontSize: "var(--text-sm)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua KM UPMK "siap" — GM dapat mengesahkan setelah
@@ -3820,7 +3786,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
                 placeholder="Catatan pengesahan/penolakan bundle KM UPMK (wajib)"
                 value={kmBundleUPMKNote}
                 onChange={(e) => setKmBundleUPMKNote(e.target.value)}
@@ -4242,7 +4208,7 @@ export function ApprovalsPage() {
               {!bundle.canApprove && bundle.total > 0 && (
                 <div
                   style={{
-                    fontSize: "var(--text-xs)",
+                    fontSize: "var(--text-sm)",
                     color: "var(--color-warning)",
                   }}>
                   Belum semua komponen "siap" — GM dapat menyetujui setelah
@@ -4251,7 +4217,7 @@ export function ApprovalsPage() {
               )}
               <textarea
                 className="form-textarea"
-                style={{ fontSize: "var(--text-xs)", minHeight: 48 }}
+                style={{ fontSize: "var(--text-sm)", minHeight: 48 }}
                 placeholder="Catatan persetujuan/penolakan bundle (wajib)"
                 value={bundleNote}
                 onChange={(e) => setBundleNote(e.target.value)}
@@ -4293,9 +4259,7 @@ export function ApprovalsPage() {
       <FoldCard
         icon={<FileText size={14} />}
         title="Semua Dokumen Persetujuan"
-        right={
-          <span className="card-meta">{filteredDocRows.length} dokumen</span>
-        }>
+        right={<span className="card-meta">{totalDataApproval} dokumen</span>}>
         <div
           className="card-body"
           style={{
@@ -4368,7 +4332,7 @@ export function ApprovalsPage() {
           style={{ padding: "0 var(--space-7) 0" }}>
           <div className="metric-card" style={{ maxWidth: "none" }}>
             <div className="metric-label">Total</div>
-            <div className="metric-value">{filteredDocRows.length}</div>
+            <div className="metric-value">{totalDataApproval}</div>
           </div>
           <div className="metric-card" style={{ maxWidth: "none" }}>
             <div className="metric-label">Disetujui</div>
@@ -4397,11 +4361,15 @@ export function ApprovalsPage() {
         </div>
 
         <div className="table-wrap" style={{ marginBottom: "var(--space-4)" }}>
-          <div className="table-scroll">
-            <table className="data-table compact">
+          <div className={`table-scroll ${hasOpenKpiRow ? "able-scroll" : ""}`}>
+            <table
+              className="data-table compact"
+              style={{ margin: 0, width: "100%" }}>
               <thead>
                 <tr>
-                  <th>Unit</th>
+                  <th className="num" colSpan={2}>
+                    Unit
+                  </th>
                   <th>Jenis Dokumen</th>
                   <th>Periode</th>
                   <th>Jenjang</th>
@@ -4411,132 +4379,214 @@ export function ApprovalsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredDocRows.map((d) => (
-                  <Fragment key={d.id}>
-                    <tr>
-                      <td style={{ fontWeight: 600 }}>
-                        {UNIT_NAMES[d.unitCode] ?? d.unitCode}
-                      </td>
-                      <td>
-                        {d.jenis}
-                        {d.detail ? (
-                          <span style={{ color: "var(--color-text-muted)" }}>
-                            {" "}
-                            · {d.detail}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td
-                        style={{
-                          color: "var(--color-text-muted)",
-                          whiteSpace: "nowrap",
-                        }}>
-                        {periodMap[d.periodId] ?? "—"}
-                      </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        {d.status === "approved" ? (
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: "var(--color-success)",
-                              fontWeight: 600,
-                            }}>
-                            ✓ Selesai ({d.stepCount}/{d.stepCount})
-                          </span>
-                        ) : d.status === "ready" ? (
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: "var(--color-warning)",
-                              fontWeight: 600,
-                            }}>
-                            Lolos rantai → bundle
-                          </span>
-                        ) : d.status === "rejected" ? (
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: "var(--color-danger)",
-                            }}>
-                            Dikembalikan
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              fontSize: 14,
-                              color: "var(--color-accent)",
-                              fontWeight: 600,
-                            }}>
-                            Langkah {d.stepIndex}/{Math.max(0, d.stepCount - 1)}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}
-                          style={{ fontSize: 14 }}>
-                          {DOC_STATUS_LABEL[d.status] ?? d.status}
-                        </span>
-                      </td>
-                      <td
-                        style={{
-                          color:
-                            d.status === "approved"
-                              ? "var(--color-success)"
-                              : "var(--color-text-muted)",
-                          fontSize: 13,
-                        }}>
-                        {nextApproverLabel(d.status, d.stepLabel)}
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() =>
-                            setDocExpanded(docExpanded === d.id ? null : d.id)
-                          }
-                          title="Lihat riwayat persetujuan & komentar">
-                          <MessageSquare size={12} />{" "}
-                          {Array.isArray(d.history)
-                            ? (d.history as unknown[]).length
-                            : 0}
-                          <ChevronDown
-                            size={12}
-                            style={{
-                              transform:
-                                docExpanded === d.id
-                                  ? "rotate(180deg)"
-                                  : "none",
-                              transition: "transform .2s",
-                            }}
-                          />
-                        </button>
-                      </td>
-                    </tr>
-                    {docExpanded === d.id && (
+                {filteredDocRows.map((d) => {
+                  const hasKpiItems = d.kpiItems && d.kpiItems.length > 0;
+                  const isOpen = docKpiExpanded === d.id;
+
+                  return (
+                    <Fragment key={d.id}>
                       <tr>
+                        <td colSpan={2} style={{ fontWeight: 600 }}>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled={!hasKpiItems}
+                            onClick={() =>
+                              hasKpiItems &&
+                              setDocKpiExpanded(isOpen ? null : d.id)
+                            }
+                            style={{
+                              cursor: hasKpiItems ? "pointer" : "default",
+                              opacity: hasKpiItems ? 1 : 0.6,
+                            }}>
+                            <ChevronDown
+                              size={12}
+                              style={{
+                                transform: isOpen ? "rotate(180deg)" : "none",
+                                transition: "transform .2s",
+                                flexShrink: 0,
+                                visibility: hasKpiItems ? "visible" : "hidden",
+                              }}
+                            />
+                            {UNIT_NAMES[d.unitCode] ?? d.unitCode}
+                          </button>
+                        </td>
+                        <td>
+                          {d.jenis}
+                          {d.detail ? (
+                            <span style={{ color: "var(--color-text-muted)" }}>
+                              {" "}
+                              · {d.detail}
+                            </span>
+                          ) : null}
+                        </td>
                         <td
-                          colSpan={7}
                           style={{
-                            background: "var(--color-surface-2)",
-                            padding: 0,
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
                           }}>
-                          <ApprovalTimeline history={d.history} />
+                          {periodMap[d.periodId] ?? "—"}
+                        </td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          {d.status === "approved" ? (
+                            <span
+                              style={{
+                                fontSize: 14,
+                                color: "var(--color-success)",
+                                fontWeight: 500,
+                              }}>
+                              ✓ Selesai ({d.stepCount}/{d.stepCount})
+                            </span>
+                          ) : d.status === "ready" ? (
+                            <span
+                              style={{
+                                fontSize: 14,
+                                color: "var(--color-warning)",
+                                fontWeight: 500,
+                              }}>
+                              Lolos rantai → bundle
+                            </span>
+                          ) : d.status === "rejected" ? (
+                            <span
+                              style={{
+                                fontSize: 14,
+                                color: "var(--color-danger)",
+                                fontWeight: 500,
+                              }}>
+                              Dikembalikan
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 14,
+                                color: "var(--color-accent)",
+                                fontWeight: 500,
+                              }}>
+                              Langkah {d.stepIndex}/
+                              {Math.max(0, d.stepCount - 1)}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${DOC_STATUS_PILL[d.status] ?? "in-review"}`}
+                            style={{ fontSize: 14 }}>
+                            {DOC_STATUS_LABEL[d.status] ?? d.status}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            color:
+                              d.status === "approved"
+                                ? "var(--color-success)"
+                                : "var(--color-text-muted)",
+                            fontSize: 14,
+                          }}>
+                          {nextApproverLabel(d.status, d.stepLabel)}
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() =>
+                              setDocExpanded(docExpanded === d.id ? null : d.id)
+                            }
+                            title="Lihat riwayat persetujuan & komentar">
+                            <MessageSquare size={12} />{" "}
+                            {Array.isArray(d.history)
+                              ? (d.history as unknown[]).length
+                              : 0}
+                            <ChevronDown
+                              size={12}
+                              style={{
+                                transform:
+                                  docExpanded === d.id
+                                    ? "rotate(180deg)"
+                                    : "none",
+                                transition: "transform .2s",
+                              }}
+                            />
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </Fragment>
-                ))}
+                      {isOpen && hasKpiItems && (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            style={{
+                              background: "var(--color-surface-2)",
+                              padding: 0,
+                            }}>
+                            <table
+                              className="data-table table-expanded"
+                              style={{ margin: 0 }}>
+                              <thead>
+                                <tr>
+                                  <th>No</th>
+                                  <th>Indikator Kinerja</th>
+                                  <th>Formula</th>
+                                  <th>Satuan</th>
+                                  <th className="num">Bobot</th>
+                                  <th>Target</th>
+                                  <th>
+                                    {d.jenis === "Kontrak Manajemen"
+                                      ? `Target Tahun ${new Date().getFullYear()}`
+                                      : "Realisasi"}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(d.kpiItems as Record<string, unknown>[]).map(
+                                  (it, idx) => {
+                                    const itStr = it as Record<string, string>;
+                                    return (
+                                      <tr key={idx}>
+                                        <td>{idx + 1}</td>
+                                        <td>{itStr.indikator ?? "—"}</td>
+                                        <td>{itStr.formula ?? "—"}</td>
+                                        <td>{itStr.satuan ?? "—"}</td>
+                                        <td className="num">
+                                          {itStr.bobot ?? "—"}
+                                        </td>
+                                        <td>{itStr.target ?? "—"}</td>
+                                        <td>
+                                          {d.jenis === "Kontrak Manajemen"
+                                            ? (itStr.target2 ?? "—")
+                                            : (itStr.realisasi ?? "—")}
+                                        </td>
+                                      </tr>
+                                    );
+                                  },
+                                )}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                      {docExpanded === d.id && (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            style={{
+                              background: "var(--color-surface-2)",
+                              padding: 0,
+                            }}>
+                            <ApprovalTimeline history={d.history} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
                 {filteredDocRows.length === 0 && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <EmptyState
                         title={
-                          docRows.length === 0
+                          filteredDocRows.length === 0
                             ? "Belum ada dokumen"
                             : "Tidak ada dokumen yang cocok"
                         }
                         message={
-                          docRows.length === 0
+                          filteredDocRows.length === 0
                             ? "Belum ada Kontrak Manajemen atau Realisasi yang diinput."
                             : "Coba ubah filter jenis, status, atau periode."
                         }
@@ -4547,6 +4597,28 @@ export function ApprovalsPage() {
               </tbody>
             </table>
           </div>
+          {totalPageApproval > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "end",
+                paddingTop: "var(--space-5)",
+              }}>
+              <Pagination
+                currentPage={docPage}
+                paginate={paginate}
+                perPage={docPagination.perPage}
+                page={{
+                  total: totalDataApproval,
+                  total_page: totalPageApproval,
+                  per_page: docPagination.perPage,
+                }}
+                indexOfFirstProject={indexOfFirstProject}
+                indexOfLastProject={indexOfLastProject}
+                customText="dokumen KM"
+              />
+            </div>
+          )}
         </div>
       </FoldCard>
 
