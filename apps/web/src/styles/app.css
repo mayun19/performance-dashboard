@@ -42,17 +42,21 @@
 /* Tables used inline — normalize to .data-table */
 .data-table.compact th,
 .data-table.compact td {
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-base);
+}
+
+.table-expanded th,
+.table-expanded td {
+  font-size: var(--text-sm) !important;
 }
 
 /* Card header compact variant */
 .card-header.compact {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-7);
   min-height: 0;
 }
 .card-header.compact .card-title {
-  font-size: var(--text-sm);
+  font-size: var(--text-lg);
 }
 
 /* Three col grid for cards */
@@ -91,7 +95,7 @@
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-6);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 .status-banner.success {
   background: var(--color-success-tint);
@@ -138,7 +142,7 @@
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--color-border);
 }
-.card-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); }
+.card-title { font-size: var(--text-lg); font-weight: 600; color: var(--color-text); }
 .card-footer { padding: var(--space-3) var(--space-5); border-top: 1px solid var(--color-border); }
 
 /* ----- Utility buttons (extend prototype .btn) ----- */
@@ -147,7 +151,7 @@
 .btn-danger { background: var(--color-danger); color: #fff; }
 .btn-danger:hover { filter: brightness(0.9); }
 .btn-full { width: 100%; justify-content: center; }
-.btn-sm { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.btn-sm { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
 
 /* ----- Badges ----- */
 .badge-pill {
@@ -161,7 +165,7 @@
 
 /* ----- Form extras ----- */
 .form-group { display: flex; flex-direction: column; gap: var(--space-2); }
-.form-label { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); }
+.form-label { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-muted); }
 .form-input {
   width: 100%; padding: var(--space-2) var(--space-3);
   background: var(--color-surface-2); border: 1px solid var(--color-border);
@@ -170,8 +174,8 @@
   transition: border-color var(--tr-fast);
   outline: none;
 }
-.form-input:focus { border-color: var(--color-accent); }
-.form-input-sm { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); }
+.form-input:focus { border-color: var(--color-brand); }
+.form-input-sm { padding: var(--space-1) var(--space-2); font-size: var(--text-sm); }
 .form-error {
   font-size: var(--text-xs); color: var(--color-danger);
   padding: var(--space-2) var(--space-3);
@@ -182,15 +186,18 @@
 .table-wrap { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
 .data-table th {
-  background: var(--color-surface-2); padding: var(--space-2) var(--space-3);
+  background: var(--color-table-head); padding: var(--space-7) var(--space-3);
   text-align: left; font-weight: 700; font-size: var(--text-2xs);
   letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--color-text-muted); border-bottom: 1px solid var(--color-border);
+  color: var(--color-table-head-text); border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 .data-table td {
   padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border);
   color: var(--color-text); vertical-align: middle;
+}
+.data-table.input-km th {
+padding: var(--space-4) var(--space-3)
 }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: var(--color-surface-hover); }
@@ -355,7 +362,7 @@ code {
 
 /* ----- Metric card inner aliases (used by page components) ----- */
 .metric-card { display: flex; flex-direction: column; gap: var(--space-2); }
-.metric-label { font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 500; letter-spacing: 0.02em; }
+.metric-label { font-size: var(--text-sm); color: var(--color-text); font-weight: 700; letter-spacing: 0.02em; }
 .metric-value {
   font-family: 'Manrope', system-ui, sans-serif;
   font-size: var(--display-sm); font-weight: 800; color: var(--color-text); line-height: 1;
@@ -372,8 +379,8 @@ code {
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ----- Card title flex with icon ----- */
-.card-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text); display: flex; align-items: center; gap: var(--space-2); }
-.card-meta { font-size: var(--text-xs); color: var(--color-text-muted); }
+.card-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text); display: flex; align-items: center; gap: var(--space-2); }
+.card-meta { font-size: var(--text-sm); color: var(--color-text-muted); }
 
 /* ----- Fold-up card header (clickable button) ----- */
 .fold-card-header {
@@ -388,7 +395,7 @@ code {
 .fold-card-header:hover { background: var(--color-surface-hover); }
 
 /* ----- Sidebar nav label: allow long labels to wrap to 2 lines ----- */
-.nav-item { align-items: flex-start; }
+.nav-item { align-items: center; } 
 .nav-icon { margin-top: 2px; }
 .nav-label {
   white-space: normal;

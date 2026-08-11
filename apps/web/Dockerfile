@@ -1,7 +1,7 @@
 FROM node:20-slim AS builder
 WORKDIR /app
-RUN npm i -g pnpm
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+RUN npm i -g pnpm@10.33.2
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .pnpmfile.cjs .npmrc ./
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
