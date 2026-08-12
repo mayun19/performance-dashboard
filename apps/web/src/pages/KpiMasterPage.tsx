@@ -203,6 +203,9 @@ type Assignment = {
 type AssignmentRow = Omit<Assignment, "bidang"> & {
   id: string;
   bidang: string;
+  status: string;
+  reviewer?: string;
+  reviewNote?: string;
 };
 type KpiMasterRowItem = {
   id: string;
@@ -2082,6 +2085,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                   <th>Unit</th>
                                   <th>Bidang</th>
                                   <th>PJ</th>
+                                  <th>Status</th>
                                   <th>Target Sem I</th>
                                   <th>Target {CURRENT_YEAR}</th>
                                   <th className="num">
@@ -2104,6 +2108,51 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                         color: "var(--color-text-muted)",
                                       }}>
                                       {a.holder || "—"}
+                                    </td>
+                                    <td>
+                                      <span
+                                        className={`status-pill ${STATUS_PILL[a.status] ?? "in-review"}`}>
+                                        {STATUS_LABEL[a.status] ?? a.status}
+                                      </span>
+                                      {a.status === "submitted" &&
+                                        (() => {
+                                          
+                                          const lbl =
+                                            a.reviewer ?? "tahap review";
+                                          return (
+                                            <div
+                                              style={{
+                                                fontSize: 12,
+                                                color:
+                                                  "var(--color-text-muted)",
+                                                marginTop: 4,
+                                              }}>
+                                              di {lbl}
+                                            </div>
+                                          );
+                                        })()}
+                                      {a.status === "ready" && (
+                                        <div
+                                          style={{
+                                            fontSize: 12,
+                                            color: "var(--color-warning)",
+                                            marginTop: 4,
+                                          }}>
+                                          lolos rantai → menunggu bundle GM
+                                        </div>
+                                      )}
+                                      {a.status === "rejected" &&
+                                        a.reviewNote && (
+                                          <div
+                                            style={{
+                                              fontSize: 12,
+                                              color: "var(--color-danger)",
+                                              marginTop: 4,
+                                              maxWidth: 220,
+                                            }}>
+                                            {a.reviewNote}
+                                          </div>
+                                        )}
                                     </td>
                                     <td>{a.target || "—"}</td>
                                     <td className="num">{a.target2 || "—"}</td>

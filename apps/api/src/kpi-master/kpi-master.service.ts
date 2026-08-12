@@ -135,9 +135,10 @@ export class KpiMasterService {
         include,
         orderBy: { createdAt: "desc" },
       });
-      return master.map((m) =>
+      const withFlags = master.map((m) =>
         this.withVersionFlags(m, activePeriod?.yearMonth),
       );
+      return this.attachAssignmentStatuses(withFlags);
     }
 
     const page = currentPage ?? 1;
@@ -153,11 +154,12 @@ export class KpiMasterService {
       }),
       this.prisma.kpiMaster.count({ where }),
     ]);
+    const withFlags = masters.map((m) =>
+      this.withVersionFlags(m, activePeriod?.yearMonth),
+    );
 
     return {
-      data: masters.map((m) =>
-        this.withVersionFlags(m, activePeriod?.yearMonth),
-      ),
+      data: await this.attachAssignmentStatuses(withFlags),
       pagination: {
         currentPage: page,
         perPage: limit,
@@ -165,6 +167,124 @@ export class KpiMasterService {
         totalPage: Math.ceil(totalData / limit),
       },
     };
+  }
+
+  // Sinkronisasi status dokumen KM ke tiap assignment untuk view list(). Satu KpiAssignment
+  // (unit,bidang) tak punya FK langsung ke KontrakManajemen — hubungannya hanya lewat
+  // kpiItems[].masterKpiId di dalam dokumen yang cocok (periodId + kmType + unitCode + bidang),
+  // sama seperti pola pencarian di getPerKpiReview()/getRollup(). Dibatch (bukan query per
+  // assignment) supaya list() tetap O(1) query tambahan terlepas dari jumlah master/assignment.
+  // Nilai status: 'draft' | 'submitted' | 'ready' | 'approved' | 'rejected' | 'none'
+  // ('none' = belum ada dokumen KM untuk kombinasi unit/bidang/periode/kmType ini).
+  // reviewNote & step ikut disalin dari dokumen yang sama (label langkah berjalan/terakhir —
+  // sama pola dengan stepLabel di InputKontrakService.getReviewList()) — null bila status 'none'.
+  private async attachAssignmentStatuses<
+    T extends {
+      id: string;
+      kmType: string;
+      effectiveMonth: string;
+      assignments: Array<
+        Record<string, unknown> & { unitCode: string; bidang: string }
+      >;
+    },
+  >(masters: T[]): Promise<T[]> {
+    const emptyInfo = { status: "none", reviewNote: null, step: null } as const;
+    if (masters.length === 0) return masters;
+
+    const yearMonths = [...new Set(masters.map((m) => m.effectiveMonth))];
+    const periods = await this.prisma.period.findMany({
+      where: { yearMonth: { in: yearMonths } },
+    });
+    const periodIdByYearMonth = new Map(
+      periods.map((p) => [p.yearMonth, p.id]),
+    );
+    const periodIds = periods.map((p) => p.id);
+
+    if (periodIds.length === 0) {
+      return masters.map((m) => ({
+        ...m,
+        assignments: m.assignments.map((a) => ({ ...a, ...emptyInfo })),
+      }));
+    }
+
+    const kmTypes = [...new Set(masters.map((m) => m.kmType))];
+
+    // Satu query untuk semua dokumen relevan, diurutkan terbaru dulu — pengisian Map di
+    // bawah pakai "first write wins" sehingga otomatis mengambil status paling mutakhir
+    // (mengakomodasi kasus 1 assignment punya >1 dokumen: submitted lama + draft baru,
+    // lihat catatan di fanOut()).
+    const docs = await this.prisma.kontrakManajemen.findMany({
+      where: { periodId: { in: periodIds }, kmType: { in: kmTypes } },
+      select: {
+        periodId: true,
+        kmType: true,
+        unitCode: true,
+        bidang: true,
+        status: true,
+        reviewNote: true,
+        steps: true,
+        currentStepIndex: true,
+        kpiItems: true,
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    type AssignmentDocInfo = {
+      status: string;
+      reviewNote: string | null;
+      reviewer: string | null;
+    };
+    const infoByKey = new Map<string, AssignmentDocInfo>();
+    for (const doc of docs) {
+      const items = (Array.isArray(doc.kpiItems) ? doc.kpiItems : []) as Record<
+        string,
+        unknown
+      >[];
+      const masterIds = new Set(
+        items
+          .map((it) => it["masterKpiId"])
+          .filter((v): v is string => typeof v === "string"),
+      );
+      if (masterIds.size === 0) continue;
+
+      const steps = (Array.isArray(doc.steps) ? doc.steps : []) as Array<
+        Record<string, unknown>
+      >;
+      // Klem index ke batas array — dokumen 'ready'/'approved' punya currentStepIndex ===
+      // steps.length (chain selesai), sehingga step terakhir yang dilewati lebih informatif
+      // daripada undefined.
+      const stepIdx = Math.min(
+        Math.max(doc.currentStepIndex, 0),
+        Math.max(steps.length - 1, 0),
+      );
+      const stepLabel =
+        typeof steps[stepIdx]?.["label"] === "string"
+          ? (steps[stepIdx]["label"] as string)
+          : null;
+
+      for (const masterId of masterIds) {
+        const key = `${masterId}|${doc.periodId}|${doc.kmType}|${doc.unitCode}|${doc.bidang}`;
+        if (!infoByKey.has(key)) {
+          infoByKey.set(key, {
+            status: doc.status,
+            reviewNote: doc.reviewNote ?? null,
+            reviewer: stepLabel,
+          });
+        }
+      }
+    }
+
+    return masters.map((m) => {
+      const periodId = periodIdByYearMonth.get(m.effectiveMonth);
+      return {
+        ...m,
+        assignments: m.assignments.map((a) => {
+          const key = `${m.id}|${periodId}|${m.kmType}|${a.unitCode}|${a.bidang}`;
+          const info = periodId ? infoByKey.get(key) : undefined;
+          return { ...a, ...(info ?? emptyInfo) };
+        }),
+      };
+    });
   }
 
   private withVersionFlags<
