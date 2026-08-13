@@ -771,8 +771,6 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     }
   };
 
-  console.log("id kpi", editingId);
-
   const handleDelete = async (id: string) => {
     if (
       !confirm(
@@ -798,30 +796,50 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setFormError(null);
     setReviseBusyIndex(i);
     try {
+      const otherAssignments =
+        aggregationMethod === "weighted" && !isSingleAssignment
+          ? assignments
+              .filter((row, idx) => idx !== i && !!row.id)
+              .map((row) => ({
+                id: row.id as string,
+                persenAgregasi: row.persenAgregasi,
+              }))
+          : undefined;
+
       const patch: ReviseRejectedAssignmentInput = {
         holder: a.holder,
         target: a.target,
         target2: a.target2,
         persenAgregasi: a.persenAgregasi,
+        otherAssignments,
       };
       const result = await kpiMaster.reviseRejectedAssignment(a.id, patch);
       // Reflect server-confirmed values back into the row & flip its badge to draft —
       // matches what reviseRejectedAssignment() actually persisted server-side.
       setAssignments((prev) =>
-        prev.map((row, idx) =>
-          idx === i
-            ? {
-                ...row,
-                holder: result.assignment.holder,
-                target: result.assignment.target,
-                target2: result.assignment.target2,
-                persenAgregasi: result.assignment.persenAgregasi,
-                status: "draft",
-              }
-            : row,
-        ),
+        prev.map((row, idx) => {
+          if (idx === i) {
+            return {
+              ...row,
+              holder: result.assignment.holder,
+              target: result.assignment.target,
+              target2: result.assignment.target2,
+              persenAgregasi: result.assignment.persenAgregasi,
+              status: "draft",
+            };
+          }
+          // Reflect server-confirmed rebalanced value for any other row that was patched.
+          const updatedOther = result.otherAssignments.find(
+            (o) => o.id === row.id,
+          );
+          return updatedOther
+            ? { ...row, persenAgregasi: updatedOther.persenAgregasi }
+            : row;
+        }),
       );
+      resetForm();
       load(); // resync KPI Master list (status pills, reviewNote, etc.)
+      setContinuePrompt(true);
     } catch (e) {
       setFormError(
         (e as { response?: { data?: { message?: string } } })?.response?.data
@@ -1603,6 +1621,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                       {assignments.map((a, i) => {
                         const isLocked =
                           hasRejectedRow && a.status !== "rejected";
+
                         return (
                           <Fragment key={i}>
                             <tr
@@ -1795,8 +1814,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                       style={{ textAlign: "center" }}
                                       value={a.persenAgregasi || ""}
                                       disabled={
-                                        isLocked ||
-                                        (autoCalcPersen && allTarget2Numeric)
+                                        autoCalcPersen && allTarget2Numeric
                                       }
                                       onChange={(e) =>
                                         updatePersen(i, e.target.value)
@@ -2014,15 +2032,11 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
 
               {hasRejectedAssignment ? (
                 <button
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-primary"
                   disabled={reviseBusyIndex === rejectedAssignmentIndex}
                   onClick={() => handleReviseSave(rejectedAssignmentIndex)}
                   title="Revisi assignment ini & kembalikan dokumen KM ke draft"
-                  style={{
-                    color: "var(--color-warning)",
-                    fontSize: 11,
-                    whiteSpace: "nowrap",
-                  }}>
+                >
                   {reviseBusyIndex === rejectedAssignmentIndex
                     ? "Menyimpan…"
                     : "Revisi & Kirim"}

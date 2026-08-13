@@ -86,12 +86,22 @@ class ConsolidationReviewDto {
   @IsOptional() @IsString() periodId?: string;
 }
 
+class OtherAssignmentPersenDto {
+  @IsString() id!: string;
+  @IsNumber() persenAgregasi!: number;
+}
+
 // Patch sempit utk reviseRejectedAssignment() — lihat catatan pembatasan field di service.
 class ReviseRejectedAssignmentDto {
   @IsOptional() @IsString() holder?: string;
   @IsOptional() @IsString() target?: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsNumber() persenAgregasi?: number;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OtherAssignmentPersenDto)
+  otherAssignments?: OtherAssignmentPersenDto[];
 }
 
 @UseGuards(JwtAuthGuard)

@@ -274,6 +274,7 @@ export interface ReviseRejectedAssignmentInput {
   target?: string;
   target2?: string;
   persenAgregasi?: number;
+  otherAssignments?: Array<{ id: string; persenAgregasi: number }>;
 }
 
 export interface ReviseRejectedAssignmentResult {
@@ -284,6 +285,10 @@ export interface ReviseRejectedAssignmentResult {
     target2: string;
     persenAgregasi: number;
   };
+  otherAssignments: Array<{
+    id: string;
+    persenAgregasi: number;
+  }>;
   document: { id: string; status: string };
 }
 

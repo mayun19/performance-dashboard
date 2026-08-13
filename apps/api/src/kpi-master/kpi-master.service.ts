@@ -103,6 +103,7 @@ export interface ReviseRejectedAssignmentInput {
   target?: string;
   target2?: string;
   persenAgregasi?: number;
+  otherAssignments?: Array<{ id: string; persenAgregasi: number }>;
 }
 
 @Injectable()
@@ -609,7 +610,74 @@ export class KpiMasterService {
         "Item KPI ini tidak ditemukan di dokumen KM yang ditolak",
       );
 
-    // 1. Assignment — hanya field yang dikirim & diizinkan.
+    // ===== Validasi & siapkan rebalancing bobot agregasi assignment lain (opsional) =====
+    // Scoped ketat ke master ini — id yang bukan milik KPI Master yang sama ditolak langsung,
+    // supaya satu panggilan revise tidak bisa diam-diam mengubah bobot KPI lain.
+    const otherPatches = patch.otherAssignments ?? [];
+    let otherAssignmentRows: Array<{ id: string; unitCode: string }> = [];
+    if (otherPatches.length > 0) {
+      const ids = otherPatches.map((o) => o.id);
+      if (new Set(ids).size !== ids.length)
+        throw new BadRequestException(
+          "otherAssignments memuat id assignment duplikat",
+        );
+      if (ids.includes(assignment.id))
+        throw new BadRequestException(
+          "otherAssignments tidak boleh menyertakan assignment yang sedang direvisi — gunakan persenAgregasi utama",
+        );
+      const rows = await this.prisma.kpiAssignment.findMany({
+        where: { id: { in: ids } },
+      });
+      if (rows.length !== ids.length)
+        throw new BadRequestException(
+          "Salah satu assignment pada otherAssignments tidak ditemukan",
+        );
+      const foreign = rows.find((r) => r.kpiMasterId !== master.id);
+      if (foreign)
+        throw new BadRequestException(
+          "Semua otherAssignments harus berada pada KPI Master yang sama",
+        );
+      for (const o of otherPatches) {
+        if (!Number.isFinite(Number(o.persenAgregasi)))
+          throw new BadRequestException(
+            "Bobot agregasi pada otherAssignments harus berupa angka",
+          );
+      }
+      otherAssignmentRows = rows.map((r) => ({
+        id: r.id,
+        unitCode: r.unitCode,
+      }));
+    }
+
+    // Total 100% (metode weighted, >1 assignment) dihitung dari: nilai BARU assignment yang
+    // direvisi + nilai BARU tiap otherAssignments yang dikirim, digabung dengan nilai EXISTING
+    // assignment lain milik master ini yang tidak ikut dikirim.
+    if (master.aggregationMethod !== "sum") {
+      const allAssignments = await this.prisma.kpiAssignment.findMany({
+        where: { kpiMasterId: master.id },
+      });
+      if (allAssignments.length > 1) {
+        const newPersenById = new Map<string, number>();
+        newPersenById.set(
+          assignment.id,
+          patch.persenAgregasi !== undefined
+            ? Number(patch.persenAgregasi) || 0
+            : assignment.persenAgregasi,
+        );
+        for (const o of otherPatches)
+          newPersenById.set(o.id, Number(o.persenAgregasi) || 0);
+        const total = allAssignments.reduce(
+          (s, a) => s + (newPersenById.get(a.id) ?? a.persenAgregasi),
+          0,
+        );
+        if (Math.abs(total - 100) > 0.01)
+          throw new BadRequestException(
+            `Total bobot agregasi seluruh assignment harus 100%, saat ini ${Math.round(total * 100) / 100}%`,
+          );
+      }
+    }
+
+    // 1. Assignment utama — hanya field yang dikirim & diizinkan.
     const updatedAssignment = await this.prisma.kpiAssignment.update({
       where: { id: assignment.id },
       data: {
@@ -621,6 +689,17 @@ export class KpiMasterService {
           : {}),
       },
     });
+
+    // 1b. Assignment lain — HANYA persenAgregasi (rebalancing), tidak menyentuh target/holder/
+    //     status/dokumen KM milik assignment tsb.
+    const updatedOtherAssignments: typeof updatedAssignment[] = [];
+    for (const o of otherPatches) {
+      const row = await this.prisma.kpiAssignment.update({
+        where: { id: o.id },
+        data: { persenAgregasi: Number(o.persenAgregasi) || 0 },
+      });
+      updatedOtherAssignments.push(row);
+    }
 
     // 2. Item dokumen — hanya target/target2 ditempel; sisanya (formula/satuan/bobot/
     //    polaritas/subIndicators) dibiarkan apa adanya, bukan direfan dari master.
@@ -668,12 +747,22 @@ export class KpiMasterService {
         action: "kpi_master.assignment_revise",
         entity: "KpiAssignment",
         targetId: assignment.id,
-        note: `Assignment ${assignment.unitCode} — ${assignment.bidang} pada KPI "${master.indikator}" direvisi setelah ditolak; dokumen KM dikembalikan ke draft`,
+        note:
+          `Assignment ${assignment.unitCode} — ${assignment.bidang} pada KPI "${master.indikator}" direvisi setelah ditolak; dokumen KM dikembalikan ke draft` +
+          (updatedOtherAssignments.length > 0
+            ? `; bobot agregasi ${updatedOtherAssignments.length} assignment lain turut disesuaikan`
+            : ""),
       },
     });
     await this.cache.del(`kontrak:${assignment.unitCode}`);
+    for (const row of otherAssignmentRows)
+      await this.cache.del(`kontrak:${row.unitCode}`);
 
-    return { assignment: updatedAssignment, document: updatedDoc };
+    return {
+      assignment: updatedAssignment,
+      otherAssignments: updatedOtherAssignments,
+      document: updatedDoc,
+    };
   }
 
   // Rollup: gulung realisasi tiap assignment (child) menjadi nilai parent. Realisasi
