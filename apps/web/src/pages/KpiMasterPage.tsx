@@ -2035,8 +2035,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                   className="btn btn-primary"
                   disabled={reviseBusyIndex === rejectedAssignmentIndex}
                   onClick={() => handleReviseSave(rejectedAssignmentIndex)}
-                  title="Revisi assignment ini & kembalikan dokumen KM ke draft"
-                >
+                  title="Revisi assignment ini & kembalikan dokumen KM ke draft">
                   {reviseBusyIndex === rejectedAssignmentIndex
                     ? "Menyimpan…"
                     : "Revisi & Kirim"}
@@ -2914,7 +2913,9 @@ function DokumenKmTab() {
                     <th>Jumlah KPI</th>
                     <th>Status</th>
                     <th>Tanggal</th>
-                    <th style={{ width: 180 }}>Aksi</th>
+                    <th className="num" style={{ width: 180 }}>
+                      Aksi
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3005,60 +3006,64 @@ function DokumenKmTab() {
                             year: "numeric",
                           })}
                         </td>
-                        <td>
-                          <div
-                            style={{ display: "flex", gap: "var(--space-2)" }}>
-                            {k.status === "draft" || k.status === "rejected" ? (
-                              canActOnRow(k) ? (
-                                <>
-                                  <button
-                                    className="btn btn-primary btn-sm"
-                                    onClick={() => handleSubmit(k.id)}
-                                    disabled={submitting}
-                                    title={
-                                      isDocReady(k.id)
-                                        ? "Alur reviewer default siap"
-                                        : "Belum ada default reviewer — pilih manual"
-                                    }>
-                                    <Send size={14} /> Kirim
-                                  </button>
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() => handleDeleteKm(k)}
-                                    disabled={submitting}
-                                    title="Hapus dokumen KM"
-                                    style={{ color: "var(--color-danger)" }}>
-                                    <Trash2 size={14} />
-                                  </button>
-                                </>
-                              ) : (
-                                <span
-                                  style={{
-                                    fontSize: "var(--text-sm)",
-                                    color: "var(--color-text-subtle)",
-                                  }}>
-                                  Hanya PIC Kinerja (RPC) — lihat saja
-                                </span>
-                              )
-                            ) : k.status === "submitted" ? (
+                        <td className="num">
+                          {k.status === "draft" ? (
+                            canActOnRow(k) ? (
+                              <div style={{ display: "flex", gap: "var(--space-4)" }}>
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => handleSubmit(k.id)}
+                                  disabled={submitting}
+                                  title={
+                                    isDocReady(k.id)
+                                      ? "Alur reviewer default siap"
+                                      : "Belum ada default reviewer — pilih manual"
+                                  }>
+                                  <Send size={14} /> Kirim
+                                </button>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => handleDeleteKm(k)}
+                                  disabled={submitting}
+                                  title="Hapus dokumen KM"
+                                  style={{ color: "var(--color-danger)" }}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ) : (
                               <span
                                 style={{
                                   fontSize: "var(--text-sm)",
-                                  color: "var(--color-text-muted)",
+                                  color: "var(--color-text-subtle)",
                                 }}>
-                                Menunggu review
+                                Hanya PIC Kinerja (RPC) — lihat saja
                               </span>
-                            ) : k.status === "approved" ? (
-                              <span
-                                style={{
-                                  fontSize: "var(--text-sm)",
-                                  color: "var(--color-success)",
-                                }}>
-                                ✓ Disetujui{" "}
-                                {k.reviewer ? `· ${k.reviewer}` : ""}
-                              </span>
-                            ) : null}
-                          </div>
+                            )
+                          ) : k.status === "submitted" ? (
+                            <span
+                              style={{
+                                fontSize: "var(--text-sm)",
+                                color: "var(--color-text-muted)",
+                              }}>
+                              Menunggu review
+                            </span>
+                          ) : k.status === "approved" ? (
+                            <span
+                              style={{
+                                fontSize: "var(--text-sm)",
+                                color: "var(--color-success)",
+                              }}>
+                              ✓ Disetujui {k.reviewer ? `· ${k.reviewer}` : ""}
+                            </span>
+                          ) : k.status === "rejected" ? (
+                            <span
+                              style={{
+                                fontSize: "var(--text-sm)",
+                                color: "var(--color-text-muted)",
+                              }}>
+                              -
+                            </span>
+                          ) : null}
                         </td>
                       </tr>
                       {draftExpanded === k.id && (
