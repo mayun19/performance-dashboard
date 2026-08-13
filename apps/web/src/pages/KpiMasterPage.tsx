@@ -33,6 +33,7 @@ import type {
   KontrakManajemen,
   KontrakManajemenItem,
   PaginationPropsList,
+  ReviseRejectedAssignmentInput,
 } from "../lib/types";
 import Pagination from "@/components/Pagination";
 import { usePaginationHelpers } from "@/hooks/usePaginationHelpers";
@@ -188,6 +189,8 @@ export function KpiMasterPage() {
 // bukan mengubah model backend). Di-"expand" jadi entri tunggal-bidang saat disimpan — lihat
 // expandAssignmentsForSave().
 type Assignment = {
+  id?: string;
+  status?: string;
   unitCode: string;
   bidang: string[];
   holder: string;
@@ -372,6 +375,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const [currentPage, setCurrentPage] = useState(1);
   const perPage = 10;
 
+  const [reviseBusyIndex, setReviseBusyIndex] = useState<number | null>(null);
+
   // Sub-indikator (opt-in, generik) — KPI apa pun boleh ditandai "komposit" & diisi sub-indikator
   // di sini; tidak dibatasi ke nama indikator tertentu. Non-kosong → bobotKm assignment jadi
   // turunan (Σ bobot sub), realisasi diisi per-sub belakangan di Input Realisasi.
@@ -439,6 +444,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setTargetParent(m.targetParent);
     setAssignments(
       m.assignments.map((a) => ({
+        id: a.id,
+        status: a.status,
         unitCode: a.unitCode,
         bidang: [a.bidang],
         holder: a.holder,
@@ -671,9 +678,6 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       );
       return;
     }
-    // Target wajib diisi — KPI tanpa target diam-diam dilewati dari penilaian tanpa peringatan
-    // (lihat catatan sama di kpi-master.service.ts save()). Blocking modal (bukan banner biasa)
-    // karena mudah terlewat & user diminta lengkapi dulu sebelum bisa disimpan sama sekali.
     const missingTargets = isComposite
       ? subIndicators
           .filter((s) => !s.target.trim())
@@ -728,10 +732,17 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setBusy(true);
     try {
       const expanded = expandAssignmentsForSave(assignments);
-      const assignmentsToSave =
+      const assignmentsToSave = (
         isSingleAssignment && aggregationMethod === "weighted"
           ? expanded.map((a) => ({ ...a, persenAgregasi: 100 }))
-          : expanded;
+          : expanded
+      ).map(
+        // id/status are local UI-only fields (drive the inline "Revisi & Kirim" row-locking) —
+        // AssignmentInput on the backend is whitelist-validated and rejects unknown properties,
+        // so they must never leave the client. Explicitly destructure them off here rather than
+        // upstream, so `assignments` state keeps carrying them for the table's own bookkeeping.
+        ({ id: _id, status: _status, ...rest }) => rest,
+      );
       await kpiMaster.save({
         id: editingId ?? undefined,
         kmType,
@@ -760,6 +771,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     }
   };
 
+  console.log("id kpi", editingId);
+
   const handleDelete = async (id: string) => {
     if (
       !confirm(
@@ -775,9 +788,60 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     }
   };
 
+  const handleReviseSave = async (i: number) => {
+    const a = assignments[i];
+    if (!a.id) return; // safety net — button is only rendered when a.id exists
+    if (!a.target.trim()) {
+      setFormError("Target Sem I wajib diisi sebelum revisi.");
+      return;
+    }
+    setFormError(null);
+    setReviseBusyIndex(i);
+    try {
+      const patch: ReviseRejectedAssignmentInput = {
+        holder: a.holder,
+        target: a.target,
+        target2: a.target2,
+        persenAgregasi: a.persenAgregasi,
+      };
+      const result = await kpiMaster.reviseRejectedAssignment(a.id, patch);
+      // Reflect server-confirmed values back into the row & flip its badge to draft —
+      // matches what reviseRejectedAssignment() actually persisted server-side.
+      setAssignments((prev) =>
+        prev.map((row, idx) =>
+          idx === i
+            ? {
+                ...row,
+                holder: result.assignment.holder,
+                target: result.assignment.target,
+                target2: result.assignment.target2,
+                persenAgregasi: result.assignment.persenAgregasi,
+                status: "draft",
+              }
+            : row,
+        ),
+      );
+      load(); // resync KPI Master list (status pills, reviewNote, etc.)
+    } catch (e) {
+      setFormError(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ??
+          (e as Error)?.message ??
+          "Gagal merevisi assignment",
+      );
+    } finally {
+      setReviseBusyIndex(null);
+    }
+  };
+
   const totalDataMaster = masters.pagination.totalData;
   const { paginate, indexOfFirstProject, indexOfLastProject } =
     usePaginationHelpers(masters.pagination, currentPage, setCurrentPage);
+  const rejectedAssignmentIndex = assignments.findIndex(
+    (row) => row.status === "rejected" && !!row.id,
+  );
+  const hasRejectedAssignment = rejectedAssignmentIndex >= 0;
+  const hasRejectedRow = assignments.some((x) => x.status === "rejected");
 
   if (loading) return <SkeletonTable rows={4} cols={5} />;
   if (error && totalDataMaster === 0 && !showForm)
@@ -1536,338 +1600,372 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {assignments.map((a, i) => (
-                        <Fragment key={i}>
-                          <tr>
-                            <td>
-                              <select
-                                className="form-input form-input-sm"
-                                style={{ width: "120px" }}
-                                value={a.unitCode}
-                                onChange={(e) =>
-                                  updateAssignmentUnit(i, e.target.value)
-                                }>
-                                {UNIT_OPTIONS.map((u) => (
-                                  <option key={u.code} value={u.code}>
-                                    {u.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td>
-                              {a.unitCode === "KP" ? (
-                                // Kantor Induk: tetap single-select seperti semula — target/PJ tiap bidang KP
-                                // biasanya beda-beda & tak sesederhana UPMK, jadi multi-bidang-per-baris
-                                // sengaja TIDAK diaktifkan di sini (khusus diminta hanya utk UPMK).
+                      {assignments.map((a, i) => {
+                        const isLocked =
+                          hasRejectedRow && a.status !== "rejected";
+                        return (
+                          <Fragment key={i}>
+                            <tr
+                              style={
+                                a.status === "rejected"
+                                  ? { background: "var(--color-danger-tint)" }
+                                  : undefined
+                              }>
+                              <td>
                                 <select
                                   className="form-input form-input-sm"
-                                  style={{ width: "240px" }}
-                                  value={a.bidang[0] ?? ""}
+                                  style={{ width: "120px" }}
+                                  value={a.unitCode}
                                   onChange={(e) =>
-                                    setAssignments((prev) =>
-                                      prev.map((row, idx) =>
-                                        idx === i
-                                          ? { ...row, bidang: [e.target.value] }
-                                          : row,
-                                      ),
-                                    )
-                                  }>
-                                  {bidangOptionsFor(a.unitCode).map((b) => (
-                                    <option key={b} value={b}>
-                                      {b}
+                                    updateAssignmentUnit(i, e.target.value)
+                                  }
+                                  disabled={isLocked}>
+                                  {UNIT_OPTIONS.map((u) => (
+                                    <option key={u.code} value={u.code}>
+                                      {u.name}
                                     </option>
                                   ))}
                                 </select>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: 4,
-                                    alignItems: "center",
-                                  }}>
-                                  {a.bidang.map((b) => (
-                                    <span
-                                      key={b}
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: 3,
-                                        fontSize: 11,
-                                        border: "1px solid var(--color-border)",
-                                        borderRadius: 4,
-                                        padding: "1px 4px",
-                                      }}>
-                                      {b}
-                                      <button
-                                        onClick={() => toggleRowBidang(i, b)}
-                                        disabled={a.bidang.length <= 1}
-                                        style={{
-                                          border: "none",
-                                          background: "none",
-                                          cursor:
-                                            a.bidang.length <= 1
-                                              ? "not-allowed"
-                                              : "pointer",
-                                          color: "var(--color-text-muted)",
-                                          padding: 0,
-                                          lineHeight: 1,
-                                        }}
-                                        title="Hapus bidang ini dari baris">
-                                        ×
-                                      </button>
-                                    </span>
-                                  ))}
-                                  <button
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() =>
-                                      setExpandedBidangRow(
-                                        expandedBidangRow === i ? null : i,
+                              </td>
+                              <td>
+                                {a.unitCode === "KP" ? (
+                                  // Kantor Induk: tetap single-select seperti semula — target/PJ tiap bidang KP
+                                  // biasanya beda-beda & tak sesederhana UPMK, jadi multi-bidang-per-baris
+                                  // sengaja TIDAK diaktifkan di sini (khusus diminta hanya utk UPMK).
+                                  <select
+                                    className="form-input form-input-sm"
+                                    style={{ width: "240px" }}
+                                    value={a.bidang[0] ?? ""}
+                                    disabled={isLocked}
+                                    onChange={(e) =>
+                                      setAssignments((prev) =>
+                                        prev.map((row, idx) =>
+                                          idx === i
+                                            ? {
+                                                ...row,
+                                                bidang: [e.target.value],
+                                              }
+                                            : row,
+                                        ),
                                       )
                                     }>
-                                    <Plus size={11} /> Bidang
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                            <td>
-                              <input
-                                className="form-input form-input-sm"
-                                value={a.holder}
-                                onChange={(e) =>
-                                  updateAssignment(i, "holder", e.target.value)
-                                }
-                                placeholder="Nama PJ"
-                              />
-                            </td>
-                            {isComposite ? (
-                              <td colSpan={2}>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() =>
-                                    setExpandedAssignment(
-                                      expandedAssignment === i ? null : i,
-                                    )
-                                  }
-                                  title="Atur target tiap sub-indikator utk unit ini — kosong = warisi target template">
-                                  {subIndicators.length} sub · atur target{" "}
-                                  <ChevronDown
-                                    size={12}
+                                    {bidangOptionsFor(a.unitCode).map((b) => (
+                                      <option key={b} value={b}>
+                                        {b}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <div
                                     style={{
-                                      transform:
-                                        expandedAssignment === i
-                                          ? "rotate(180deg)"
-                                          : "none",
-                                      transition: "transform .2s",
-                                    }}
-                                  />
-                                </button>
-                              </td>
-                            ) : (
-                              <>
-                                <td>
-                                  <input
-                                    className="form-input form-input-sm"
-                                    value={a.target}
-                                    onChange={(e) =>
-                                      updateAssignment(
-                                        i,
-                                        "target",
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Target Sem I"
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    className="form-input form-input-sm"
-                                    value={a.target2}
-                                    onChange={(e) =>
-                                      updateAssignment(
-                                        i,
-                                        "target2",
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Target tahun"
-                                  />
-                                </td>
-                              </>
-                            )}
-                            {aggregationMethod === "weighted" &&
-                              !isSingleAssignment && (
-                                <td>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={0.01}
-                                    className="form-input form-input-sm"
-                                    style={{ textAlign: "center" }}
-                                    value={a.persenAgregasi || ""}
-                                    disabled={
-                                      autoCalcPersen && allTarget2Numeric
-                                    }
-                                    onChange={(e) =>
-                                      updatePersen(i, e.target.value)
-                                    }
-                                    placeholder="0"
-                                  />
-                                </td>
-                              )}
-                            <td>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                disabled={assignments.length <= 1}
-                                onClick={() => removeAssignment(i)}
-                                style={{ color: "var(--color-danger)" }}>
-                                <Trash2 size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                          {a.unitCode !== "KP" && expandedBidangRow === i && (
-                            <tr
-                              style={{ background: "var(--color-surface-2)" }}>
-                              <td
-                                colSpan={
-                                  5 +
-                                  (aggregationMethod === "weighted" &&
-                                  !isSingleAssignment
-                                    ? 1
-                                    : 0) +
-                                  1
-                                }
-                                style={{
-                                  padding: "var(--space-2) var(--space-4)",
-                                }}>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    gap: 10,
-                                    flexWrap: "wrap",
-                                  }}>
-                                  {bidangOptionsFor(a.unitCode).map((b) => {
-                                    const usedElsewhere = bidangUsedElsewhere(
-                                      i,
-                                      a.unitCode,
-                                    ).has(b);
-                                    return (
-                                      <label
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: 4,
+                                      alignItems: "center",
+                                    }}>
+                                    {a.bidang.map((b) => (
+                                      <span
                                         key={b}
                                         style={{
-                                          display: "flex",
+                                          display: "inline-flex",
                                           alignItems: "center",
-                                          gap: 4,
-                                          fontSize: "var(--text-xs)",
-                                          opacity: usedElsewhere ? 0.5 : 1,
-                                          cursor: usedElsewhere
-                                            ? "not-allowed"
-                                            : "pointer",
+                                          gap: 3,
+                                          fontSize: 11,
+                                          border:
+                                            "1px solid var(--color-border)",
+                                          borderRadius: 4,
+                                          padding: "1px 4px",
                                         }}>
-                                        <input
-                                          type="checkbox"
-                                          disabled={usedElsewhere}
-                                          checked={a.bidang.includes(b)}
-                                          onChange={() => toggleRowBidang(i, b)}
-                                        />
                                         {b}
-                                        {usedElsewhere &&
-                                          " (dipakai baris lain)"}
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                          {isComposite && expandedAssignment === i && (
-                            <tr
-                              style={{ background: "var(--color-surface-2)" }}>
-                              <td
-                                colSpan={
-                                  5 +
-                                  (aggregationMethod === "weighted" &&
-                                  !isSingleAssignment
-                                    ? 1
-                                    : 0) +
-                                  1
-                                }
-                                style={{ padding: 0 }}>
-                                <table
-                                  className="data-table compact"
-                                  style={{ margin: 0 }}>
-                                  <thead>
-                                    <tr>
-                                      <th>Sub-Indikator</th>
-                                      <th>Target Sem I</th>
-                                      <th>Target {CURRENT_YEAR}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {subIndicators.map((si, j) => (
-                                      <tr key={j}>
-                                        <td
+                                        <button
+                                          onClick={() => toggleRowBidang(i, b)}
+                                          disabled={
+                                            isLocked || a.bidang.length <= 1
+                                          }
                                           style={{
+                                            border: "none",
+                                            background: "none",
+                                            cursor:
+                                              a.bidang.length <= 1
+                                                ? "not-allowed"
+                                                : "pointer",
                                             color: "var(--color-text-muted)",
-                                          }}>
-                                          ↳ {si.nama || `Sub ${j + 1}`}
-                                        </td>
-                                        <td>
-                                          <input
-                                            className="form-input form-input-sm"
-                                            placeholder={si.target || "—"}
-                                            value={
-                                              a.subIndicatorTargets?.[j]
-                                                ?.target ?? ""
-                                            }
-                                            onChange={(e) =>
-                                              updateAssignmentSubTarget(
-                                                i,
-                                                j,
-                                                "target",
-                                                e.target.value,
-                                              )
-                                            }
-                                          />
-                                        </td>
-                                        <td>
-                                          <input
-                                            className="form-input form-input-sm"
-                                            placeholder={si.target2 || "—"}
-                                            value={
-                                              a.subIndicatorTargets?.[j]
-                                                ?.target2 ?? ""
-                                            }
-                                            onChange={(e) =>
-                                              updateAssignmentSubTarget(
-                                                i,
-                                                j,
-                                                "target2",
-                                                e.target.value,
-                                              )
-                                            }
-                                          />
-                                        </td>
-                                      </tr>
+                                            padding: 0,
+                                            lineHeight: 1,
+                                          }}
+                                          title="Hapus bidang ini dari baris">
+                                          ×
+                                        </button>
+                                      </span>
                                     ))}
-                                  </tbody>
-                                </table>
-                                <p
-                                  style={{
-                                    fontSize: 11,
-                                    color: "var(--color-text-muted)",
-                                    margin: "var(--space-2)",
-                                  }}>
-                                  Kosongkan agar unit ini mewarisi target
-                                  template di atas (placeholder = nilai yang
-                                  dipakai).
-                                </p>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() =>
+                                        setExpandedBidangRow(
+                                          expandedBidangRow === i ? null : i,
+                                        )
+                                      }>
+                                      <Plus size={11} /> Bidang
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                <input
+                                  className="form-input form-input-sm"
+                                  value={a.holder}
+                                  disabled={isLocked}
+                                  onChange={(e) =>
+                                    updateAssignment(
+                                      i,
+                                      "holder",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Nama PJ"
+                                />
+                              </td>
+                              {isComposite ? (
+                                <td colSpan={2}>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    disabled={isLocked}
+                                    onClick={() =>
+                                      setExpandedAssignment(
+                                        expandedAssignment === i ? null : i,
+                                      )
+                                    }
+                                    title="Atur target tiap sub-indikator utk unit ini — kosong = warisi target template">
+                                    {subIndicators.length} sub · atur target{" "}
+                                    <ChevronDown
+                                      size={12}
+                                      style={{
+                                        transform:
+                                          expandedAssignment === i
+                                            ? "rotate(180deg)"
+                                            : "none",
+                                        transition: "transform .2s",
+                                      }}
+                                    />
+                                  </button>
+                                </td>
+                              ) : (
+                                <>
+                                  <td>
+                                    <input
+                                      className="form-input form-input-sm"
+                                      value={a.target}
+                                      disabled={isLocked}
+                                      onChange={(e) =>
+                                        updateAssignment(
+                                          i,
+                                          "target",
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Target Sem I"
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      className="form-input form-input-sm"
+                                      value={a.target2}
+                                      disabled={isLocked}
+                                      onChange={(e) =>
+                                        updateAssignment(
+                                          i,
+                                          "target2",
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Target tahun"
+                                    />
+                                  </td>
+                                </>
+                              )}
+                              {aggregationMethod === "weighted" &&
+                                !isSingleAssignment && (
+                                  <td>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={0.01}
+                                      className="form-input form-input-sm"
+                                      style={{ textAlign: "center" }}
+                                      value={a.persenAgregasi || ""}
+                                      disabled={
+                                        isLocked ||
+                                        (autoCalcPersen && allTarget2Numeric)
+                                      }
+                                      onChange={(e) =>
+                                        updatePersen(i, e.target.value)
+                                      }
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                )}
+                              <td>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={isLocked || assignments.length <= 1}
+                                  onClick={() => removeAssignment(i)}
+                                  style={{ color: "var(--color-danger)" }}>
+                                  <Trash2 size={16} />
+                                </button>
                               </td>
                             </tr>
-                          )}
-                        </Fragment>
-                      ))}
+                            {a.unitCode !== "KP" && expandedBidangRow === i && (
+                              <tr
+                                style={{
+                                  background: "var(--color-surface-2)",
+                                }}>
+                                <td
+                                  colSpan={
+                                    5 +
+                                    (aggregationMethod === "weighted" &&
+                                    !isSingleAssignment
+                                      ? 1
+                                      : 0) +
+                                    1
+                                  }
+                                  style={{
+                                    padding: "var(--space-2) var(--space-4)",
+                                  }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: 10,
+                                      flexWrap: "wrap",
+                                    }}>
+                                    {bidangOptionsFor(a.unitCode).map((b) => {
+                                      const usedElsewhere = bidangUsedElsewhere(
+                                        i,
+                                        a.unitCode,
+                                      ).has(b);
+                                      return (
+                                        <label
+                                          key={b}
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 4,
+                                            fontSize: "var(--text-xs)",
+                                            opacity: usedElsewhere ? 0.5 : 1,
+                                            cursor: usedElsewhere
+                                              ? "not-allowed"
+                                              : "pointer",
+                                          }}>
+                                          <input
+                                            type="checkbox"
+                                            disabled={usedElsewhere}
+                                            checked={a.bidang.includes(b)}
+                                            onChange={() =>
+                                              toggleRowBidang(i, b)
+                                            }
+                                          />
+                                          {b}
+                                          {usedElsewhere &&
+                                            " (dipakai baris lain)"}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            {isComposite && expandedAssignment === i && (
+                              <tr
+                                style={{
+                                  background: "var(--color-surface-2)",
+                                }}>
+                                <td
+                                  colSpan={
+                                    5 +
+                                    (aggregationMethod === "weighted" &&
+                                    !isSingleAssignment
+                                      ? 1
+                                      : 0) +
+                                    1
+                                  }
+                                  style={{ padding: 0 }}>
+                                  <table
+                                    className="data-table compact"
+                                    style={{ margin: 0 }}>
+                                    <thead>
+                                      <tr>
+                                        <th>Sub-Indikator</th>
+                                        <th>Target Sem I</th>
+                                        <th>Target {CURRENT_YEAR}</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {subIndicators.map((si, j) => (
+                                        <tr key={j}>
+                                          <td
+                                            style={{
+                                              color: "var(--color-text-muted)",
+                                            }}>
+                                            ↳ {si.nama || `Sub ${j + 1}`}
+                                          </td>
+                                          <td>
+                                            <input
+                                              className="form-input form-input-sm"
+                                              placeholder={si.target || "—"}
+                                              value={
+                                                a.subIndicatorTargets?.[j]
+                                                  ?.target ?? ""
+                                              }
+                                              disabled={isLocked}
+                                              onChange={(e) =>
+                                                updateAssignmentSubTarget(
+                                                  i,
+                                                  j,
+                                                  "target",
+                                                  e.target.value,
+                                                )
+                                              }
+                                            />
+                                          </td>
+                                          <td>
+                                            <input
+                                              className="form-input form-input-sm"
+                                              placeholder={si.target2 || "—"}
+                                              value={
+                                                a.subIndicatorTargets?.[j]
+                                                  ?.target2 ?? ""
+                                              }
+                                              disabled={isLocked}
+                                              onChange={(e) =>
+                                                updateAssignmentSubTarget(
+                                                  i,
+                                                  j,
+                                                  "target2",
+                                                  e.target.value,
+                                                )
+                                              }
+                                            />
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                  <p
+                                    style={{
+                                      fontSize: 11,
+                                      color: "var(--color-text-muted)",
+                                      margin: "var(--space-2)",
+                                    }}>
+                                    Kosongkan agar unit ini mewarisi target
+                                    template di atas (placeholder = nilai yang
+                                    dipakai).
+                                  </p>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
                       {aggregationMethod === "weighted" &&
                         !isSingleAssignment &&
                         anyPersenSet && (
@@ -1913,16 +2011,34 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                 disabled={busy}>
                 Batal
               </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSave}
-                disabled={busy}>
-                {busy
-                  ? "Menyimpan…"
-                  : editingId
-                    ? "Update Draft KM"
-                    : "Simpan Draft KM"}
-              </button>
+
+              {hasRejectedAssignment ? (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={reviseBusyIndex === rejectedAssignmentIndex}
+                  onClick={() => handleReviseSave(rejectedAssignmentIndex)}
+                  title="Revisi assignment ini & kembalikan dokumen KM ke draft"
+                  style={{
+                    color: "var(--color-warning)",
+                    fontSize: 11,
+                    whiteSpace: "nowrap",
+                  }}>
+                  {reviseBusyIndex === rejectedAssignmentIndex
+                    ? "Menyimpan…"
+                    : "Revisi & Kirim"}
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSave}
+                  disabled={busy}>
+                  {busy
+                    ? "Menyimpan…"
+                    : editingId
+                      ? "Update Draft KM"
+                      : "Simpan Draft KM"}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2085,9 +2201,11 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                   <th>Unit</th>
                                   <th>Bidang</th>
                                   <th>PJ</th>
-                                  <th>Status</th>
-                                  <th>Target Sem I</th>
-                                  <th>Target {CURRENT_YEAR}</th>
+                                  <th style={{ minWidth: 40, maxWidth: 400 }}>
+                                    Status
+                                  </th>
+                                  <th className="num">Target Sem I</th>
+                                  <th className="num">Target {CURRENT_YEAR}</th>
                                   <th className="num">
                                     {m.aggregationMethod === "sum"
                                       ? "Metode"
@@ -2116,7 +2234,6 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                       </span>
                                       {a.status === "submitted" &&
                                         (() => {
-                                          
                                           const lbl =
                                             a.reviewer ?? "tahap review";
                                           return (
@@ -2154,7 +2271,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                           </div>
                                         )}
                                     </td>
-                                    <td>{a.target || "—"}</td>
+                                    <td className="num">{a.target || "—"}</td>
                                     <td className="num">{a.target2 || "—"}</td>
                                     <td className="num">
                                       {m.aggregationMethod === "sum"
