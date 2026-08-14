@@ -193,15 +193,66 @@ export class KpiMasterService {
       id: string;
       kmType: string;
       effectiveMonth: string;
+      previousVersionId?: string | null;
       assignments: Array<
         Record<string, unknown> & { unitCode: string; bidang: string }
       >;
     },
   >(masters: T[]): Promise<T[]> {
-    const emptyInfo = { status: "none", reviewNote: null, step: null } as const;
+    const emptyInfo = {
+      status: "none",
+      reviewNote: null,
+      reviewer: null,
+    } as const;
     if (masters.length === 0) return masters;
 
-    const yearMonths = [...new Set(masters.map((m) => m.effectiveMonth))];
+    const STATUS_PRIORITY: Record<string, number> = {
+      rejected: 0,
+      submitted: 1,
+      ready: 2,
+      approved: 3,
+      draft: 4,
+      none: 5,
+    };
+
+    // ini — dibatasi hops utk jaga-jaga siklus data yang tak terduga.
+    const ancestorIds = new Set<string>();
+    {
+      const queue = masters
+        .map((m) => m.previousVersionId)
+        .filter((id): id is string => !!id);
+      const seen = new Set(queue);
+      let hops = 0;
+      while (queue.length > 0 && hops < 200) {
+        const id = queue.shift()!;
+        ancestorIds.add(id);
+        const anc = await this.prisma.kpiMaster.findUnique({
+          where: { id },
+          select: { previousVersionId: true },
+        });
+        if (anc?.previousVersionId && !seen.has(anc.previousVersionId)) {
+          seen.add(anc.previousVersionId);
+          queue.push(anc.previousVersionId);
+        }
+        hops++;
+      }
+    }
+    const ancestorMasters = ancestorIds.size
+      ? await this.prisma.kpiMaster.findMany({
+          where: { id: { in: [...ancestorIds] } },
+          include: {
+            assignments: {
+              orderBy: [{ unitCode: "asc" }, { bidang: "asc" }],
+            },
+          },
+        })
+      : [];
+
+    // Gabungan current masters + ancestor masters — dipakai bersama utk resolve periodId
+    // (tiap versi punya effectiveMonth sendiri) & mencari dokumen yang relevan.
+    const allForLookup = [...masters, ...(ancestorMasters as unknown as T[])];
+
+    const yearMonths = [...new Set(allForLookup.map((m) => m.effectiveMonth))];
     const periods = await this.prisma.period.findMany({
       where: { yearMonth: { in: yearMonths } },
     });
@@ -217,7 +268,7 @@ export class KpiMasterService {
       }));
     }
 
-    const kmTypes = [...new Set(masters.map((m) => m.kmType))];
+    const kmTypes = [...new Set(allForLookup.map((m) => m.kmType))];
 
     // Satu query untuk semua dokumen relevan, diurutkan terbaru dulu — pengisian Map di
     // bawah pakai "first write wins" sehingga otomatis mengambil status paling mutakhir
@@ -233,6 +284,7 @@ export class KpiMasterService {
         status: true,
         reviewNote: true,
         steps: true,
+        updatedAt: true,
         currentStepIndex: true,
         kpiItems: true,
       },
@@ -244,18 +296,21 @@ export class KpiMasterService {
       reviewNote: string | null;
       reviewer: string | null;
     };
-    const infoByKey = new Map<string, AssignmentDocInfo>();
+
+    type PrimaryDocInfo = AssignmentDocInfo & { updatedAt: Date };
+    type DocGroup = { masterIds: Set<string>; primary: PrimaryDocInfo | null };
+
+    const groups = new Map<string, DocGroup>();
+
     for (const doc of docs) {
       const items = (Array.isArray(doc.kpiItems) ? doc.kpiItems : []) as Record<
         string,
         unknown
       >[];
-      const masterIds = new Set(
-        items
-          .map((it) => it["masterKpiId"])
-          .filter((v): v is string => typeof v === "string"),
-      );
-      if (masterIds.size === 0) continue;
+      const masterIds = items
+        .map((it) => it["masterKpiId"])
+        .filter((v): v is string => typeof v === "string");
+      if (masterIds.length === 0) continue;
 
       const steps = (Array.isArray(doc.steps) ? doc.steps : []) as Array<
         Record<string, unknown>
@@ -272,29 +327,91 @@ export class KpiMasterService {
           ? (steps[stepIdx]["label"] as string)
           : null;
 
-      for (const masterId of masterIds) {
-        const key = `${masterId}|${doc.periodId}|${doc.kmType}|${doc.unitCode}|${doc.bidang}`;
-        if (!infoByKey.has(key)) {
-          infoByKey.set(key, {
-            status: doc.status,
-            reviewNote: doc.reviewNote ?? null,
-            reviewer: stepLabel,
-          });
-        }
+      const groupKey = `${doc.periodId}|${doc.kmType}|${doc.unitCode}|${doc.bidang}`;
+      let group = groups.get(groupKey);
+      if (!group) {
+        group = { masterIds: new Set(), primary: null };
+        groups.set(groupKey, group);
+      }
+      for (const masterId of masterIds) group.masterIds.add(masterId);
+
+      const candidate: PrimaryDocInfo = {
+        status: doc.status,
+        reviewNote: doc.reviewNote ?? null,
+        reviewer: stepLabel,
+        updatedAt: doc.updatedAt,
+      };
+      const candidatePriority = STATUS_PRIORITY[doc.status] ?? 99;
+      const currentPriority = group.primary
+        ? (STATUS_PRIORITY[group.primary.status] ?? 99)
+        : Infinity;
+      // Prioritas lebih rendah menang; seri prioritas → dokumen ter-update lebih baru menang.
+      // Perbandingan eksplisit (bukan cuma andalkan orderBy) supaya urutan iterasi docs tak
+      // memengaruhi hasil akhir grup.
+      if (
+        !group.primary ||
+        candidatePriority < currentPriority ||
+        (candidatePriority === currentPriority &&
+          candidate.updatedAt > group.primary.updatedAt)
+      ) {
+        group.primary = candidate;
       }
     }
 
-    return masters.map((m) => {
-      const periodId = periodIdByYearMonth.get(m.effectiveMonth);
-      return {
-        ...m,
-        assignments: m.assignments.map((a) => {
-          const key = `${m.id}|${periodId}|${m.kmType}|${a.unitCode}|${a.bidang}`;
-          const info = periodId ? infoByKey.get(key) : undefined;
-          return { ...a, ...(info ?? emptyInfo) };
-        }),
-      };
-    });
+    const infoByMasterKey = new Map<string, AssignmentDocInfo>();
+    for (const [groupKey, group] of groups) {
+      if (!group.primary) continue;
+      const { status, reviewNote, reviewer } = group.primary;
+      for (const masterId of group.masterIds) {
+        infoByMasterKey.set(`${masterId}|${groupKey}`, {
+          status,
+          reviewNote,
+          reviewer,
+        });
+      }
+    }
+
+    const masterById = new Map(allForLookup.map((m) => [m.id, m]));
+    const getInfo = (
+      masterId: string,
+      unitCode: string,
+      bidang: string,
+    ): AssignmentDocInfo | undefined => {
+      const master = masterById.get(masterId);
+      if (!master) return undefined;
+      const periodId = periodIdByYearMonth.get(master.effectiveMonth);
+      if (!periodId) return undefined;
+      return infoByMasterKey.get(
+        `${masterId}|${periodId}|${master.kmType}|${unitCode}|${bidang}`,
+      );
+    };
+
+    return masters.map((m) => ({
+      ...m,
+      assignments: m.assignments.map((a) => {
+        const own = getInfo(m.id, a.unitCode, a.bidang) ?? emptyInfo;
+        // Susuri rantai versi lama mencari status paling mendesak utk (unitCode,bidang)
+        // yang sama — assignment versi baru yang tampak 'draft' bersih semestinya tetap
+        // menampilkan isu yang belum selesai dari versi sebelumnya (mis. 'rejected').
+        let best: AssignmentDocInfo = own;
+        let ancestorId = m.previousVersionId ?? null;
+        let hops = 0;
+        while (ancestorId && hops < 20) {
+          const ancInfo = getInfo(ancestorId, a.unitCode, a.bidang);
+          if (
+            ancInfo &&
+            (STATUS_PRIORITY[ancInfo.status] ?? 99) <
+              (STATUS_PRIORITY[best.status] ?? 99)
+          ) {
+            best = ancInfo;
+          }
+          const anc = masterById.get(ancestorId);
+          ancestorId = anc?.previousVersionId ?? null;
+          hops++;
+        }
+        return { ...a, ...best };
+      }),
+    }));
   }
 
   private withVersionFlags<
@@ -692,7 +809,7 @@ export class KpiMasterService {
 
     // 1b. Assignment lain — HANYA persenAgregasi (rebalancing), tidak menyentuh target/holder/
     //     status/dokumen KM milik assignment tsb.
-    const updatedOtherAssignments: typeof updatedAssignment[] = [];
+    const updatedOtherAssignments: (typeof updatedAssignment)[] = [];
     for (const o of otherPatches) {
       const row = await this.prisma.kpiAssignment.update({
         where: { id: o.id },
