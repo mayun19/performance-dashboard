@@ -290,6 +290,9 @@ export interface ReviseRejectedAssignmentResult {
     persenAgregasi: number;
   }>;
   document: { id: string; status: string };
+  allItemsRevised: boolean;
+  revisedCount: number;
+  totalItems: number;
 }
 
 export type Assignment = {

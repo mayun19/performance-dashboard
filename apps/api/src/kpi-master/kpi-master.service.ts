@@ -203,11 +203,13 @@ export class KpiMasterService {
       status: "none",
       reviewNote: null,
       reviewer: null,
+      updatedAt: new Date(0),
     } as const;
     if (masters.length === 0) return masters;
 
     const STATUS_PRIORITY: Record<string, number> = {
       rejected: 0,
+      revised: 0,
       submitted: 1,
       ready: 2,
       approved: 3,
@@ -283,6 +285,7 @@ export class KpiMasterService {
         bidang: true,
         status: true,
         reviewNote: true,
+        reviewedAt: true,
         steps: true,
         updatedAt: true,
         currentStepIndex: true,
@@ -295,23 +298,18 @@ export class KpiMasterService {
       status: string;
       reviewNote: string | null;
       reviewer: string | null;
+      updatedAt: Date;
     };
 
     type PrimaryDocInfo = AssignmentDocInfo & { updatedAt: Date };
-    type DocGroup = { masterIds: Set<string>; primary: PrimaryDocInfo | null };
-
-    const groups = new Map<string, DocGroup>();
+    const infoByMasterKey = new Map<string, AssignmentDocInfo>();
 
     for (const doc of docs) {
       const items = (Array.isArray(doc.kpiItems) ? doc.kpiItems : []) as Record<
         string,
         unknown
       >[];
-      const masterIds = items
-        .map((it) => it["masterKpiId"])
-        .filter((v): v is string => typeof v === "string");
-      if (masterIds.length === 0) continue;
-
+      if (items.length === 0) continue;
       const steps = (Array.isArray(doc.steps) ? doc.steps : []) as Array<
         Record<string, unknown>
       >;
@@ -326,48 +324,45 @@ export class KpiMasterService {
         typeof steps[stepIdx]?.["label"] === "string"
           ? (steps[stepIdx]["label"] as string)
           : null;
+      const reviewedAtMs = doc.reviewedAt ? doc.reviewedAt.getTime() : 0;
+      for (const it of items) {
+        const masterId = it["masterKpiId"];
+        if (typeof masterId !== "string") continue;
 
-      const groupKey = `${doc.periodId}|${doc.kmType}|${doc.unitCode}|${doc.bidang}`;
-      let group = groups.get(groupKey);
-      if (!group) {
-        group = { masterIds: new Set(), primary: null };
-        groups.set(groupKey, group);
-      }
-      for (const masterId of masterIds) group.masterIds.add(masterId);
+        // Gating per-item hanya relevan utk dokumen yang sedang dalam alur revisi
+        // ('rejected'/'revised') — status lain berlaku apa adanya ke semua item.
+        let itemStatus = doc.status;
+        if (doc.status === "rejected" || doc.status === "revised") {
+          const revisedAt = it["revisedAt"];
+          const isRevised =
+            typeof revisedAt === "string" &&
+            new Date(revisedAt).getTime() > reviewedAtMs;
+          itemStatus = isRevised ? "draft" : "rejected";
+        }
 
-      const candidate: PrimaryDocInfo = {
-        status: doc.status,
-        reviewNote: doc.reviewNote ?? null,
-        reviewer: stepLabel,
-        updatedAt: doc.updatedAt,
-      };
-      const candidatePriority = STATUS_PRIORITY[doc.status] ?? 99;
-      const currentPriority = group.primary
-        ? (STATUS_PRIORITY[group.primary.status] ?? 99)
-        : Infinity;
-      // Prioritas lebih rendah menang; seri prioritas → dokumen ter-update lebih baru menang.
-      // Perbandingan eksplisit (bukan cuma andalkan orderBy) supaya urutan iterasi docs tak
-      // memengaruhi hasil akhir grup.
-      if (
-        !group.primary ||
-        candidatePriority < currentPriority ||
-        (candidatePriority === currentPriority &&
-          candidate.updatedAt > group.primary.updatedAt)
-      ) {
-        group.primary = candidate;
-      }
-    }
-
-    const infoByMasterKey = new Map<string, AssignmentDocInfo>();
-    for (const [groupKey, group] of groups) {
-      if (!group.primary) continue;
-      const { status, reviewNote, reviewer } = group.primary;
-      for (const masterId of group.masterIds) {
-        infoByMasterKey.set(`${masterId}|${groupKey}`, {
-          status,
-          reviewNote,
-          reviewer,
-        });
+        const key = `${masterId}|${doc.periodId}|${doc.kmType}|${doc.unitCode}|${doc.bidang}`;
+        const candidate: PrimaryDocInfo = {
+          status: itemStatus,
+          reviewNote: doc.reviewNote ?? null,
+          reviewer: stepLabel,
+          updatedAt: doc.updatedAt,
+        };
+        const candidatePriority = STATUS_PRIORITY[itemStatus] ?? 99;
+        const existing = infoByMasterKey.get(key);
+        const currentPriority = existing
+          ? (STATUS_PRIORITY[existing.status] ?? 99)
+          : Infinity;
+        // Prioritas lebih rendah menang; seri prioritas → dokumen ter-update lebih baru menang.
+        // Perbandingan eksplisit (bukan cuma andalkan orderBy) supaya urutan iterasi docs tak
+        // memengaruhi hasil akhir.
+        if (
+          !existing ||
+          candidatePriority < currentPriority ||
+          (candidatePriority === currentPriority &&
+            candidate.updatedAt > existing.updatedAt)
+        ) {
+          infoByMasterKey.set(key, candidate);
+        }
       }
     }
 
@@ -821,22 +816,55 @@ export class KpiMasterService {
     // 2. Item dokumen — hanya target/target2 ditempel; sisanya (formula/satuan/bobot/
     //    polaritas/subIndicators) dibiarkan apa adanya, bukan direfan dari master.
     const nextItems = [...items];
+    const nowIso = new Date().toISOString();
     nextItems[idx] = {
       ...nextItems[idx],
       target: updatedAssignment.target,
       target2: updatedAssignment.target2,
+      revisedAt: nowIso,
     };
+
+    // ===== Gating: cek apakah SEMUA item ber-masterKpiId sudah direvisi sejak penolakan
+    // TERAKHIR (doc.reviewedAt). Item tanpa masterKpiId (legacy, tak tertaut assignment)
+    // dianggap otomatis "beres" karena tak bisa direvisi lewat jalur ini sama sekali. =====
+    const reviewedAtMs = doc.reviewedAt ? doc.reviewedAt.getTime() : 0;
+    const itemsWithMaster = nextItems.filter(
+      (it) => typeof it["masterKpiId"] === "string",
+    );
+    const revisedSet = new Set<string>();
+    for (const it of itemsWithMaster) {
+      const revisedAt = it["revisedAt"];
+      if (
+        typeof revisedAt === "string" &&
+        new Date(revisedAt).getTime() > reviewedAtMs
+      ) {
+        revisedSet.add(String(it["masterKpiId"]));
+      }
+    }
+    const totalTrackedItems = itemsWithMaster.length;
+    const revisedCount = revisedSet.size;
+    const allItemsRevised =
+      totalTrackedItems === 0 || revisedCount === totalTrackedItems;
 
     const history = [
       ...(Array.isArray(doc.history) ? (doc.history as object[]) : []),
-      {
-        stepIndex: 0,
-        actor: user.name,
-        role: user.role,
-        action: "revised_after_reject",
-        note: "Assignment diperbaiki setelah ditolak — dikembalikan ke draft",
-        ts: new Date().toISOString(),
-      },
+      allItemsRevised
+        ? {
+            stepIndex: 0,
+            actor: user.name,
+            role: user.role,
+            action: "revised_after_reject",
+            note: `Seluruh ${totalTrackedItems} item KPI pada dokumen ini telah direvisi — dikembalikan ke draft`,
+            ts: nowIso,
+          }
+        : {
+            stepIndex: 0,
+            actor: user.name,
+            role: user.role,
+            action: "revised_item_after_reject",
+            note: `Item "${master.indikator}" direvisi (${revisedCount}/${totalTrackedItems} item pada dokumen ini sudah direvisi) — dokumen masih menunggu revisi item lain sebelum dapat dikirim ulang`,
+            ts: nowIso,
+          },
     ];
 
     // 3. Dokumen kembali ke 'draft' — siap dikirim ulang; jejak review sebelumnya dibersihkan
@@ -846,13 +874,17 @@ export class KpiMasterService {
       where: { id: doc.id },
       data: {
         kpiItems: nextItems as object,
-        status: "draft",
-        ...(patch.holder ? { holder: patch.holder } : {}),
-        reviewer: null,
-        reviewNote: null,
-        reviewedAt: null,
-        currentStepIndex: 0,
-        currentStage: 0,
+        ...(allItemsRevised
+          ? {
+              status: "draft",
+              reviewer: null,
+              reviewNote: null,
+              reviewedAt: null,
+              currentStepIndex: 0,
+              currentStage: 0,
+            }
+          : {}),
+        ...(patch.holder && allItemsRevised ? { holder: patch.holder } : {}),
         history,
       },
     });
@@ -865,7 +897,10 @@ export class KpiMasterService {
         entity: "KpiAssignment",
         targetId: assignment.id,
         note:
-          `Assignment ${assignment.unitCode} — ${assignment.bidang} pada KPI "${master.indikator}" direvisi setelah ditolak; dokumen KM dikembalikan ke draft` +
+          `Assignment ${assignment.unitCode} — ${assignment.bidang} pada KPI "${master.indikator}" direvisi setelah ditolak` +
+          (allItemsRevised
+            ? "; dokumen KM dikembalikan ke draft"
+            : `; menunggu revisi ${totalTrackedItems - revisedCount} item lain pada dokumen yang sama`) +
           (updatedOtherAssignments.length > 0
             ? `; bobot agregasi ${updatedOtherAssignments.length} assignment lain turut disesuaikan`
             : ""),
@@ -879,6 +914,11 @@ export class KpiMasterService {
       assignment: updatedAssignment,
       otherAssignments: updatedOtherAssignments,
       document: updatedDoc,
+      // Info gating — dipakai FE utk menampilkan progres & memutuskan apakah menyarankan
+      // "lanjut ke Dokumen KM" (hanya masuk akal setelah SEMUA item beres).
+      allItemsRevised,
+      revisedCount,
+      totalItems: totalTrackedItems,
     };
   }
 

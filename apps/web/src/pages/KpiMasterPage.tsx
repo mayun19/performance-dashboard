@@ -825,7 +825,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
               target: result.assignment.target,
               target2: result.assignment.target2,
               persenAgregasi: result.assignment.persenAgregasi,
-              status: "draft",
+              status: result.allItemsRevised ? "draft" : "rejected",
             };
           }
           // Reflect server-confirmed rebalanced value for any other row that was patched.
@@ -839,7 +839,18 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       );
       resetForm();
       load(); // resync KPI Master list (status pills, reviewNote, etc.)
-      setContinuePrompt(true);
+      if (result.allItemsRevised) {
+        // Seluruh item dokumen sudah direvisi — dokumen kembali draft, saatnya arahkan ke
+        // Dokumen KM untuk dikirim ulang.
+        setContinuePrompt(true);
+      } else {
+        // Masih ada item lain pada dokumen yang sama yang belum direvisi — beri tahu progres
+        // alih-alih menyarankan langkah lanjutan yang belum relevan.
+        setFormError(
+          `Item ini sudah direvisi (${result.revisedCount}/${result.totalItems} item pada dokumen ini). ` +
+            `Revisi indikator KPI lain yang berstatus "Dikembalikan" pada unit/bidang yang sama sebelum dokumen dapat dikirim ulang.`,
+        );
+      }
     } catch (e) {
       setFormError(
         (e as { response?: { data?: { message?: string } } })?.response?.data
@@ -3009,7 +3020,11 @@ function DokumenKmTab() {
                         <td className="num">
                           {k.status === "draft" ? (
                             canActOnRow(k) ? (
-                              <div style={{ display: "flex", gap: "var(--space-4)" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "var(--space-4)",
+                                }}>
                                 <button
                                   className="btn btn-primary btn-sm"
                                   onClick={() => handleSubmit(k.id)}
