@@ -255,6 +255,7 @@ export interface KontrakManajemenItem {
   unitCode: string;
   bidang: string;
   holder: string;
+  holders: string[];
   kpiItems: Record<string, unknown>[];
   status: "draft" | "submitted" | "ready" | "approved" | "rejected";
   kmType: "draft" | "final";

@@ -2937,7 +2937,30 @@ function DokumenKmTab() {
                           {UNIT_NAMES[k.unitCode] ?? k.unitCode}
                         </td>
                         <td>{k.bidang}</td>
-                        <td>{k.holder}</td>
+                        <td>
+                          {" "}
+                          {k.holders && k.holders.length > 2 ? (
+                            <span title={k.holders.join(", ")}>
+                              {k.holders.map((h, i) => (
+                                <span key={i}>
+                                  {h}
+                                  {i < k.holders.length - 1 && ", "}
+                                </span>
+                              ))}
+                            </span>
+                          ) : k.holders && k.holders.length > 0 ? (
+                            <span title={k.holders.join(", ")}>
+                              {k.holders.map((h, i) => (
+                                <span key={i}>
+                                  {h}
+                                  {i < k.holders.length - 1 && ", "}
+                                </span>
+                              ))}
+                            </span>
+                          ) : (
+                            (k.holders?.[0] ?? k.holder)
+                          )}
+                        </td>
                         <td className="num">
                           <button
                             className="btn btn-ghost btn-sm"

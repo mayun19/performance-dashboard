@@ -85,6 +85,7 @@ type FannedItem = {
   target: string;
   target2: string;
   polaritas: string;
+  holder: string;
   subIndicators?: SubIndicatorInput[];
 };
 
@@ -821,6 +822,7 @@ export class KpiMasterService {
       ...nextItems[idx],
       target: updatedAssignment.target,
       target2: updatedAssignment.target2,
+      holder: updatedAssignment.holder,
       revisedAt: nowIso,
     };
 
@@ -1791,6 +1793,7 @@ export class KpiMasterService {
         target: a.target,
         target2: a.target2,
         polaritas: master.polaritas ?? "positive",
+        holder: a.holder || master.createdBy,
         ...(mergedSubIndicators ? { subIndicators: mergedSubIndicators } : {}),
       };
       const existingKm = await this.prisma.kontrakManajemen.findFirst({
