@@ -854,7 +854,7 @@ export class KpiMasterService {
             actor: user.name,
             role: user.role,
             action: "revised_after_reject",
-            note: `Seluruh ${totalTrackedItems} item KPI pada dokumen ini telah direvisi — dikembalikan ke draft`,
+            note: `Seluruh ${totalTrackedItems} indikator KPI pada dokumen ini telah direvisi — dikembalikan ke draft`,
             ts: nowIso,
           }
         : {
@@ -862,7 +862,7 @@ export class KpiMasterService {
             actor: user.name,
             role: user.role,
             action: "revised_item_after_reject",
-            note: `Item "${master.indikator}" direvisi (${revisedCount}/${totalTrackedItems} item pada dokumen ini sudah direvisi) — dokumen masih menunggu revisi item lain sebelum dapat dikirim ulang`,
+            note: `Indikator KPI "${master.indikator}" direvisi (${revisedCount}/${totalTrackedItems} indikator KPI pada dokumen ini sudah direvisi) — dokumen masih menunggu revisi indikator lain sebelum dapat dikirim ulang`,
             ts: nowIso,
           },
     ];
