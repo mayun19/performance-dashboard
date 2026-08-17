@@ -30,6 +30,35 @@ export class InputKontrakService {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
+  // Ambil daftar Penanggung Jawab (holder) UNIK dari seluruh kpiItems dokumen. Tiap item
+  // bisa punya holder sendiri (field 'holder' pada FannedItem, disinkronkan dari
+  // KpiAssignment.holder — lihat fanOut()/reviseRejectedAssignment() di kpi-master.service.ts).
+  // Item LEGACY (dibuat sebelum field 'holder' per-item ada, atau via authoring manual lama)
+  // tak punya 'holder' sendiri — fallback ke doc.holder (perilaku lama, satu holder untuk
+  // seluruh dokumen) supaya data historis tetap tampil wajar tanpa migrasi data.
+  private extractHolders(kpiItems: unknown, docHolder: string): string[] {
+    const items = (Array.isArray(kpiItems) ? kpiItems : []) as Record<
+      string,
+      unknown
+    >[];
+    const itemHolders = items
+      .map((it) =>
+        typeof it["holder"] === "string" ? it["holder"].trim() : "",
+      )
+      .filter((h) => h.length > 0);
+    const source = itemHolders.length > 0 ? itemHolders : [docHolder.trim()];
+    return [...new Set(source.filter((h) => h.length > 0))];
+  }
+
+  // Sisipkan 'holders' (array unik, urutan kemunculan) ke sebuah dokumen KM tanpa mengubah
+  // field 'holder' asli — field lama tetap dipertahankan untuk kompatibilitas mundur (mis.
+  // print/export yang masih membaca .holder), 'holders' adalah tambahan untuk tampilan list.
+  private withHolders<T extends { holder: string; kpiItems: unknown }>(
+    doc: T,
+  ): T & { holders: string[] } {
+    return { ...doc, holders: this.extractHolders(doc.kpiItems, doc.holder) };
+  }
+
   async getList(
     unitCode?: string,
     periodId?: string,
@@ -46,12 +75,13 @@ export class InputKontrakService {
     // Tak dipaginasi bila currentPage/perPage tak dikirim — pertahankan perilaku lama untuk
     // caller existing (mis. fan-out doc list, bulk-submit readiness check) yang mengharapkan
     // array penuh, bukan { data, pagination }.
-    if (!currentPage && !perPage) {
-      return this.prisma.kontrakManajemen.findMany({
-        where,
-        orderBy: { submittedAt: "desc" },
-      });
-    }
+     if (!currentPage && !perPage) {
+       const docs = await this.prisma.kontrakManajemen.findMany({
+         where,
+         orderBy: { submittedAt: "desc" },
+       });
+       return docs.map((d) => this.withHolders(d));
+     }
 
     const page = currentPage ?? 1;
     const limit = perPage ?? 10;
@@ -67,7 +97,7 @@ export class InputKontrakService {
     ]);
 
     return {
-      data,
+      data: data.map((d) => this.withHolders(d)),
       pagination: {
         currentPage: page,
         perPage: limit,
@@ -78,7 +108,10 @@ export class InputKontrakService {
   }
 
   async getById(id: string) {
-    return this.prisma.kontrakManajemen.findUnique({ where: { id } });
+     const doc = await this.prisma.kontrakManajemen.findUnique({
+       where: { id },
+     });
+     return doc ? this.withHolders(doc) : null;
   }
 
   // Registri KM yang sudah DISETUJUI penuh (final oleh GM).
@@ -109,10 +142,11 @@ export class InputKontrakService {
     };
 
     if (!currentPage && !perPage) {
-      return this.prisma.kontrakManajemen.findMany({
+      const docs = await this.prisma.kontrakManajemen.findMany({
         where,
         orderBy: [{ unitCode: "asc" }, { reviewedAt: "desc" }],
       });
+      return docs.map((d) => this.withHolders(d));
     }
 
     const page = currentPage ?? 1;
@@ -129,7 +163,7 @@ export class InputKontrakService {
     ]);
 
     return {
-      data,
+      data: data.map((d) => this.withHolders(d)),
       pagination: {
         currentPage: page,
         perPage: limit,
@@ -856,6 +890,7 @@ export class InputKontrakService {
         status: c.status,
         submitter: c.submitter,
         holder: c.holder,
+        holders: this.extractHolders(c.kpiItems, c.holder),
         history: c.history,
         kpiItems: (Array.isArray(c.kpiItems)
           ? (c.kpiItems as Record<string, unknown>[])

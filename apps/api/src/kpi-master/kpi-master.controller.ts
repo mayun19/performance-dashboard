@@ -86,6 +86,24 @@ class ConsolidationReviewDto {
   @IsOptional() @IsString() periodId?: string;
 }
 
+class OtherAssignmentPersenDto {
+  @IsString() id!: string;
+  @IsNumber() persenAgregasi!: number;
+}
+
+// Patch sempit utk reviseRejectedAssignment() — lihat catatan pembatasan field di service.
+class ReviseRejectedAssignmentDto {
+  @IsOptional() @IsString() holder?: string;
+  @IsOptional() @IsString() target?: string;
+  @IsOptional() @IsString() target2?: string;
+  @IsOptional() @IsNumber() persenAgregasi?: number;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OtherAssignmentPersenDto)
+  otherAssignments?: OtherAssignmentPersenDto[];
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("kpi-master")
 export class KpiMasterController {
@@ -148,6 +166,17 @@ export class KpiMasterController {
   @Post("save")
   save(@CurrentUser() user: User, @Body() dto: SaveMasterDto) {
     return this.svc.save(user, dto);
+  }
+
+  // Revisi cepat 1 assignment yang dokumen KM-nya baru saja ditolak — lihat catatan
+  // pembeda dgn save() di KpiMasterService.reviseRejectedAssignment().
+  @Post("assignment/:assignmentId/revise-rejected")
+  reviseRejectedAssignment(
+    @CurrentUser() user: User,
+    @Param("assignmentId") assignmentId: string,
+    @Body() dto: ReviseRejectedAssignmentDto,
+  ) {
+    return this.svc.reviseRejectedAssignment(user, assignmentId, dto);
   }
 
   @Delete(":id")

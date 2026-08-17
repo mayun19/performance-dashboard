@@ -262,6 +262,9 @@ const ACTION_LABEL: Record<string, string> = {
   approved: "Disetujui",
   returned: "Dikembalikan ke konseptor",
   returned_step: "Dikembalikan 1 tahap",
+  revised_item_after_reject: "Indikator KPI direvisi (sebagian)",
+  revised_after_reject:
+    "Seluruh Indikator KPI direvisi — dikembalikan ke Draft",
 };
 function ApprovalTimeline({ history }: { history: unknown }) {
   const entries = Array.isArray(history) ? (history as HistEntry[]) : [];

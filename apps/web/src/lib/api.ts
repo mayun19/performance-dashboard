@@ -1,5 +1,5 @@
 import axios from "axios";
-import { KontrakManajemen } from "./types";
+import { KontrakManajemen, ReviseRejectedAssignmentInput, ReviseRejectedAssignmentResult } from "./types";
 
 const api = axios.create({
   baseURL: "/api",
@@ -410,6 +410,13 @@ export const kpiMaster = {
     subIndicators?: SubIndicatorInput[];
     polaritas?: "positive" | "negative";
   }) => api.post("/kpi-master/save", dto).then((r) => r.data),
+  reviseRejectedAssignment: (
+    assignmentId: string,
+    patch: ReviseRejectedAssignmentInput,
+  ) =>
+    api
+      .post(`/kpi-master/assignment/${assignmentId}/revise-rejected`, patch)
+      .then((r) => r.data as ReviseRejectedAssignmentResult),
   delete: (id: string) => api.delete(`/kpi-master/${id}`).then((r) => r.data),
   rollup: (id: string, periodId?: string) =>
     api

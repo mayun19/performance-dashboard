@@ -1,3 +1,5 @@
+import { ReviewerSlots, SubIndicatorTargetOverride } from "./api";
+
 export type Role =
   | "STAFF"
   | "ASMAN"
@@ -253,6 +255,7 @@ export interface KontrakManajemenItem {
   unitCode: string;
   bidang: string;
   holder: string;
+  holders: string[];
   kpiItems: Record<string, unknown>[];
   status: "draft" | "submitted" | "ready" | "approved" | "rejected";
   kmType: "draft" | "final";
@@ -266,6 +269,45 @@ export interface KontrakManajemenItem {
   submittedAt: string;
   updatedAt: string;
 }
+
+export interface ReviseRejectedAssignmentInput {
+  holder?: string;
+  target?: string;
+  target2?: string;
+  persenAgregasi?: number;
+  otherAssignments?: Array<{ id: string; persenAgregasi: number }>;
+}
+
+export interface ReviseRejectedAssignmentResult {
+  assignment: {
+    id: string;
+    holder: string;
+    target: string;
+    target2: string;
+    persenAgregasi: number;
+  };
+  otherAssignments: Array<{
+    id: string;
+    persenAgregasi: number;
+  }>;
+  document: { id: string; status: string };
+  allItemsRevised: boolean;
+  revisedCount: number;
+  totalItems: number;
+}
+
+export type Assignment = {
+  id?: string; // present only when loaded from an existing KpiAssignment (edit mode)
+  status?: string; // carried read-only from backend — drives the inline "Revisi" affordance
+  unitCode: string;
+  bidang: string[];
+  holder: string;
+  target: string;
+  target2: string;
+  persenAgregasi: number;
+  reviewerSlots: ReviewerSlots | null;
+  subIndicatorTargets: SubIndicatorTargetOverride[] | null;
+};
 
 export interface PaginationPropsList {
   currentPage: number;
