@@ -188,7 +188,7 @@ export class InputKontrakService {
     }
     return this.prisma.kontrakManajemen.findMany({
       where: {
-        status: { in: ["submitted", "ready", "approved"] },
+        status: "approved",
         ...(unitCode ? { unitCode } : {}),
         ...(periodIdsInYear ? { periodId: { in: periodIdsInYear } } : {}),
         ...(kmType ? { kmType } : {}),
