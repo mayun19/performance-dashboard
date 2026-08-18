@@ -774,7 +774,9 @@ export function InputRealisasiPage() {
                   <tr>
                     <th>No</th>
                     <th>Bidang</th>
-                    <th>Indikator</th>
+                    <th style={{ width: 390 }}>
+                      Indikator
+                    </th>
                     <th>Formula</th>
                     <th>Satuan</th>
                     <th className="num">Bobot</th>
@@ -795,6 +797,7 @@ export function InputRealisasiPage() {
                 </thead>
                 <tbody>
                   {kpiList.map((kpi, i) => {
+                    console.log("data kpi", kpi);
                     const isComposite =
                       !!kpi.subIndicators && kpi.subIndicators.length > 0;
                     const hasVal = isItemFilled(kpi, i);
@@ -817,7 +820,7 @@ export function InputRealisasiPage() {
                             }}>
                             {kpi.bidang ?? "—"}
                           </td>
-                          <td style={{ maxWidth: 220, fontWeight: 500 }}>
+                          <td style={{ minWidth: 260, fontWeight: 500 }}>
                             {kpi.indikator ?? "—"}
                             {isComposite && (
                               <span
@@ -839,7 +842,7 @@ export function InputRealisasiPage() {
                             style={{
                               fontSize: 14,
                               color: "var(--color-text-muted)",
-                              maxWidth: 200,
+                              minWidth: 260,
                             }}>
                             {kpi.formula ?? "—"}
                           </td>
@@ -847,8 +850,9 @@ export function InputRealisasiPage() {
                             style={{
                               color: "var(--color-text-muted)",
                               whiteSpace: "nowrap",
-                            }}>
-                            {kpi.satuan ?? "—"}
+                            }}
+                            className="num">
+                            {kpi.satuan || "—"}
                           </td>
                           <td
                             className="num"
@@ -859,10 +863,10 @@ export function InputRealisasiPage() {
                             {kpi.bobot ?? "—"}
                           </td>
                           <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target ?? "—")}
+                            {isComposite ? "— (per sub)" : (kpi.target || "—")}
                           </td>
                           <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target2 ?? "—")}
+                            {isComposite ? "— (per sub)" : (kpi.target2 || "—")}
                           </td>
                           {anyLivingTarget && (
                             <td
