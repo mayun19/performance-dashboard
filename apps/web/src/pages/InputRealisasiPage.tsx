@@ -774,9 +774,7 @@ export function InputRealisasiPage() {
                   <tr>
                     <th>No</th>
                     <th>Bidang</th>
-                    <th style={{ width: 390 }}>
-                      Indikator
-                    </th>
+                    <th style={{ width: 390 }}>Indikator</th>
                     <th>Formula</th>
                     <th>Satuan</th>
                     <th className="num">Bobot</th>
@@ -797,7 +795,6 @@ export function InputRealisasiPage() {
                 </thead>
                 <tbody>
                   {kpiList.map((kpi, i) => {
-                    console.log("data kpi", kpi);
                     const isComposite =
                       !!kpi.subIndicators && kpi.subIndicators.length > 0;
                     const hasVal = isItemFilled(kpi, i);
@@ -863,10 +860,10 @@ export function InputRealisasiPage() {
                             {kpi.bobot ?? "—"}
                           </td>
                           <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target || "—")}
+                            {isComposite ? "— (per sub)" : kpi.target || "—"}
                           </td>
                           <td className="num">
-                            {isComposite ? "— (per sub)" : (kpi.target2 || "—")}
+                            {isComposite ? "— (per sub)" : kpi.target2 || "—"}
                           </td>
                           {anyLivingTarget && (
                             <td
