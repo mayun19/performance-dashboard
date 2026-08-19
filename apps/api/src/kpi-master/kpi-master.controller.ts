@@ -88,15 +88,35 @@ class ConsolidationReviewDto {
 
 class OtherAssignmentPersenDto {
   @IsString() id!: string;
-  @IsNumber() persenAgregasi!: number;
-}
-
-// Patch sempit utk reviseRejectedAssignment() — lihat catatan pembatasan field di service.
-class ReviseRejectedAssignmentDto {
   @IsOptional() @IsString() holder?: string;
   @IsOptional() @IsString() target?: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsNumber() persenAgregasi?: number;
+}
+
+// Patch sempit utk reviseRejectedAssignment() — lihat catatan pembatasan field di service.
+class ReviseRejectedAssignmentDto {
+  // Field assignment UTAMA (holder/target/target2/persenAgregasi) 
+  @IsOptional() @IsString() holder?: string;
+  @IsOptional() @IsString() target?: string;
+  @IsOptional() @IsString() target2?: string;
+  @IsOptional() @IsNumber() persenAgregasi?: number;
+
+  // Field definisi KpiMaster (SHARED lintas semua assignment KPI ini)
+  @IsOptional() @IsString() indikator?: string;
+  @IsOptional() @IsString() formula?: string;
+  @IsOptional() @IsString() satuan?: string;
+  @IsOptional() @IsString() bobotKm?: string;
+  @IsOptional() @IsString() targetParent?: string;
+  @IsOptional() @IsIn(["positive", "negative"]) polaritas?:
+    | "positive"
+    | "negative";
+  @IsOptional() @IsIn(["weighted", "sum"]) aggregationMethod?:
+    | "weighted"
+    | "sum";
+  @IsOptional() @IsIn(["draft", "final"]) kmType?: string;
+
+  // Assignment lain (unit/bidang lain) pada KPI Master yang sama, direvisi sekaligus -----
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

@@ -555,9 +555,12 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   // satu — dihitung dari total bidang, bukan jumlah baris, krn 1 baris bisa punya banyak bidang.
   const totalBidangCount = assignments.reduce((s, a) => s + a.bidang.length, 0);
   const isSingleAssignment = totalBidangCount === 1;
+
   const totalPersenForm = isSingleAssignment
     ? 100
-    : assignments.reduce((s, a) => s + (a.persenAgregasi || 0), 0);
+    : Math.round(
+        assignments.reduce((s, a) => s + (a.persenAgregasi || 0), 0) * 100,
+      ) / 100;
   const anyPersenSet =
     isSingleAssignment || assignments.some((a) => (a.persenAgregasi || 0) > 0);
 
@@ -796,59 +799,89 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
     setFormError(null);
     setReviseBusyIndex(i);
     try {
-      const otherAssignments =
-        aggregationMethod === "weighted" && !isSingleAssignment
-          ? assignments
-              .filter((row, idx) => idx !== i && !!row.id)
-              .map((row) => ({
-                id: row.id as string,
-                persenAgregasi: row.persenAgregasi,
-              }))
-          : undefined;
+      // otherAssignments: SEMUA baris lain yang punya id (rejected), bukan hanya diperlukan
+      // untuk rebalancing bobot — kirim target/target2/holder/persenAgregasi tiap baris agar
+      // NILAI-nya juga ikut direvisi, bukan cuma persenAgregasi.
+      const otherAssignments = assignments
+        .filter(
+          (row, idx) => idx !== i && !!row.id && row.status === "rejected",
+        )
+        .map((row) => ({
+          id: row.id as string,
+          holder: row.holder,
+          target: row.target,
+          target2: row.target2,
+          ...(aggregationMethod === "weighted" && !isSingleAssignment
+            ? { persenAgregasi: row.persenAgregasi }
+            : {}),
+        }));
 
+      // Field definisi KPI Master (SHARED lintas semua assignment) — hanya kirim yang memang
+      // berubah dari nilai server terakhir supaya history/audit log tetap bersih (opsional,
+      // service juga aman menerima nilai sama — hanya jadi no-op di sana).
       const patch: ReviseRejectedAssignmentInput = {
         holder: a.holder,
         target: a.target,
         target2: a.target2,
         persenAgregasi: a.persenAgregasi,
-        otherAssignments,
+        otherAssignments:
+          otherAssignments.length > 0 ? otherAssignments : undefined,
+        indikator,
+        formula,
+        satuan,
+        bobotKm,
+        targetParent,
+        polaritas,
+        aggregationMethod,
+        kmType,
       };
       const result = await kpiMaster.reviseRejectedAssignment(a.id, patch);
-      // Reflect server-confirmed values back into the row & flip its badge to draft —
-      // matches what reviseRejectedAssignment() actually persisted server-side.
+
+      // Reflect server-confirmed values back into every row that was part of this revise
+      // (main + otherAssignments) — result.results has one entry per assignment revised.
       setAssignments((prev) =>
-        prev.map((row, idx) => {
-          if (idx === i) {
-            return {
-              ...row,
-              holder: result.assignment.holder,
-              target: result.assignment.target,
-              target2: result.assignment.target2,
-              persenAgregasi: result.assignment.persenAgregasi,
-              status: result.allItemsRevised ? "draft" : "rejected",
-            };
-          }
-          // Reflect server-confirmed rebalanced value for any other row that was patched.
-          const updatedOther = result.otherAssignments.find(
-            (o) => o.id === row.id,
-          );
-          return updatedOther
-            ? { ...row, persenAgregasi: updatedOther.persenAgregasi }
-            : row;
+        prev.map((row) => {
+          const matched = result.results.find((r) => r.assignmentId === row.id);
+          if (!matched) return row;
+          const patchedInput =
+            row.id === a.id
+              ? patch
+              : otherAssignments.find((o) => o.id === row.id);
+          return {
+            ...row,
+            holder: patchedInput?.holder ?? row.holder,
+            target: patchedInput?.target ?? row.target,
+            target2: patchedInput?.target2 ?? row.target2,
+            persenAgregasi: patchedInput?.persenAgregasi ?? row.persenAgregasi,
+            status: matched.allItemsRevised ? "draft" : "rejected",
+          };
         }),
       );
+
+      // Reflect server-confirmed master definition (indikator bisa berubah, dst.) — sinkronkan
+      // state form dgn nilai final yang disimpan server.
+      setIndikator(result.master.indikator);
+      setFormula(result.master.formula);
+      setSatuan(result.master.satuan);
+      setBobotKm(result.master.bobotKm);
+      setTargetParent(result.master.targetParent);
+      setPolaritas(result.master.polaritas as "positive" | "negative");
+      setAggregationMethod(
+        result.master.aggregationMethod as "weighted" | "sum",
+      );
+
       resetForm();
-      load(); // resync KPI Master list (status pills, reviewNote, etc.)
-      if (result.allItemsRevised) {
-        // Seluruh item dokumen sudah direvisi — dokumen kembali draft, saatnya arahkan ke
+      load();
+      if (result.allDone) {
+        // Seluruh dokumen yang direvisi di aksi ini sudah kembali draft — saatnya arahkan ke
         // Dokumen KM untuk dikirim ulang.
         setContinuePrompt(true);
       } else {
-        // Masih ada item lain pada dokumen yang sama yang belum direvisi — beri tahu progres
-        // alih-alih menyarankan langkah lanjutan yang belum relevan.
+        const pending = result.results.filter((r) => !r.allItemsRevised);
         setFormError(
-          `Item ini sudah direvisi (${result.revisedCount}/${result.totalItems} item pada dokumen ini). ` +
-            `Revisi indikator KPI lain yang berstatus "Dikembalikan" pada unit/bidang yang sama sebelum dokumen dapat dikirim ulang.`,
+          `Sebagian dokumen sudah direvisi. Masih ada ${pending.length} dokumen ` +
+            `(${pending.map((r) => `${r.unitCode} — ${r.bidang}`).join(", ")}) ` +
+            `yang menunggu revisi indikator KPI lain sebelum dapat dikirim ulang.`,
         );
       }
     } catch (e) {

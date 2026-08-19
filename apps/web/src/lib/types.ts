@@ -270,30 +270,50 @@ export interface KontrakManajemenItem {
   updatedAt: string;
 }
 
-export interface ReviseRejectedAssignmentInput {
+export interface ReviseAssignmentPatch {
   holder?: string;
   target?: string;
   target2?: string;
   persenAgregasi?: number;
-  otherAssignments?: Array<{ id: string; persenAgregasi: number }>;
+}
+
+export interface ReviseRejectedAssignmentInput extends ReviseAssignmentPatch {
+  indikator?: string;
+  formula?: string;
+  satuan?: string;
+  bobotKm?: string;
+  targetParent?: string;
+  polaritas?: "positive" | "negative";
+  aggregationMethod?: "weighted" | "sum";
+  kmType?: string;
+  otherAssignments?: Array<{ id: string } & ReviseAssignmentPatch>;
 }
 
 export interface ReviseRejectedAssignmentResult {
-  assignment: {
-    id: string;
-    holder: string;
-    target: string;
-    target2: string;
-    persenAgregasi: number;
-  };
-  otherAssignments: Array<{
-    id: string;
-    persenAgregasi: number;
+  results: Array<{
+    assignmentId: string;
+    unitCode: string;
+    bidang: string;
+    document: {
+      id: string;
+      status: string;
+      [key: string]: unknown;
+    };
+    allItemsRevised: boolean;
+    revisedCount: number;
+    totalItems: number;
   }>;
-  document: { id: string; status: string };
-  allItemsRevised: boolean;
-  revisedCount: number;
-  totalItems: number;
+  allDone: boolean;
+  master: {
+    indikator: string;
+    formula: string;
+    satuan: string;
+    polaritas: string;
+    bobotKm: string;
+    targetParent: string;
+    aggregationMethod: string;
+  };
+  syncedDocsCount: number;
 }
 
 export type Assignment = {
