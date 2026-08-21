@@ -33,6 +33,7 @@ export class ApprovalsController {
     @Query("type") type: "all" | "km" | "real" = "all",
     @Query("status") status?: string,
     @Query("periodId") periodId?: string,
+    @Query("kmType") kmType?: string,
     @Query("currentPage") currentPage?: string,
     @Query("perPage") perPage?: string,
   ) {
@@ -41,6 +42,7 @@ export class ApprovalsController {
       type,
       status,
       periodId,
+      kmType,
       currentPage ? Number(currentPage) : undefined,
       perPage ? Number(perPage) : undefined,
     );

@@ -750,6 +750,7 @@ export function ApprovalsPage() {
   >(null);
   // Draft dan Final adalah dua bundle KM independen — tab ini menentukan mana yang ditinjau GM.
   const [kmBundleType, setKmBundleType] = useState<"draft" | "final">("draft");
+  const [trackerKmType, setTrackerKmType] = useState<string>("all");
   const [filteredDocRows, setFilteredDocRows] = useState<DocRow[]>([]);
   const [docKpiExpanded, setDocKpiExpanded] = useState<string | null>(null);
   const [subIndicatorsExpanded, setSubIndicatorsExpanded] = useState<
@@ -837,6 +838,7 @@ export function ApprovalsPage() {
         type: trackerType,
         status: trackerStatus,
         periodId: trackerPeriod,
+        kmType: trackerKmType,
         currentPage: docPage,
         perPage: 10,
       })
@@ -845,8 +847,11 @@ export function ApprovalsPage() {
         setDocPagination(res.pagination);
       })
       .catch(() => {});
-  }, [trackerType, trackerStatus, trackerPeriod, docPage]);
-  useEffect(() => setDocPage(1), [trackerType, trackerStatus, trackerPeriod]);
+  }, [trackerType, trackerStatus, trackerPeriod, trackerKmType, docPage]);
+  useEffect(
+    () => setDocPage(1),
+    [trackerType, trackerStatus, trackerPeriod, trackerKmType],
+  );
 
   // Package berstatus 'target_fix' (menunggu koreksi target PIC REN) — SEMUA periode, bukan
   // hanya periode yang sedang dipilih di navbar (finding: koreksi Januari harus tetap tampil
@@ -2162,6 +2167,8 @@ export function ApprovalsPage() {
     ...kmList.map((k): QueueEntry => ({ kind: "km", data: k })),
     ...realList.map((r): QueueEntry => ({ kind: "real", data: r })),
   ].sort((a, b) => slaOf(a) - slaOf(b));
+
+  const showKmType = trackerType === "all" || trackerType === "km";
 
   return (
     <div className="page approvals-page">
@@ -4317,6 +4324,17 @@ export function ApprovalsPage() {
                 </option>
               ))}
             </select>
+            {showKmType && (
+              <select
+                className="form-input form-input-sm"
+                value={trackerKmType}
+                onChange={(e) => setTrackerKmType(e.target.value)}>
+                <option value="all">Semua tipe KM</option>
+                <option value="draft">KM Draft</option>
+                <option value="final">KM Final</option>
+              </select>
+            )}
+
             <select
               className="form-input form-input-sm"
               value={trackerPeriod}
@@ -4375,6 +4393,7 @@ export function ApprovalsPage() {
                     Unit
                   </th>
                   <th>Jenis Dokumen</th>
+                  {showKmType && <th className="num">Tipe KM</th>}
                   <th>Periode</th>
                   <th>Jenjang</th>
                   <th>Status</th>
@@ -4416,6 +4435,7 @@ export function ApprovalsPage() {
                         </td>
                         <td>
                           {d.jenis}
+
                           {d.detail ? (
                             <span style={{ color: "var(--color-text-muted)" }}>
                               {" "}
@@ -4423,6 +4443,18 @@ export function ApprovalsPage() {
                             </span>
                           ) : null}
                         </td>
+                        {showKmType && (
+                          <td className="num">
+                            {d.kmType && (
+                              <span
+                                className={`status-pill ${d.kmType === "final" ? "completed" : "at-risk"}`}
+                                style={{ marginLeft: 6 }}>
+                                {d.kmType === "final" ? "Final" : "Draft"}
+                              </span>
+                            )}
+                          </td>
+                        )}
+
                         <td
                           style={{
                             color: "var(--color-text-muted)",
@@ -4622,7 +4654,6 @@ export function ApprovalsPage() {
                                                       <th className="num">
                                                         Target Tahun $
                                                         {new Date().getFullYear()}
-                                                        
                                                       </th>
                                                     </tr>
                                                   </thead>

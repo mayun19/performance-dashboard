@@ -372,6 +372,7 @@ export interface DocRow {
   stepLabel: string;
   stepIndex: number;
   stepCount: number;
+  kmType?: "draft" | "final" | null;
   kpiItems?: Record<string, unknown>[];
 }
 

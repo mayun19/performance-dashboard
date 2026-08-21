@@ -39,6 +39,7 @@ export interface DocRow {
   stepCount: number;
   kpiItems?: Record<string, unknown>[];
   submittedAt?: Date;
+  kmType?: "draft" | "final" | null;
 }
 
 export interface PaginatedDocRows {
@@ -212,6 +213,7 @@ export class ApprovalsService {
     type: "all" | "km" | "real" = "all",
     status?: string,
     periodId?: string,
+    kmType?: string,
     currentPage?: number,
     perPage?: number,
   ): Promise<DocRow[] | PaginatedDocRows> {
@@ -219,12 +221,20 @@ export class ApprovalsService {
     const bidangFilter = scopeAll ? {} : { bidang: user.bidang as string };
     const statusFilter = status && status !== "all" ? { status } : {};
     const periodFilter = periodId && periodId !== "all" ? { periodId } : {};
+    // kmType filter hanya berlaku bermakna utk dokumen KM (Realisasi tak punya field ini) — bila
+    // type==="real", filter ini otomatis tak berefek karena kmRows di-skip sepenuhnya.
+    const kmTypeFilter = kmType && kmType !== "all" ? { kmType } : {};
 
     const [kmRows, realRows] = await Promise.all([
       type === "real"
         ? Promise.resolve([])
         : this.prisma.kontrakManajemen.findMany({
-            where: { ...bidangFilter, ...statusFilter, ...periodFilter },
+            where: {
+              ...bidangFilter,
+              ...statusFilter,
+              ...periodFilter,
+              ...kmTypeFilter,
+            },
             orderBy: { submittedAt: "desc" },
           }),
       type === "km"
@@ -245,9 +255,11 @@ export class ApprovalsService {
         status: k.status,
         reviewer: k.reviewer,
         history: k.history,
+        kmType: (k.kmType as "draft" | "final") ?? null,
         ...this.stepInfo(
           k as unknown as { steps?: unknown; currentStepIndex?: number },
         ),
+
         kpiItems: Array.isArray(k.kpiItems)
           ? (k.kpiItems as Record<string, unknown>[])
           : [],
@@ -271,6 +283,7 @@ export class ApprovalsService {
         status: r.status,
         reviewer: r.reviewer,
         history: r.history,
+        kmType: null,
         ...this.stepInfo(
           r as unknown as { steps?: unknown; currentStepIndex?: number },
         ),
