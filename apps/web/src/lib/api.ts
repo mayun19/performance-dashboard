@@ -128,6 +128,7 @@ export const approvals = {
     type?: string;
     status?: string;
     periodId?: string;
+    kmType?: string;
     currentPage?: number;
     perPage?: number;
   }) => api.get("/approvals/documents", { params }).then((r) => r.data),

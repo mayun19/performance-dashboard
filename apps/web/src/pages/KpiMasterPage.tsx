@@ -2133,11 +2133,23 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                     <th className="num">Bobot KM</th>
                     <th className="num">Assignment</th>
                     <th>Dibuat oleh</th>
-                    <th style={{ width: 90 }} />
+                    <th className="num" style={{ width: 90 }} />
                   </tr>
                 </thead>
                 <tbody>
                   {masters.data.map((m) => {
+                    const hasSubmittedOrApprovedAssignment = (
+                      assignments: Array<{ status?: string }>,
+                    ): boolean =>
+                      assignments.some(
+                        (a) =>
+                          a.status === "submitted" || a.status === "approved",
+                      );
+
+                    const result = hasSubmittedOrApprovedAssignment(
+                      m.assignments,
+                    );
+
                     const isCompositeIndikator =
                       m.subIndicators && m.subIndicators.length > 0;
                     return (
@@ -2232,22 +2244,25 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                             }}>
                             {m.createdBy}
                           </td>
-                          <td>
+                          <td className="num">
                             {canAuthor && (
-                              <div style={{ display: "flex", gap: 4 }}>
+                              <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
                                 <button
                                   className="btn btn-ghost btn-sm"
                                   onClick={() => handleEdit(m)}
                                   title="Edit">
                                   <Edit2 size={13} />
                                 </button>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => handleDelete(m.id)}
-                                  title="Hapus"
-                                  style={{ color: "var(--color-danger)" }}>
-                                  <Trash2 size={13} />
-                                </button>
+
+                                {!result && (
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => handleDelete(m.id)}
+                                    title="Hapus"
+                                    style={{ color: "var(--color-danger)" }}>
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
                               </div>
                             )}
                           </td>
