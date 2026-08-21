@@ -209,6 +209,7 @@ type AssignmentRow = Omit<Assignment, "bidang"> & {
   status: string;
   reviewer?: string;
   reviewNote?: string;
+  subIndicatorTargets?: string[];
 };
 type KpiMasterRowItem = {
   id: string;
@@ -382,6 +383,9 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   // turunan (Σ bobot sub), realisasi diisi per-sub belakangan di Input Realisasi.
   const [isComposite, setIsComposite] = useState(false);
   const [subIndicators, setSubIndicators] = useState<SubIndicatorInput[]>([]);
+  const [expandedSubIndicators, setexpandedSubIndicators] = useState<
+    number | null
+  >(null);
   const addSubIndicator = () =>
     setSubIndicators((prev) => [...prev, emptySubIndicator()]);
   const removeSubIndicator = (i: number) =>
@@ -1207,7 +1211,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                     className="form-input"
                     value="Per sub-indikator"
                     disabled
-                    title="KPI komposit — polaritas diatur per sub-indikator di tabel bawah"
+                    title="KPI komposit — polaritas diper sub-indikator di tabel bawah"
                   />
                 ) : (
                   <select
@@ -2146,6 +2150,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                       m.assignments,
                     );
 
+                    const isCompositeIndikator =
+                      m.subIndicators && m.subIndicators.length > 0;
                     return (
                       <Fragment key={m.id}>
                         <tr>
@@ -2166,7 +2172,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                 Σ SUM
                               </span>
                             )}
-                            {m.subIndicators && m.subIndicators.length > 0 && (
+                            {isComposite && (
                               <span
                                 style={{
                                   marginLeft: 6,
@@ -2177,8 +2183,8 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                   borderRadius: 4,
                                   padding: "1px 4px",
                                 }}
-                                title={`Komposit — ${m.subIndicators.length} sub-indikator`}>
-                                Komposit ({m.subIndicators.length})
+                                title={`Komposit — ${m.subIndicators?.length ?? 0} sub-indikator`}>
+                                Komposit ({m.subIndicators?.length ?? 0})
                               </span>
                             )}
                           </td>
@@ -2262,255 +2268,410 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                           </td>
                         </tr>
                         {expanded === m.id && (
-                          <tr>
-                            <td
-                              colSpan={8}
-                              style={{
-                                background: "var(--color-surface-2)",
-                                padding: 0,
-                              }}>
-                              <table
-                                className="data-table table-expanded"
-                                style={{ margin: 0 }}>
-                                <thead>
-                                  <tr>
-                                    <th>Unit</th>
-                                    <th>Bidang</th>
-                                    <th>PJ</th>
-                                    <th style={{ minWidth: 40, maxWidth: 400 }}>
-                                      Status
-                                    </th>
-                                    <th className="num">Target Sem I</th>
-                                    <th className="num">
-                                      Target {CURRENT_YEAR}
-                                    </th>
-                                    <th className="num">
-                                      {m.aggregationMethod === "sum"
-                                        ? "Metode"
-                                        : "Bobot Agregasi"}
-                                    </th>
-                                    <th style={{ width: 40 }}>Bulanan</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {m.assignments.map((a) => (
-                                    <tr key={a.id}>
-                                      <td style={{ fontWeight: 600 }}>
-                                        {UNIT_NAMES[a.unitCode] ?? a.unitCode}
-                                      </td>
-                                      <td style={{ fontSize: 13 }}>
-                                        {a.bidang}
-                                      </td>
-                                      <td
-                                        style={{
-                                          color: "var(--color-text-muted)",
-                                        }}>
-                                        {a.holder || "—"}
-                                      </td>
-                                      <td>
-                                        <span
-                                          className={`status-pill ${STATUS_PILL[a.status] ?? "in-review"}`}>
-                                          {STATUS_LABEL[a.status] ?? a.status}
-                                        </span>
-                                        {a.status === "submitted" &&
-                                          (() => {
-                                            const lbl =
-                                              a.reviewer ?? "tahap review";
-                                            return (
+                          <>
+                            {isCompositeIndikator && (
+                              <tr>
+                                <td
+                                  colSpan={8}
+                                  style={{
+                                    background: "var(--color-surface-2)",
+                                    padding: 0,
+                                  }}>
+                                  <table
+                                    className="data-table table-expanded"
+                                    style={{ margin: 0 }}>
+                                    <thead>
+                                      <tr>
+                                        <th>Nama Sub-Indikator</th>
+                                        <th>Formula / Cara Pengukuran</th>
+                                        <th>Satuan</th>
+                                        {aggregationMethod === "weighted" && (
+                                          <th>Polaritas</th>
+                                        )}
+                                        <th className="num">
+                                          {aggregationMethod === "sum"
+                                            ? "Max Penalti (poin)"
+                                            : "Bobot (poin)"}
+                                        </th>
+                                        <th>Target Sem I</th>
+                                        <th>Target {CURRENT_YEAR}</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {m.subIndicators?.map((a, i) => {
+                                        return (
+                                          <tr key={`sub${i}`}>
+                                            <td style={{ fontWeight: 600 }}>
+                                              {a.nama}
+                                            </td>
+                                            <td style={{ fontSize: 13 }}>
+                                              {a.formula}
+                                            </td>
+                                            <td
+                                              style={{
+                                                color:
+                                                  "var(--color-text-muted)",
+                                              }}>
+                                              {a.satuan || "—"}
+                                            </td>
+                                            <td>{a.polaritas}</td>
+                                            <td className="num">
+                                              {a.bobot || "—"}
+                                            </td>
+                                            <td className="num">
+                                              {a.target || "—"}
+                                            </td>
+                                            <td className="num">
+                                              {a.target2 || "—"}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
+                            )}
+                            <tr>
+                              <td
+                                colSpan={8}
+                                style={{
+                                  background: "var(--color-surface-2)",
+                                  padding: 0,
+                                }}>
+                                <table
+                                  className="data-table table-expanded"
+                                  style={{ margin: 0 }}>
+                                  <thead>
+                                    <tr>
+                                      <th>Unit</th>
+                                      <th>Bidang</th>
+                                      <th>PJ</th>
+                                      <th
+                                        style={{ minWidth: 40, maxWidth: 400 }}>
+                                        Status
+                                      </th>
+                                      <th className="num">Target Sem I</th>
+                                      <th className="num">
+                                        Target {CURRENT_YEAR}
+                                      </th>
+                                      <th className="num">
+                                        {m.aggregationMethod === "sum"
+                                          ? "Metode"
+                                          : "Bobot Agregasi"}
+                                      </th>
+                                      <th style={{ width: 40 }}>Bulanan</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {m.assignments.map((a, i) => (
+                                      <>
+                                        <tr key={a.id}>
+                                          <td style={{ fontWeight: 600 }}>
+                                            {UNIT_NAMES[a.unitCode] ??
+                                              a.unitCode}
+                                          </td>
+                                          <td style={{ fontSize: 13 }}>
+                                            {a.bidang}
+                                          </td>
+                                          <td
+                                            style={{
+                                              color: "var(--color-text-muted)",
+                                            }}>
+                                            {a.holder || "—"}
+                                          </td>
+                                          <td>
+                                            <span
+                                              className={`status-pill ${STATUS_PILL[a.status] ?? "in-review"}`}>
+                                              {STATUS_LABEL[a.status] ??
+                                                a.status}
+                                            </span>
+                                            {a.status === "submitted" &&
+                                              (() => {
+                                                const lbl =
+                                                  a.reviewer ?? "tahap review";
+                                                return (
+                                                  <div
+                                                    style={{
+                                                      fontSize: 12,
+                                                      color:
+                                                        "var(--color-text-muted)",
+                                                      marginTop: 4,
+                                                    }}>
+                                                    di {lbl}
+                                                  </div>
+                                                );
+                                              })()}
+                                            {a.status === "ready" && (
                                               <div
                                                 style={{
                                                   fontSize: 12,
-                                                  color:
-                                                    "var(--color-text-muted)",
+                                                  color: "var(--color-warning)",
                                                   marginTop: 4,
                                                 }}>
-                                                di {lbl}
+                                                lolos rantai → menunggu bundle
+                                                GM
                                               </div>
-                                            );
-                                          })()}
-                                        {a.status === "ready" && (
-                                          <div
-                                            style={{
-                                              fontSize: 12,
-                                              color: "var(--color-warning)",
-                                              marginTop: 4,
-                                            }}>
-                                            lolos rantai → menunggu bundle GM
-                                          </div>
-                                        )}
-                                        {a.status === "rejected" &&
-                                          a.reviewNote && (
-                                            <div
+                                            )}
+                                            {a.status === "rejected" &&
+                                              a.reviewNote && (
+                                                <div
+                                                  style={{
+                                                    fontSize: 12,
+                                                    color:
+                                                      "var(--color-danger)",
+                                                    marginTop: 4,
+                                                    maxWidth: 220,
+                                                  }}>
+                                                  {a.reviewNote}
+                                                </div>
+                                              )}
+                                          </td>
+                                          <td className="num">
+                                            {isCompositeIndikator ? (
+                                              <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() =>
+                                                  setexpandedSubIndicators(
+                                                    expandedSubIndicators === i
+                                                      ? null
+                                                      : i,
+                                                  )
+                                                }
+                                                title="Atur target tiap sub-indikator utk unit ini — kosong = warisi target template">
+                                                {a.subIndicatorTargets
+                                                  ?.length ?? 0}{" "}
+                                                sub
+                                                <ChevronDown
+                                                  size={12}
+                                                  style={{
+                                                    transform:
+                                                      expandedSubIndicators ===
+                                                      i
+                                                        ? "rotate(180deg)"
+                                                        : "none",
+                                                    transition: "transform .2s",
+                                                  }}
+                                                />
+                                              </button>
+                                            ) : (
+                                              a.target || "—"
+                                            )}
+                                          </td>
+                                          <td className="num">
+                                            {a.target2 || "—"}
+                                          </td>
+                                          <td className="num">
+                                            {m.aggregationMethod === "sum"
+                                              ? "SUM"
+                                              : a.persenAgregasi
+                                                ? `${a.persenAgregasi}%`
+                                                : "—"}
+                                          </td>
+                                          <td className="num">
+                                            <button
+                                              className="btn btn-ghost btn-sm"
+                                              title="Atur target 12 bulan"
+                                              onClick={() =>
+                                                setDisburseFor({
+                                                  assignment: a,
+                                                  indikator: m.indikator,
+                                                  satuan: m.satuan,
+                                                  unitLabel:
+                                                    UNIT_NAMES[a.unitCode] ??
+                                                    a.unitCode,
+                                                })
+                                              }>
+                                              <Calendar size={13} />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                        {expandedSubIndicators === i && (
+                                          <tr key={i}>
+                                            <td
+                                              colSpan={8}
                                               style={{
-                                                fontSize: 12,
-                                                color: "var(--color-danger)",
-                                                marginTop: 4,
-                                                maxWidth: 220,
+                                                background:
+                                                  "var(--color-surface-2)",
+                                                padding: 0,
                                               }}>
-                                              {a.reviewNote}
-                                            </div>
-                                          )}
-                                      </td>
-                                      <td className="num">{a.target || "—"}</td>
-                                      <td className="num">
-                                        {a.target2 || "—"}
-                                      </td>
-                                      <td className="num">
-                                        {m.aggregationMethod === "sum"
-                                          ? "SUM"
-                                          : a.persenAgregasi
-                                            ? `${a.persenAgregasi}%`
-                                            : "—"}
-                                      </td>
-                                      <td className="num">
-                                        <button
-                                          className="btn btn-ghost btn-sm"
-                                          title="Atur target 12 bulan"
-                                          onClick={() =>
-                                            setDisburseFor({
-                                              assignment: a,
-                                              indikator: m.indikator,
-                                              satuan: m.satuan,
-                                              unitLabel:
-                                                UNIT_NAMES[a.unitCode] ??
-                                                a.unitCode,
-                                            })
-                                          }>
-                                          <Calendar size={13} />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                              <table
+                                                className="data-table table-expanded"
+                                                style={{ margin: 0 }}>
+                                                <thead>
+                                                  <tr>
+                                                    <th>Sub-Indikator</th>
 
-                              {/* Rollup: nilai parent hasil agregasi realisasi children */}
-                              <div
-                                style={{
-                                  padding: "var(--space-3)",
-                                  borderTop: "1px solid var(--color-border)",
-                                }}>
+                                                    <th className="num">
+                                                      Target Sem I
+                                                    </th>
+                                                    <th className="num">
+                                                      Target {CURRENT_YEAR}
+                                                    </th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {a.subIndicatorTargets?.map(
+                                                    (sub, i) => {
+                                                      return (
+                                                        <tr key={i}>
+                                                          <td>
+                                                            ↳{" "}
+                                                            {m.subIndicators?.[
+                                                              i
+                                                            ]?.nama || "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.target || "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.target2 || "—"}
+                                                          </td>
+                                                        </tr>
+                                                      );
+                                                    },
+                                                  )}
+                                                </tbody>
+                                              </table>
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </>
+                                    ))}
+                                  </tbody>
+                                </table>
+
+                                {/* Rollup: nilai parent hasil agregasi realisasi children */}
                                 <div
                                   style={{
-                                    fontSize: "var(--text-xs)",
-                                    fontWeight: 700,
-                                    marginBottom: 6,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 6,
+                                    padding: "var(--space-3)",
+                                    borderTop: "1px solid var(--color-border)",
                                   }}>
-                                  <PieChart size={13} /> Rollup Nilai Parent
-                                </div>
-                                {rollupLoading === m.id ? (
-                                  <div
-                                    style={{
-                                      fontSize: "var(--text-sm)",
-                                      color: "var(--color-text-muted)",
-                                    }}>
-                                    Menghitung…
-                                  </div>
-                                ) : rollups[m.id] ? (
-                                  <>
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        gap: "var(--space-4)",
-                                        alignItems: "baseline",
-                                        marginBottom: 8,
-                                      }}>
-                                      <span
-                                        style={{
-                                          fontSize: "var(--text-xl)",
-                                          fontWeight: 800,
-                                          color: "var(--color-accent)",
-                                        }}>
-                                        {rollups[m.id].nilaiParent}
-                                      </span>
-                                      <span
-                                        style={{
-                                          fontSize: "var(--text-xs)",
-                                          color: "var(--color-text-muted)",
-                                        }}>
-                                        Target parent:{" "}
-                                        {rollups[m.id].targetParent || "—"} ·
-                                        Periode: {rollups[m.id].periodLabel} ·
-                                        Total bobot: {rollups[m.id].totalPersen}
-                                        %
-                                        {!rollups[m.id].isFullyConfigured && (
-                                          <span
-                                            style={{
-                                              color: "var(--color-warning)",
-                                            }}>
-                                            {" "}
-                                            (belum 100%)
-                                          </span>
-                                        )}
-                                      </span>
-                                    </div>
-                                    <div className="table-scroll table-expanded">
-                                      <table
-                                        className="data-table compact"
-                                        style={{ margin: 0 }}>
-                                        <thead>
-                                          <tr>
-                                            <th>Unit</th>
-                                            <th>Bidang</th>
-                                            <th className="num">Bobot</th>
-                                            <th className="num">Realisasi</th>
-                                            <th className="num">Kontribusi</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {rollups[m.id].breakdown.map(
-                                            (b, i) => (
-                                              <tr key={i}>
-                                                <td style={{ fontWeight: 600 }}>
-                                                  {UNIT_NAMES[b.unitCode] ??
-                                                    b.unitCode}
-                                                </td>
-                                                <td style={{ fontSize: 13 }}>
-                                                  {b.bidang}
-                                                </td>
-                                                <td className="num">
-                                                  {b.persenAgregasi}%
-                                                </td>
-                                                <td className="num">
-                                                  {b.hasData ? (
-                                                    b.realisasi
-                                                  ) : (
-                                                    <span
-                                                      style={{
-                                                        color:
-                                                          "var(--color-text-subtle)",
-                                                      }}>
-                                                      belum ada
-                                                    </span>
-                                                  )}
-                                                </td>
-                                                <td
-                                                  className="num"
-                                                  style={{ fontWeight: 700 }}>
-                                                  {b.kontribusi}
-                                                </td>
-                                              </tr>
-                                            ),
-                                          )}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </>
-                                ) : (
                                   <div
                                     style={{
                                       fontSize: "var(--text-xs)",
-                                      color: "var(--color-text-muted)",
+                                      fontWeight: 700,
+                                      marginBottom: 6,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 6,
                                     }}>
-                                    Rollup tidak tersedia.
+                                    <PieChart size={13} /> Rollup Nilai Parent
                                   </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
+                                  {rollupLoading === m.id ? (
+                                    <div
+                                      style={{
+                                        fontSize: "var(--text-sm)",
+                                        color: "var(--color-text-muted)",
+                                      }}>
+                                      Menghitung…
+                                    </div>
+                                  ) : rollups[m.id] ? (
+                                    <>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          gap: "var(--space-4)",
+                                          alignItems: "baseline",
+                                          marginBottom: 8,
+                                        }}>
+                                        <span
+                                          style={{
+                                            fontSize: "var(--text-xl)",
+                                            fontWeight: 800,
+                                            color: "var(--color-accent)",
+                                          }}>
+                                          {rollups[m.id].nilaiParent}
+                                        </span>
+                                        <span
+                                          style={{
+                                            fontSize: "var(--text-xs)",
+                                            color: "var(--color-text-muted)",
+                                          }}>
+                                          Target parent:{" "}
+                                          {rollups[m.id].targetParent || "—"} ·
+                                          Periode: {rollups[m.id].periodLabel} ·
+                                          Total bobot:{" "}
+                                          {rollups[m.id].totalPersen}%
+                                          {!rollups[m.id].isFullyConfigured && (
+                                            <span
+                                              style={{
+                                                color: "var(--color-warning)",
+                                              }}>
+                                              {" "}
+                                              (belum 100%)
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="table-scroll table-expanded">
+                                        <table
+                                          className="data-table compact"
+                                          style={{ margin: 0 }}>
+                                          <thead>
+                                            <tr>
+                                              <th>Unit</th>
+                                              <th>Bidang</th>
+                                              <th className="num">Bobot</th>
+                                              <th className="num">Realisasi</th>
+                                              <th className="num">
+                                                Kontribusi
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {rollups[m.id].breakdown.map(
+                                              (b, i) => (
+                                                <tr key={i}>
+                                                  <td
+                                                    style={{ fontWeight: 600 }}>
+                                                    {UNIT_NAMES[b.unitCode] ??
+                                                      b.unitCode}
+                                                  </td>
+                                                  <td style={{ fontSize: 13 }}>
+                                                    {b.bidang}
+                                                  </td>
+                                                  <td className="num">
+                                                    {b.persenAgregasi}%
+                                                  </td>
+                                                  <td className="num">
+                                                    {b.hasData ? (
+                                                      b.realisasi
+                                                    ) : (
+                                                      <span
+                                                        style={{
+                                                          color:
+                                                            "var(--color-text-subtle)",
+                                                        }}>
+                                                        belum ada
+                                                      </span>
+                                                    )}
+                                                  </td>
+                                                  <td
+                                                    className="num"
+                                                    style={{ fontWeight: 700 }}>
+                                                    {b.kontribusi}
+                                                  </td>
+                                                </tr>
+                                              ),
+                                            )}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div
+                                      style={{
+                                        fontSize: "var(--text-xs)",
+                                        color: "var(--color-text-muted)",
+                                      }}>
+                                      Rollup tidak tersedia.
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          </>
                         )}
                       </Fragment>
                     );
@@ -2590,6 +2751,9 @@ function DokumenKmTab() {
   const [notice, setNotice] = useState<string | null>(null);
   const [approvedExpanded, setApprovedExpanded] = useState<string | null>(null);
   const [draftExpanded, setDraftExpanded] = useState<string | null>(null);
+  const [expandedSubIndicators, setexpandedSubIndicators] = useState<
+    number | null
+  >(null);
 
   const [selectedUnit, setSelectedUnit] = useState("KP");
   const [submitTargetId, setSubmitTargetId] = useState<string | null>(null);
@@ -3189,18 +3353,121 @@ function DokumenKmTab() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {(k.kpiItems as Record<string, string>[]).map(
-                                  (it, idx) => (
-                                    <tr key={idx}>
-                                      <td>{idx + 1}</td>
-                                      <td>{it.indikator}</td>
-                                      <td>{it.formula}</td>
-                                      <td>{it.satuan}</td>
-                                      <td className="num">{it.bobot}</td>
-                                      <td>{it.target}</td>
-                                      <td>{it.target2}</td>
-                                    </tr>
-                                  ),
+                                {(k.kpiItems as Record<string, any>[]).map(
+                                  (it, idx) => {
+                                    const hasSubsIndicators =
+                                      Array.isArray(it.subIndicators) &&
+                                      it.subIndicators.length > 0;
+                                    const countSubs =
+                                      it.subIndicators?.length ?? 0;
+
+                                    return (
+                                      <Fragment key={idx}>
+                                        <tr>
+                                          <td>{idx + 1}</td>
+                                          <td>{it.indikator}</td>
+                                          <td>{it.formula || "-"}</td>
+                                          <td>{it.satuan || "-"}</td>
+                                          <td className="num">
+                                            {it.bobot || "-"}
+                                          </td>
+                                          <td>
+                                            {hasSubsIndicators ? (
+                                              <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() =>
+                                                  setexpandedSubIndicators(
+                                                    expandedSubIndicators ===
+                                                      idx
+                                                      ? null
+                                                      : idx,
+                                                  )
+                                                }
+                                                title="Lihat target tiap sub-indikator">
+                                                {countSubs} sub{" "}
+                                                <ChevronDown
+                                                  size={12}
+                                                  style={{
+                                                    transform:
+                                                      expandedSubIndicators ===
+                                                      idx
+                                                        ? "rotate(180deg)"
+                                                        : "none",
+                                                    transition: "transform .2s",
+                                                  }}
+                                                />
+                                              </button>
+                                            ) : (
+                                              it.target
+                                            )}
+                                          </td>
+                                          <td>{it.target2 || "-"}</td>
+                                        </tr>
+                                        {hasSubsIndicators &&
+                                          expandedSubIndicators === idx && (
+                                            <tr>
+                                              <td
+                                                colSpan={7}
+                                                style={{
+                                                  background:
+                                                    "var(--color-surface-2)",
+                                                  padding: 0,
+                                                }}>
+                                                <table
+                                                  className="data-table table-expanded"
+                                                  style={{ margin: 0 }}>
+                                                  <thead>
+                                                    <tr>
+                                                      <th>Sub-Indikator</th>
+                                                      <th>Formula</th>
+                                                      <th>Polaritas</th>
+                                                      <th>Satuan</th>
+
+                                                      <th className="num">
+                                                        Target Sem I
+                                                      </th>
+                                                      <th className="num">
+                                                        Target {CURRENT_YEAR}
+                                                      </th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {it.subIndicators.map(
+                                                      (sub: any, j: number) => (
+                                                        <tr key={j}>
+                                                          <td>
+                                                            ↳{" "}
+                                                            {sub.nama ||
+                                                              `Sub ${j + 1}`}
+                                                          </td>
+                                                          <td>
+                                                            {sub.formula || "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.polaritas ||
+                                                              "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.satuan || "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.target || "—"}
+                                                          </td>
+
+                                                          <td className="num">
+                                                            {sub.target2 || "—"}
+                                                          </td>
+                                                        </tr>
+                                                      ),
+                                                    )}
+                                                  </tbody>
+                                                </table>
+                                              </td>
+                                            </tr>
+                                          )}
+                                      </Fragment>
+                                    );
+                                  },
                                 )}
                               </tbody>
                             </table>
