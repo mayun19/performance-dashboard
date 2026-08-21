@@ -752,6 +752,9 @@ export function ApprovalsPage() {
   const [kmBundleType, setKmBundleType] = useState<"draft" | "final">("draft");
   const [filteredDocRows, setFilteredDocRows] = useState<DocRow[]>([]);
   const [docKpiExpanded, setDocKpiExpanded] = useState<string | null>(null);
+  const [subIndicatorsExpanded, setSubIndicatorsExpanded] = useState<
+    number | null
+  >(null);
   const [docPagination, setDocPagination] = useState<
     PaginatedDocRows["pagination"]
   >({ currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 });
@@ -3343,7 +3346,6 @@ export function ApprovalsPage() {
                       <tr>
                         <td
                           style={{
-                            
                             color: "var(--color-text-muted)",
                           }}>
                           {c.bidang}
@@ -3353,8 +3355,7 @@ export function ApprovalsPage() {
                         </td>
                         <td>
                           <span
-                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}
-                            >
+                            className={`status-pill ${c.status === "approved" ? "completed" : c.status === "ready" ? "at-risk" : "in-review"}`}>
                             {c.status === "ready"
                               ? "Siap (lolos SM RPC)"
                               : c.status === "approved"
@@ -4526,10 +4527,10 @@ export function ApprovalsPage() {
                                   <th>No</th>
                                   <th>Indikator Kinerja</th>
                                   <th>Formula</th>
-                                  <th>Satuan</th>
+                                  <th className="num">Satuan</th>
                                   <th className="num">Bobot</th>
-                                  <th>Target</th>
-                                  <th>
+                                  <th className="num">Target</th>
+                                  <th className="num">
                                     {d.jenis === "Kontrak Manajemen"
                                       ? `Target Tahun ${new Date().getFullYear()}`
                                       : "Realisasi"}
@@ -4540,22 +4541,126 @@ export function ApprovalsPage() {
                                 {(d.kpiItems as Record<string, unknown>[]).map(
                                   (it, idx) => {
                                     const itStr = it as Record<string, string>;
+                                    const subIndicators =
+                                      (it as { subIndicators?: unknown[] })
+                                        .subIndicators ?? [];
+                                    const hasSubIndicators =
+                                      subIndicators.length > 0;
+                                    const countSubsIndicator =
+                                      subIndicators.length;
                                     return (
-                                      <tr key={idx}>
-                                        <td>{idx + 1}</td>
-                                        <td>{itStr.indikator ?? "—"}</td>
-                                        <td>{itStr.formula ?? "—"}</td>
-                                        <td>{itStr.satuan ?? "—"}</td>
-                                        <td className="num">
-                                          {itStr.bobot ?? "—"}
-                                        </td>
-                                        <td>{itStr.target ?? "—"}</td>
-                                        <td>
-                                          {d.jenis === "Kontrak Manajemen"
-                                            ? (itStr.target2 ?? "—")
-                                            : (itStr.realisasi ?? "—")}
-                                        </td>
-                                      </tr>
+                                      <>
+                                        <tr key={idx}>
+                                          <td>{idx + 1}</td>
+                                          <td>{itStr.indikator || "—"}</td>
+                                          <td>{itStr.formula || "—"}</td>
+                                          <td className="num">
+                                            {itStr.satuan || "—"}
+                                          </td>
+                                          <td className="num">
+                                            {itStr.bobot || "—"}
+                                          </td>
+                                          <td className="num">
+                                            {hasSubIndicators ? (
+                                              <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() =>
+                                                  setSubIndicatorsExpanded(
+                                                    subIndicatorsExpanded ===
+                                                      idx
+                                                      ? null
+                                                      : idx,
+                                                  )
+                                                }
+                                                title="Lihat target tiap sub-indikator">
+                                                {countSubsIndicator} sub{" "}
+                                                <ChevronDown
+                                                  size={12}
+                                                  style={{
+                                                    transform:
+                                                      subIndicatorsExpanded ===
+                                                      idx
+                                                        ? "rotate(180deg)"
+                                                        : "none",
+                                                    transition: "transform .2s",
+                                                  }}
+                                                />
+                                              </button>
+                                            ) : (
+                                              itStr.target || "—"
+                                            )}
+                                          </td>
+                                          <td className="num">
+                                            {d.jenis === "Kontrak Manajemen"
+                                              ? itStr.target2 || "—"
+                                              : itStr.realisasi || "—"}
+                                          </td>
+                                        </tr>
+                                        {hasSubIndicators &&
+                                          subIndicatorsExpanded === idx && (
+                                            <tr>
+                                              <td
+                                                colSpan={7}
+                                                style={{
+                                                  background:
+                                                    "var(--color-surface-2)",
+                                                  padding: 0,
+                                                }}>
+                                                <table
+                                                  className="data-table table-expanded"
+                                                  style={{ margin: 0 }}>
+                                                  <thead>
+                                                    <tr>
+                                                      <th>Sub-Indikator</th>
+                                                      <th>Formula</th>
+                                                      <th>Polaritas</th>
+                                                      <th>Satuan</th>
+
+                                                      <th className="num">
+                                                        Target Sem I
+                                                      </th>
+                                                      <th className="num">
+                                                        Target Tahun $
+                                                        {new Date().getFullYear()}
+                                                        
+                                                      </th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {subIndicators.map(
+                                                      (sub: any, j: number) => (
+                                                        <tr key={j}>
+                                                          <td>
+                                                            ↳{" "}
+                                                            {sub.nama ||
+                                                              `Sub ${j + 1}`}
+                                                          </td>
+                                                          <td>
+                                                            {sub.formula || "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.polaritas ||
+                                                              "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.satuan || "—"}
+                                                          </td>
+                                                          <td className="num">
+                                                            {sub.target || "—"}
+                                                          </td>
+
+                                                          <td className="num">
+                                                            {sub.target2 || "—"}
+                                                          </td>
+                                                        </tr>
+                                                      ),
+                                                    )}
+                                                  </tbody>
+                                                </table>
+                                              </td>
+                                            </tr>
+                                          )}
+                                      </>
                                     );
                                   },
                                 )}
