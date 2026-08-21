@@ -2129,363 +2129,392 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                     <th className="num">Bobot KM</th>
                     <th className="num">Assignment</th>
                     <th>Dibuat oleh</th>
-                    <th style={{ width: 90 }} />
+                    <th className="num" style={{ width: 90 }} />
                   </tr>
                 </thead>
                 <tbody>
-                  {masters.data.map((m) => (
-                    <Fragment key={m.id}>
-                      <tr>
-                        <td style={{ fontWeight: 600 }}>
-                          {m.indikator}
-                          {m.aggregationMethod === "sum" && (
-                            <span
-                              style={{
-                                marginLeft: 6,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--color-text-muted)",
-                                border: "1px solid var(--color-border)",
-                                borderRadius: 4,
-                                padding: "1px 4px",
-                              }}
-                              title="Metode agregasi: SUM (jumlah polos)">
-                              Σ SUM
-                            </span>
-                          )}
-                          {m.subIndicators && m.subIndicators.length > 0 && (
-                            <span
-                              style={{
-                                marginLeft: 6,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "var(--color-accent)",
-                                border: "1px solid var(--color-accent)",
-                                borderRadius: 4,
-                                padding: "1px 4px",
-                              }}
-                              title={`Komposit — ${m.subIndicators.length} sub-indikator`}>
-                              Komposit ({m.subIndicators.length})
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <span
-                            className={`status-pill ${m.kmType === "final" ? "completed" : "at-risk"}`}>
-                            {m.kmType === "final" ? "Final" : "Draft"}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className={`status-pill ${m.isPending ? "in-review" : "completed"}`}
-                            style={{ fontSize: 12 }}
-                            title={`Berlaku mulai ${m.effectiveMonth}`}>
-                            v{m.version} ·{" "}
-                            {m.isPending
-                              ? `mulai ${m.effectiveMonth}`
-                              : "berlaku"}
-                          </span>
-                        </td>
-                        <td style={{ color: "var(--color-text-muted)" }}>
-                          {m.satuan || "—"}
-                        </td>
-                        <td
-                          className="num"
-                          style={{
-                            fontWeight: 700,
-                            color: "var(--color-accent)",
-                          }}>
-                          {m.bobotKm || "—"}
-                        </td>
-                        <td className="num">
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => {
-                              const willOpen = expanded !== m.id;
-                              setExpanded(willOpen ? m.id : null);
-                              if (willOpen && !rollups[m.id]) fetchRollup(m.id);
-                            }}>
-                            {m.assignments.length} unit{" "}
-                            <ChevronDown
-                              size={12}
-                              style={{
-                                transform:
-                                  expanded === m.id ? "rotate(180deg)" : "none",
-                                transition: "transform .2s",
-                              }}
-                            />
-                          </button>
-                        </td>
-                        <td
-                          style={{
-                            color: "var(--color-text-muted)",
-                          }}>
-                          {m.createdBy}
-                        </td>
-                        <td>
-                          {canAuthor && (
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => handleEdit(m)}
-                                title="Edit">
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => handleDelete(m.id)}
-                                title="Hapus"
-                                style={{ color: "var(--color-danger)" }}>
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                      {expanded === m.id && (
+                  {masters.data.map((m) => {
+                    const hasSubmittedOrApprovedAssignment = (
+                      assignments: Array<{ status?: string }>,
+                    ): boolean =>
+                      assignments.some(
+                        (a) =>
+                          a.status === "submitted" || a.status === "approved",
+                      );
+
+                    const result = hasSubmittedOrApprovedAssignment(
+                      m.assignments,
+                    );
+
+                    return (
+                      <Fragment key={m.id}>
                         <tr>
+                          <td style={{ fontWeight: 600 }}>
+                            {m.indikator}
+                            {m.aggregationMethod === "sum" && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: "var(--color-text-muted)",
+                                  border: "1px solid var(--color-border)",
+                                  borderRadius: 4,
+                                  padding: "1px 4px",
+                                }}
+                                title="Metode agregasi: SUM (jumlah polos)">
+                                Σ SUM
+                              </span>
+                            )}
+                            {m.subIndicators && m.subIndicators.length > 0 && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: "var(--color-accent)",
+                                  border: "1px solid var(--color-accent)",
+                                  borderRadius: 4,
+                                  padding: "1px 4px",
+                                }}
+                                title={`Komposit — ${m.subIndicators.length} sub-indikator`}>
+                                Komposit ({m.subIndicators.length})
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${m.kmType === "final" ? "completed" : "at-risk"}`}>
+                              {m.kmType === "final" ? "Final" : "Draft"}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${m.isPending ? "in-review" : "completed"}`}
+                              style={{ fontSize: 12 }}
+                              title={`Berlaku mulai ${m.effectiveMonth}`}>
+                              v{m.version} ·{" "}
+                              {m.isPending
+                                ? `mulai ${m.effectiveMonth}`
+                                : "berlaku"}
+                            </span>
+                          </td>
+                          <td style={{ color: "var(--color-text-muted)" }}>
+                            {m.satuan || "—"}
+                          </td>
                           <td
-                            colSpan={8}
+                            className="num"
                             style={{
-                              background: "var(--color-surface-2)",
-                              padding: 0,
+                              fontWeight: 700,
+                              color: "var(--color-accent)",
                             }}>
-                            <table
-                              className="data-table table-expanded"
-                              style={{ margin: 0 }}>
-                              <thead>
-                                <tr>
-                                  <th>Unit</th>
-                                  <th>Bidang</th>
-                                  <th>PJ</th>
-                                  <th style={{ minWidth: 40, maxWidth: 400 }}>
-                                    Status
-                                  </th>
-                                  <th className="num">Target Sem I</th>
-                                  <th className="num">Target {CURRENT_YEAR}</th>
-                                  <th className="num">
-                                    {m.aggregationMethod === "sum"
-                                      ? "Metode"
-                                      : "Bobot Agregasi"}
-                                  </th>
-                                  <th style={{ width: 40 }}>Bulanan</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {m.assignments.map((a) => (
-                                  <tr key={a.id}>
-                                    <td style={{ fontWeight: 600 }}>
-                                      {UNIT_NAMES[a.unitCode] ?? a.unitCode}
-                                    </td>
-                                    <td style={{ fontSize: 13 }}>{a.bidang}</td>
-                                    <td
-                                      style={{
-                                        color: "var(--color-text-muted)",
-                                      }}>
-                                      {a.holder || "—"}
-                                    </td>
-                                    <td>
-                                      <span
-                                        className={`status-pill ${STATUS_PILL[a.status] ?? "in-review"}`}>
-                                        {STATUS_LABEL[a.status] ?? a.status}
-                                      </span>
-                                      {a.status === "submitted" &&
-                                        (() => {
-                                          const lbl =
-                                            a.reviewer ?? "tahap review";
-                                          return (
-                                            <div
-                                              style={{
-                                                fontSize: 12,
-                                                color:
-                                                  "var(--color-text-muted)",
-                                                marginTop: 4,
-                                              }}>
-                                              di {lbl}
-                                            </div>
-                                          );
-                                        })()}
-                                      {a.status === "ready" && (
-                                        <div
-                                          style={{
-                                            fontSize: 12,
-                                            color: "var(--color-warning)",
-                                            marginTop: 4,
-                                          }}>
-                                          lolos rantai → menunggu bundle GM
-                                        </div>
-                                      )}
-                                      {a.status === "rejected" &&
-                                        a.reviewNote && (
+                            {m.bobotKm || "—"}
+                          </td>
+                          <td className="num">
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                const willOpen = expanded !== m.id;
+                                setExpanded(willOpen ? m.id : null);
+                                if (willOpen && !rollups[m.id])
+                                  fetchRollup(m.id);
+                              }}>
+                              {m.assignments.length} unit{" "}
+                              <ChevronDown
+                                size={12}
+                                style={{
+                                  transform:
+                                    expanded === m.id
+                                      ? "rotate(180deg)"
+                                      : "none",
+                                  transition: "transform .2s",
+                                }}
+                              />
+                            </button>
+                          </td>
+                          <td
+                            style={{
+                              color: "var(--color-text-muted)",
+                            }}>
+                            {m.createdBy}
+                          </td>
+                          <td className="num">
+                            {canAuthor && (
+                              <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => handleEdit(m)}
+                                  title="Edit">
+                                  <Edit2 size={13} />
+                                </button>
+
+                                {!result && (
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => handleDelete(m.id)}
+                                    title="Hapus"
+                                    style={{ color: "var(--color-danger)" }}>
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                        {expanded === m.id && (
+                          <tr>
+                            <td
+                              colSpan={8}
+                              style={{
+                                background: "var(--color-surface-2)",
+                                padding: 0,
+                              }}>
+                              <table
+                                className="data-table table-expanded"
+                                style={{ margin: 0 }}>
+                                <thead>
+                                  <tr>
+                                    <th>Unit</th>
+                                    <th>Bidang</th>
+                                    <th>PJ</th>
+                                    <th style={{ minWidth: 40, maxWidth: 400 }}>
+                                      Status
+                                    </th>
+                                    <th className="num">Target Sem I</th>
+                                    <th className="num">
+                                      Target {CURRENT_YEAR}
+                                    </th>
+                                    <th className="num">
+                                      {m.aggregationMethod === "sum"
+                                        ? "Metode"
+                                        : "Bobot Agregasi"}
+                                    </th>
+                                    <th style={{ width: 40 }}>Bulanan</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {m.assignments.map((a) => (
+                                    <tr key={a.id}>
+                                      <td style={{ fontWeight: 600 }}>
+                                        {UNIT_NAMES[a.unitCode] ?? a.unitCode}
+                                      </td>
+                                      <td style={{ fontSize: 13 }}>
+                                        {a.bidang}
+                                      </td>
+                                      <td
+                                        style={{
+                                          color: "var(--color-text-muted)",
+                                        }}>
+                                        {a.holder || "—"}
+                                      </td>
+                                      <td>
+                                        <span
+                                          className={`status-pill ${STATUS_PILL[a.status] ?? "in-review"}`}>
+                                          {STATUS_LABEL[a.status] ?? a.status}
+                                        </span>
+                                        {a.status === "submitted" &&
+                                          (() => {
+                                            const lbl =
+                                              a.reviewer ?? "tahap review";
+                                            return (
+                                              <div
+                                                style={{
+                                                  fontSize: 12,
+                                                  color:
+                                                    "var(--color-text-muted)",
+                                                  marginTop: 4,
+                                                }}>
+                                                di {lbl}
+                                              </div>
+                                            );
+                                          })()}
+                                        {a.status === "ready" && (
                                           <div
                                             style={{
                                               fontSize: 12,
-                                              color: "var(--color-danger)",
+                                              color: "var(--color-warning)",
                                               marginTop: 4,
-                                              maxWidth: 220,
                                             }}>
-                                            {a.reviewNote}
+                                            lolos rantai → menunggu bundle GM
                                           </div>
                                         )}
-                                    </td>
-                                    <td className="num">{a.target || "—"}</td>
-                                    <td className="num">{a.target2 || "—"}</td>
-                                    <td className="num">
-                                      {m.aggregationMethod === "sum"
-                                        ? "SUM"
-                                        : a.persenAgregasi
-                                          ? `${a.persenAgregasi}%`
-                                          : "—"}
-                                    </td>
-                                    <td className="num">
-                                      <button
-                                        className="btn btn-ghost btn-sm"
-                                        title="Atur target 12 bulan"
-                                        onClick={() =>
-                                          setDisburseFor({
-                                            assignment: a,
-                                            indikator: m.indikator,
-                                            satuan: m.satuan,
-                                            unitLabel:
-                                              UNIT_NAMES[a.unitCode] ??
-                                              a.unitCode,
-                                          })
-                                        }>
-                                        <Calendar size={13} />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                        {a.status === "rejected" &&
+                                          a.reviewNote && (
+                                            <div
+                                              style={{
+                                                fontSize: 12,
+                                                color: "var(--color-danger)",
+                                                marginTop: 4,
+                                                maxWidth: 220,
+                                              }}>
+                                              {a.reviewNote}
+                                            </div>
+                                          )}
+                                      </td>
+                                      <td className="num">{a.target || "—"}</td>
+                                      <td className="num">
+                                        {a.target2 || "—"}
+                                      </td>
+                                      <td className="num">
+                                        {m.aggregationMethod === "sum"
+                                          ? "SUM"
+                                          : a.persenAgregasi
+                                            ? `${a.persenAgregasi}%`
+                                            : "—"}
+                                      </td>
+                                      <td className="num">
+                                        <button
+                                          className="btn btn-ghost btn-sm"
+                                          title="Atur target 12 bulan"
+                                          onClick={() =>
+                                            setDisburseFor({
+                                              assignment: a,
+                                              indikator: m.indikator,
+                                              satuan: m.satuan,
+                                              unitLabel:
+                                                UNIT_NAMES[a.unitCode] ??
+                                                a.unitCode,
+                                            })
+                                          }>
+                                          <Calendar size={13} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
 
-                            {/* Rollup: nilai parent hasil agregasi realisasi children */}
-                            <div
-                              style={{
-                                padding: "var(--space-3)",
-                                borderTop: "1px solid var(--color-border)",
-                              }}>
+                              {/* Rollup: nilai parent hasil agregasi realisasi children */}
                               <div
                                 style={{
-                                  fontSize: "var(--text-xs)",
-                                  fontWeight: 700,
-                                  marginBottom: 6,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 6,
+                                  padding: "var(--space-3)",
+                                  borderTop: "1px solid var(--color-border)",
                                 }}>
-                                <PieChart size={13} /> Rollup Nilai Parent
-                              </div>
-                              {rollupLoading === m.id ? (
-                                <div
-                                  style={{
-                                    fontSize: "var(--text-sm)",
-                                    color: "var(--color-text-muted)",
-                                  }}>
-                                  Menghitung…
-                                </div>
-                              ) : rollups[m.id] ? (
-                                <>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      gap: "var(--space-4)",
-                                      alignItems: "baseline",
-                                      marginBottom: 8,
-                                    }}>
-                                    <span
-                                      style={{
-                                        fontSize: "var(--text-xl)",
-                                        fontWeight: 800,
-                                        color: "var(--color-accent)",
-                                      }}>
-                                      {rollups[m.id].nilaiParent}
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontSize: "var(--text-xs)",
-                                        color: "var(--color-text-muted)",
-                                      }}>
-                                      Target parent:{" "}
-                                      {rollups[m.id].targetParent || "—"} ·
-                                      Periode: {rollups[m.id].periodLabel} ·
-                                      Total bobot: {rollups[m.id].totalPersen}%
-                                      {!rollups[m.id].isFullyConfigured && (
-                                        <span
-                                          style={{
-                                            color: "var(--color-warning)",
-                                          }}>
-                                          {" "}
-                                          (belum 100%)
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                  <div className="table-scroll table-expanded">
-                                    <table
-                                      className="data-table compact"
-                                      style={{ margin: 0 }}>
-                                      <thead>
-                                        <tr>
-                                          <th>Unit</th>
-                                          <th>Bidang</th>
-                                          <th className="num">Bobot</th>
-                                          <th className="num">Realisasi</th>
-                                          <th className="num">Kontribusi</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {rollups[m.id].breakdown.map((b, i) => (
-                                          <tr key={i}>
-                                            <td style={{ fontWeight: 600 }}>
-                                              {UNIT_NAMES[b.unitCode] ??
-                                                b.unitCode}
-                                            </td>
-                                            <td style={{ fontSize: 13 }}>
-                                              {b.bidang}
-                                            </td>
-                                            <td className="num">
-                                              {b.persenAgregasi}%
-                                            </td>
-                                            <td className="num">
-                                              {b.hasData ? (
-                                                b.realisasi
-                                              ) : (
-                                                <span
-                                                  style={{
-                                                    color:
-                                                      "var(--color-text-subtle)",
-                                                  }}>
-                                                  belum ada
-                                                </span>
-                                              )}
-                                            </td>
-                                            <td
-                                              className="num"
-                                              style={{ fontWeight: 700 }}>
-                                              {b.kontribusi}
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </>
-                              ) : (
                                 <div
                                   style={{
                                     fontSize: "var(--text-xs)",
-                                    color: "var(--color-text-muted)",
+                                    fontWeight: 700,
+                                    marginBottom: 6,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
                                   }}>
-                                  Rollup tidak tersedia.
+                                  <PieChart size={13} /> Rollup Nilai Parent
                                 </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  ))}
+                                {rollupLoading === m.id ? (
+                                  <div
+                                    style={{
+                                      fontSize: "var(--text-sm)",
+                                      color: "var(--color-text-muted)",
+                                    }}>
+                                    Menghitung…
+                                  </div>
+                                ) : rollups[m.id] ? (
+                                  <>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: "var(--space-4)",
+                                        alignItems: "baseline",
+                                        marginBottom: 8,
+                                      }}>
+                                      <span
+                                        style={{
+                                          fontSize: "var(--text-xl)",
+                                          fontWeight: 800,
+                                          color: "var(--color-accent)",
+                                        }}>
+                                        {rollups[m.id].nilaiParent}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: "var(--text-xs)",
+                                          color: "var(--color-text-muted)",
+                                        }}>
+                                        Target parent:{" "}
+                                        {rollups[m.id].targetParent || "—"} ·
+                                        Periode: {rollups[m.id].periodLabel} ·
+                                        Total bobot: {rollups[m.id].totalPersen}
+                                        %
+                                        {!rollups[m.id].isFullyConfigured && (
+                                          <span
+                                            style={{
+                                              color: "var(--color-warning)",
+                                            }}>
+                                            {" "}
+                                            (belum 100%)
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    <div className="table-scroll table-expanded">
+                                      <table
+                                        className="data-table compact"
+                                        style={{ margin: 0 }}>
+                                        <thead>
+                                          <tr>
+                                            <th>Unit</th>
+                                            <th>Bidang</th>
+                                            <th className="num">Bobot</th>
+                                            <th className="num">Realisasi</th>
+                                            <th className="num">Kontribusi</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {rollups[m.id].breakdown.map(
+                                            (b, i) => (
+                                              <tr key={i}>
+                                                <td style={{ fontWeight: 600 }}>
+                                                  {UNIT_NAMES[b.unitCode] ??
+                                                    b.unitCode}
+                                                </td>
+                                                <td style={{ fontSize: 13 }}>
+                                                  {b.bidang}
+                                                </td>
+                                                <td className="num">
+                                                  {b.persenAgregasi}%
+                                                </td>
+                                                <td className="num">
+                                                  {b.hasData ? (
+                                                    b.realisasi
+                                                  ) : (
+                                                    <span
+                                                      style={{
+                                                        color:
+                                                          "var(--color-text-subtle)",
+                                                      }}>
+                                                      belum ada
+                                                    </span>
+                                                  )}
+                                                </td>
+                                                <td
+                                                  className="num"
+                                                  style={{ fontWeight: 700 }}>
+                                                  {b.kontribusi}
+                                                </td>
+                                              </tr>
+                                            ),
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div
+                                    style={{
+                                      fontSize: "var(--text-xs)",
+                                      color: "var(--color-text-muted)",
+                                    }}>
+                                    Rollup tidak tersedia.
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
