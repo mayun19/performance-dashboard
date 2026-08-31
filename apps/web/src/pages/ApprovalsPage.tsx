@@ -4546,7 +4546,7 @@ export function ApprovalsPage() {
                       {isOpen && hasKpiItems && (
                         <tr>
                           <td
-                            colSpan={8}
+                            colSpan={9}
                             style={{
                               background: "var(--color-surface-2)",
                               padding: 0,
@@ -4703,7 +4703,7 @@ export function ApprovalsPage() {
                       {docExpanded === d.id && (
                         <tr>
                           <td
-                            colSpan={8}
+                            colSpan={9}
                             style={{
                               background: "var(--color-surface-2)",
                               padding: 0,
@@ -4717,7 +4717,7 @@ export function ApprovalsPage() {
                 })}
                 {filteredDocRows.length === 0 && (
                   <tr>
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <EmptyState
                         title={
                           filteredDocRows.length === 0
