@@ -2629,12 +2629,6 @@ export function ApprovalsPage() {
                                             const countSubsIndicator =
                                               subIndicators.length;
 
-                                            console.log(
-                                              "it",
-                                              it,
-                                              hasSubIndicators,
-                                              countSubsIndicator,
-                                            );
                                             return (
                                               <>
                                                 <tr key={idx}>
