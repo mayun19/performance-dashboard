@@ -376,6 +376,13 @@ export interface DocRow {
   kpiItems?: Record<string, unknown>[];
 }
 
+export interface DocStatusSummary  {
+  submitted: number;
+  ready: number;
+  approved: number;
+  rejected: number;
+};
+
 export interface PaginatedDocRows {
   data: DocRow[];
   pagination: {
@@ -384,4 +391,5 @@ export interface PaginatedDocRows {
     totalData: number;
     totalPage: number;
   };
-}
+  summary: DocStatusSummary;
+};
