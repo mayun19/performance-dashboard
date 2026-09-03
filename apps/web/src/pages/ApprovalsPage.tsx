@@ -19,6 +19,7 @@ import type {
   KontrakManajemenItem,
   DocRow,
   PaginatedDocRows,
+  DocStatusSummary,
 } from "../lib/types";
 import {
   CheckCircle,
@@ -760,6 +761,12 @@ export function ApprovalsPage() {
     PaginatedDocRows["pagination"]
   >({ currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 });
   const [docPage, setDocPage] = useState(1);
+  const [docSummary, setDocSummary] = useState<DocStatusSummary>({
+    submitted: 0,
+    ready: 0,
+    approved: 0,
+    rejected: 0,
+  });
 
   const { paginate, indexOfFirstProject, indexOfLastProject } =
     usePaginationHelpers(docPagination, docPage, setDocPage);
@@ -845,6 +852,7 @@ export function ApprovalsPage() {
       .then((res: PaginatedDocRows) => {
         setFilteredDocRows(res.data);
         setDocPagination(res.pagination);
+        setDocSummary(res.summary); 
       })
       .catch(() => {});
   }, [trackerType, trackerStatus, trackerPeriod, trackerKmType, docPage]);
@@ -2633,8 +2641,12 @@ export function ApprovalsPage() {
                                               <>
                                                 <tr key={idx}>
                                                   <td>{idx + 1}</td>
-                                                  <td>{itStr.indikator || "—"}</td>
-                                                  <td>{itStr.formula || "—"}</td>
+                                                  <td>
+                                                    {itStr.indikator || "—"}
+                                                  </td>
+                                                  <td>
+                                                    {itStr.formula || "—"}
+                                                  </td>
                                                   <td>{itStr.satuan || "—"}</td>
                                                   <td className="num">
                                                     {itStr.bobot || "—"}
@@ -2767,7 +2779,7 @@ export function ApprovalsPage() {
                                                                 Target Sem I
                                                               </th>
                                                               <th className="num">
-                                                                Target Tahun 
+                                                                Target Tahun
                                                                 {new Date().getFullYear()}
                                                               </th>
                                                             </tr>
@@ -4476,7 +4488,7 @@ export function ApprovalsPage() {
             <div
               className="metric-value"
               style={{ color: "var(--color-success)" }}>
-              {filteredDocRows.filter((d) => d.status === "approved").length}
+              {docSummary.approved}
             </div>
           </div>
           <div className="metric-card" style={{ maxWidth: "none" }}>
@@ -4484,7 +4496,7 @@ export function ApprovalsPage() {
             <div
               className="metric-value"
               style={{ color: "var(--color-warning)" }}>
-              {filteredDocRows.filter((d) => d.status === "submitted").length}
+              {docSummary.submitted}
             </div>
           </div>
           <div className="metric-card" style={{ maxWidth: "none" }}>
@@ -4492,7 +4504,7 @@ export function ApprovalsPage() {
             <div
               className="metric-value"
               style={{ color: "var(--color-danger)" }}>
-              {filteredDocRows.filter((d) => d.status === "rejected").length}
+              {docSummary.rejected}
             </div>
           </div>
         </div>
@@ -4767,7 +4779,7 @@ export function ApprovalsPage() {
                                                         Target Sem I
                                                       </th>
                                                       <th className="num">
-                                                        Target Tahun 
+                                                        Target Tahun
                                                         {new Date().getFullYear()}
                                                       </th>
                                                     </tr>

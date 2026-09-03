@@ -7,7 +7,7 @@ import {
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
 import { PrismaService } from "../prisma/prisma.service";
-import { Role, User } from "@prisma/client";
+import { Prisma, Role, User } from "@prisma/client";
 
 const ROLE_TO_STAGE: Record<Role, number> = {
   STAFF: 1,
@@ -51,6 +51,30 @@ export interface PaginatedDocRows {
     totalPage: number;
   };
 }
+
+export type DocStatusSummary = {
+  submitted: number;
+  ready: number;
+  approved: number;
+  rejected: number;
+};
+
+const TRACKED_STATUSES = [
+  "submitted",
+  "ready",
+  "approved",
+  "rejected",
+] as const;
+
+export type DocRowsResult =
+  | DocRow[]
+  | (PaginatedDocRows & { summary: DocStatusSummary });
+
+const normalizeFilterValue = (v?: string | null): string | undefined => {
+  const trimmed = v?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "all") return undefined;
+  return trimmed;
+};
 
 @Injectable()
 export class ApprovalsService {
@@ -216,33 +240,56 @@ export class ApprovalsService {
     kmType?: string,
     currentPage?: number,
     perPage?: number,
-  ): Promise<DocRow[] | PaginatedDocRows> {
+  ): Promise<DocRow[] | (PaginatedDocRows & { summary: DocStatusSummary })> {
     const scopeAll = this.canSeeAllBidang(user);
     const bidangFilter = scopeAll ? {} : { bidang: user.bidang as string };
-    const statusFilter = status && status !== "all" ? { status } : {};
-    const periodFilter = periodId && periodId !== "all" ? { periodId } : {};
-    // kmType filter hanya berlaku bermakna utk dokumen KM (Realisasi tak punya field ini) — bila
-    // type==="real", filter ini otomatis tak berefek karena kmRows di-skip sepenuhnya.
-    const kmTypeFilter = kmType && kmType !== "all" ? { kmType } : {};
 
-    const [kmRows, realRows] = await Promise.all([
+    const normalizedStatus = normalizeFilterValue(status);
+    const normalizedPeriodId = normalizeFilterValue(periodId);
+    const normalizedKmType = normalizeFilterValue(kmType);
+
+    const statusFilter = normalizedStatus ? { status: normalizedStatus } : {};
+    const periodFilter = normalizedPeriodId
+      ? { periodId: normalizedPeriodId }
+      : {};
+    const kmTypeFilter = normalizedKmType ? { kmType: normalizedKmType } : {};
+
+    // Filter dasar (unit/bidang, periode, tipe KM) — dipakai bersama oleh query data & summary.
+    const kmBaseWhere: Prisma.KontrakManajemenWhereInput = {
+      ...bidangFilter,
+      ...periodFilter,
+      ...kmTypeFilter,
+    };
+    const realBaseWhere: Prisma.InputRealisasiWhereInput = {
+      ...bidangFilter,
+      ...periodFilter,
+    };
+
+    // Where lengkap (+ status) — dipakai baik oleh query data MAUPUN summary, supaya summary
+    // ikut menyempit sesuai status yang sedang difilter di tabel (bukan lagi breakdown penuh).
+    const kmFullWhere: Prisma.KontrakManajemenWhereInput = {
+      ...kmBaseWhere,
+      ...statusFilter,
+    };
+    const realFullWhere: Prisma.InputRealisasiWhereInput = {
+      ...realBaseWhere,
+      ...statusFilter,
+    };
+
+    const [kmRows, realRows, summary] = await Promise.all([
       type === "real"
         ? Promise.resolve([])
         : this.prisma.kontrakManajemen.findMany({
-            where: {
-              ...bidangFilter,
-              ...statusFilter,
-              ...periodFilter,
-              ...kmTypeFilter,
-            },
+            where: kmFullWhere,
             orderBy: { submittedAt: "desc" },
           }),
       type === "km"
         ? Promise.resolve([])
         : this.prisma.inputRealisasi.findMany({
-            where: { ...bidangFilter, ...statusFilter, ...periodFilter },
+            where: realFullWhere,
             orderBy: { submittedAt: "desc" },
           }),
+      this.getDocumentsSummary(kmFullWhere, realFullWhere, type),
     ]);
 
     const kmDocs: DocRow[] = kmRows.map(
@@ -259,17 +306,10 @@ export class ApprovalsService {
         ...this.stepInfo(
           k as unknown as { steps?: unknown; currentStepIndex?: number },
         ),
-
         kpiItems: Array.isArray(k.kpiItems)
           ? (k.kpiItems as Record<string, unknown>[])
           : [],
-        ...this.stepInfo(
-          k as unknown as { steps?: unknown; currentStepIndex?: number },
-        ),
         submittedAt: k.submittedAt,
-        ...this.stepInfo(
-          k as unknown as { steps?: unknown; currentStepIndex?: number },
-        ),
       }),
     );
 
@@ -288,21 +328,14 @@ export class ApprovalsService {
           r as unknown as { steps?: unknown; currentStepIndex?: number },
         ),
         submittedAt: r.submittedAt,
-        ...this.stepInfo(
-          r as unknown as { steps?: unknown; currentStepIndex?: number },
-        ),
       }),
     );
 
-    // Merge both jenis and sort by submittedAt desc — same ordering each source query used
-    // individually, now applied across the combined set.
     const merged = [...kmDocs, ...realDocs].sort(
       (a, b) =>
         (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0),
     );
 
-    // Tak dipaginasi bila currentPage/perPage tak dikirim — pertahankan perilaku lama untuk
-    // caller existing (mis. FE yang belum diupdate) yang mengharapkan array penuh.
     if (!currentPage && !perPage) return merged;
 
     const page = currentPage ?? 1;
@@ -318,6 +351,46 @@ export class ApprovalsService {
         totalData,
         totalPage: Math.ceil(totalData / limit),
       },
+      summary,
     };
+  }
+
+  // groupBy, bukan findMany + count di JS — hanya menghitung jumlah per status tanpa menarik
+  // seluruh baris ke memori. `kmBaseWhere`/`realBaseWhere` di sini TIDAK BOLEH mengandung
+  // filter status — parameter ini sengaja bertipe ketat (bukan Record<string, unknown>) supaya
+  // pemanggil yang keliru menyelipkan status akan terlihat jelas di review/diff.
+  private async getDocumentsSummary(
+    kmBaseWhere: Prisma.KontrakManajemenWhereInput,
+    realBaseWhere: Prisma.InputRealisasiWhereInput,
+    type: "all" | "km" | "real",
+  ): Promise<DocStatusSummary> {
+
+    const [kmGrouped, realGrouped] = await Promise.all([
+      type === "real"
+        ? Promise.resolve([])
+        : this.prisma.kontrakManajemen.groupBy({
+            by: ["status"],
+            where: kmBaseWhere,
+            _count: { _all: true },
+          }),
+      type === "km"
+        ? Promise.resolve([])
+        : this.prisma.inputRealisasi.groupBy({
+            by: ["status"],
+            where: realBaseWhere,
+            _count: { _all: true },
+          }),
+    ]);
+
+    const counts = new Map<string, number>();
+    for (const row of [...kmGrouped, ...realGrouped]) {
+      counts.set(row.status, (counts.get(row.status) ?? 0) + row._count._all);
+    }
+
+    const result = TRACKED_STATUSES.reduce(
+      (acc, s) => ({ ...acc, [s]: counts.get(s) ?? 0 }),
+      {} as DocStatusSummary,
+    );
+    return result;
   }
 }
