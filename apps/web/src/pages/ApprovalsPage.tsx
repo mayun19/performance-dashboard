@@ -4510,7 +4510,7 @@ export function ApprovalsPage() {
         </div>
 
         <div className="table-wrap" style={{ marginBottom: "var(--space-4)" }}>
-          <div className={`table-scroll able-scroll`}>
+          <div className="table-scroll able-scroll">
             <table
               className="data-table compact"
               style={{ margin: 0, width: "100%" }}>
