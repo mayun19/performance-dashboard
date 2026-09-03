@@ -106,6 +106,7 @@ export interface ReviseAssignmentPatch {
   target?: string;
   target2?: string;
   persenAgregasi?: number;
+  subIndicatorTargets?: Array<{ target?: string; target2?: string }>;
 }
 
 // Patch sempit utk reviseRejectedAssignment() — HANYA 4 field ini yang boleh diubah lewat
@@ -121,6 +122,7 @@ export interface ReviseRejectedAssignmentInput {
   polaritas?: "positive" | "negative";
   aggregationMethod?: "weighted" | "sum";
   kmType?: string;
+  subIndicators?: SubIndicatorInput[];
   otherAssignments?: Array<{ id: string } & ReviseAssignmentPatch>;
 }
 
@@ -658,6 +660,63 @@ export class KpiMasterService {
     return this.withVersionFlags(m, activePeriod?.yearMonth);
   }
 
+  // Sinkronkan TEMPLATE sub-indikator baru ke SELURUH dokumen KM yang memuat item ber-
+  // masterKpiId ini (lintas status, seperti syncMasterFieldsAcrossDocuments), digabung dgn
+  // override per-assignment MASING-MASING dokumen (bukan cuma dokumen yang sedang direvisi).
+  private async syncSubIndicatorsAcrossDocuments(
+    masterId: string,
+    kmType: string,
+    subIndicatorsTemplate: SubIndicatorInput[],
+  ): Promise<number> {
+    const assignments = await this.prisma.kpiAssignment.findMany({
+      where: { kpiMasterId: masterId },
+    });
+    const overridesByPair = new Map<
+      string,
+      Array<{ target?: string; target2?: string }>
+    >();
+    for (const a of assignments) {
+      const ov = Array.isArray(a.subIndicatorTargets)
+        ? (a.subIndicatorTargets as unknown as Array<{
+            target?: string;
+            target2?: string;
+          }>)
+        : [];
+      overridesByPair.set(`${a.unitCode}||${a.bidang}`, ov);
+    }
+
+    const docs = await this.prisma.kontrakManajemen.findMany({
+      where: { kmType },
+    });
+    let updated = 0;
+    for (const doc of docs) {
+      const items = (Array.isArray(doc.kpiItems) ? doc.kpiItems : []) as Record<
+        string,
+        unknown
+      >[];
+      const idx = items.findIndex((it) => it["masterKpiId"] === masterId);
+      if (idx < 0) continue;
+      const overrides =
+        overridesByPair.get(`${doc.unitCode}||${doc.bidang}`) ?? [];
+      const merged = subIndicatorsTemplate.map((si, i) => {
+        const ov = overrides[i];
+        return {
+          ...si,
+          target: ov?.target?.trim() || si.target,
+          target2: ov?.target2?.trim() || si.target2,
+        };
+      });
+      const next = [...items];
+      next[idx] = { ...next[idx], subIndicators: merged };
+      await this.prisma.kontrakManajemen.update({
+        where: { id: doc.id },
+        data: { kpiItems: next as object },
+      });
+      updated++;
+    }
+    return updated;
+  }
+
   // Sinkronkan perubahan definisi KpiMaster ke SELURUH dokumen KM yang memuat item ber-
   // masterKpiId ini — lintas status (draft/submitted/ready/approved/rejected), sebab field-field
   // ini metadata definisi bersama, bukan bagian dari alur review per-dokumen. Hanya field yang
@@ -710,7 +769,12 @@ export class KpiMasterService {
   private async reviseOneAssignmentDocument(
     user: User,
     assignment: { id: string; unitCode: string; bidang: string },
-    master: { id: string; kmType: string; indikator: string },
+    master: {
+      id: string;
+      kmType: string;
+      indikator: string;
+      subIndicators?: Prisma.JsonValue | null; // ✅ widened — dipakai utk merge target sub
+    },
     period: { id: string },
     patch: ReviseAssignmentPatch,
   ) {
@@ -738,6 +802,35 @@ export class KpiMasterService {
         `Item KPI "${master.indikator}" tidak ditemukan pada dokumen KM ${assignment.unitCode} — ${assignment.bidang} yang ditolak`,
       );
 
+    // Ambil row assignment penuh (perlu subIndicatorTargets LAMA sbg fallback bila patch kali
+    // ini tidak menyertakan override baru — lihat effectiveOverrides di bawah).
+    const currentAssignmentRow = await this.prisma.kpiAssignment.findUnique({
+      where: { id: assignment.id },
+    });
+    if (!currentAssignmentRow)
+      throw new NotFoundException("Assignment tidak ditemukan");
+
+    const subIndicatorsTemplate = Array.isArray(master.subIndicators)
+      ? (master.subIndicators as unknown as SubIndicatorInput[])
+      : undefined;
+
+    // Sanitasi override target sub-indikator (opsional) — HANYA bila field ini disertakan di
+    // patch kali ini; bila tidak, override yang tersimpan di assignment TIDAK disentuh.
+    let sanitizedSubIndicatorTargets: Array<{
+      target: string;
+      target2: string;
+    }> | null = null;
+    if (
+      patch.subIndicatorTargets !== undefined &&
+      subIndicatorsTemplate &&
+      subIndicatorsTemplate.length > 0
+    ) {
+      sanitizedSubIndicatorTargets = this.sanitizeSubIndicatorTargets(
+        patch.subIndicatorTargets,
+        subIndicatorsTemplate.length,
+      );
+    }
+
     const updatedAssignment = await this.prisma.kpiAssignment.update({
       where: { id: assignment.id },
       data: {
@@ -747,7 +840,33 @@ export class KpiMasterService {
         ...(patch.persenAgregasi !== undefined
           ? { persenAgregasi: Number(patch.persenAgregasi) || 0 }
           : {}),
+        ...(sanitizedSubIndicatorTargets !== null
+          ? {
+              subIndicatorTargets:
+                sanitizedSubIndicatorTargets as unknown as Prisma.InputJsonValue,
+            }
+          : {}),
       },
+    });
+
+    // Nilai override yang berlaku utk merge item kali ini: hasil BARU (bila dikirim di patch
+    // ini) atau warisan yang SUDAH tersimpan sebelumnya (bila hanya template yang berubah, atau
+    // tak ada perubahan override sama sekali) — sama seperti pola merge di fanOut().
+    const effectiveOverrides =
+      sanitizedSubIndicatorTargets ??
+      (Array.isArray(currentAssignmentRow.subIndicatorTargets)
+        ? (currentAssignmentRow.subIndicatorTargets as unknown as Array<{
+            target?: string;
+            target2?: string;
+          }>)
+        : []);
+    const mergedSubIndicators = subIndicatorsTemplate?.map((si, i) => {
+      const ov = effectiveOverrides[i];
+      return {
+        ...si,
+        target: ov?.target?.trim() || si.target,
+        target2: ov?.target2?.trim() || si.target2,
+      };
     });
 
     const nextItems = [...items];
@@ -758,6 +877,7 @@ export class KpiMasterService {
       target2: updatedAssignment.target2,
       holder: updatedAssignment.holder,
       revisedAt: nowIso,
+      ...(mergedSubIndicators ? { subIndicators: mergedSubIndicators } : {}),
     };
 
     const reviewedAtMs = doc.reviewedAt ? doc.reviewedAt.getTime() : 0;
@@ -877,6 +997,21 @@ export class KpiMasterService {
         "Versi KPI ini sudah digantikan versi yang lebih baru — assignment ini tidak dapat direvisi",
       );
 
+    // Dihoist ke atas — dipakai requireTarget() & validasi subIndicators di bawah, jadi harus
+    // sudah terinisialisasi SEBELUM requireTarget didefinisikan/dipanggil (const dalam TDZ
+    // yang dibaca lebih dulu akan meledak jadi ReferenceError mentah → 500 generik ke client).
+    const wasComposite =
+      Array.isArray(master.subIndicators) &&
+      (master.subIndicators as unknown[]).length > 0;
+
+    const nextAggregationMethod =
+      patch.aggregationMethod === "sum" ||
+      patch.aggregationMethod === "weighted"
+        ? patch.aggregationMethod
+        : undefined;
+    const effectiveAggregationMethod =
+      nextAggregationMethod ?? master.aggregationMethod;
+
     const period = await this.prisma.period.findUnique({
       where: { yearMonth: master.effectiveMonth },
     });
@@ -884,6 +1019,37 @@ export class KpiMasterService {
       throw new BadRequestException(
         `Periode ${master.effectiveMonth} tidak ditemukan`,
       );
+
+    // ===== Redefinisi template sub-indikator (opsional) — HANYA bila KPI ini sudah komposit.
+    // Tidak dipakai utk mengaktifkan/menonaktifkan mode komposit lewat revisi cepat. =====
+    let newSubIndicators: SubIndicatorInput[] | null = null;
+    let newBobotKm: string | undefined;
+    if (patch.subIndicators !== undefined) {
+      if (!wasComposite)
+        throw new BadRequestException(
+          "KPI ini bukan komposit — sub-indikator hanya dapat ditambahkan lewat edit KPI Master penuh, bukan lewat revisi",
+        );
+      // sanitizeSubIndicators sudah memvalidasi tanda bobot konsisten dgn effectiveAggregationMethod
+      // ('sum' → negatif, 'weighted' → positif) — jadi tak perlu cek ulang tanda di bawah bila
+      // template ini yang dipakai.
+      newSubIndicators = this.sanitizeSubIndicators(
+        patch.subIndicators,
+        effectiveAggregationMethod as "weighted" | "sum",
+      );
+      if (!newSubIndicators || newSubIndicators.length === 0)
+        throw new BadRequestException(
+          "Tidak dapat mengosongkan sub-indikator lewat revisi — hapus KPI komposit ini lewat edit KPI Master penuh bila memang dimaksudkan",
+        );
+      newBobotKm = String(
+        newSubIndicators.reduce(
+          (s, si) => s + (Number(String(si.bobot).replace(",", ".")) || 0),
+          0,
+        ),
+      );
+    }
+    // isComposite EFEKTIF setelah patch ini diterapkan (subIndicators tidak bisa berubah dari
+    // komposit → non-komposit atau sebaliknya lewat jalur ini, jadi selalu sama dgn wasComposite).
+    const isComposite = wasComposite;
 
     // ===== Validasi & siapkan rebalancing bobot agregasi assignment lain (opsional) =====
     // Scoped ketat ke master ini — id yang bukan milik KPI Master yang sama ditolak langsung,
@@ -919,6 +1085,7 @@ export class KpiMasterService {
     }
 
     const requireTarget = (t: string | undefined, label: string) => {
+      if (isComposite) return; // composite: target lives per sub-indicator, not on the assignment
       if (t !== undefined && !t.trim())
         throw new BadRequestException(`Target Sem I wajib diisi (${label})`);
     };
@@ -954,30 +1121,27 @@ export class KpiMasterService {
         "Polaritas harus 'positive' atau 'negative'",
       );
 
-    const isComposite =
-      Array.isArray(master.subIndicators) &&
-      (master.subIndicators as unknown[]).length > 0;
-
-    if (patch.bobotKm !== undefined && isComposite)
+    // bobotKm KPI komposit selalu turunan (Σ bobot sub) — ditolak HANYA bila client mengirim
+    // nilai yang beda dari yang tersimpan DAN tidak sekaligus merevisi subIndicators (yang mana
+    // otomatis menghitung ulang bobotKm sendiri, lihat newBobotKm di atas).
+    if (
+      patch.bobotKm !== undefined &&
+      isComposite &&
+      patch.bobotKm !== master.bobotKm &&
+      newSubIndicators === null
+    )
       throw new BadRequestException(
         "Bobot KM (poin) KPI komposit diturunkan otomatis dari total bobot sub-indikator — ubah lewat edit KPI Master (Sub-Indikator), bukan lewat revisi",
       );
-
-    const nextAggregationMethod =
-      patch.aggregationMethod === "sum" ||
-      patch.aggregationMethod === "weighted"
-        ? patch.aggregationMethod
-        : undefined;
 
     if (
       nextAggregationMethod &&
       nextAggregationMethod !== master.aggregationMethod
     ) {
-      // KPI komposit: tanda bobot tiap sub-indikator harus konsisten dgn metode baru (lihat
-      // sanitizeSubIndicators — 'sum' = penalti/negatif, 'weighted' = poin/positif). Cegah
-      // pindah metode di sini bila akan membuat data sub-indikator existing tak konsisten;
-      // arahkan ke edit KPI Master penuh agar sub-indikator ikut disesuaikan.
-      if (isComposite) {
+      // Bila subIndicators ikut direvisi di payload ini, tanda bobotnya sudah divalidasi
+      // konsisten dgn effectiveAggregationMethod oleh sanitizeSubIndicators() di atas — cek
+      // manual di bawah ini hanya perlu jalan utk sub-indikator LAMA (belum ikut direvisi).
+      if (isComposite && newSubIndicators === null) {
         const subs = master.subIndicators as unknown as Array<{
           nama: string;
           bobot: string;
@@ -998,10 +1162,7 @@ export class KpiMasterService {
 
     // Total 100% (metode weighted, >1 assignment) dihitung dari: nilai BARU assignment yang
     // direvisi + nilai BARU tiap otherAssignments yang dikirim, digabung dengan nilai EXISTING
-    // assignment lain milik master ini yang tidak ikut dikirim. Pakai metode agregasi BARU
-    // (bila ikut diubah di payload ini) supaya validasi konsisten dgn hasil akhir.
-    const effectiveAggregationMethod =
-      nextAggregationMethod ?? master.aggregationMethod;
+    // assignment lain milik master ini yang tidak ikut dikirim.
     if (effectiveAggregationMethod !== "sum") {
       const allAssignments = await this.prisma.kpiAssignment.findMany({
         where: { kpiMasterId: master.id },
@@ -1041,8 +1202,19 @@ export class KpiMasterService {
       masterUpdateData.satuan = patch.satuan;
     if (patch.polaritas !== undefined && patch.polaritas !== master.polaritas)
       masterUpdateData.polaritas = patch.polaritas;
-    if (patch.bobotKm !== undefined && patch.bobotKm !== master.bobotKm)
+    if (newSubIndicators !== null) {
+      // subIndicators & bobotKm turunannya diganti bersamaan — jangan biarkan patch.bobotKm
+      // manual menimpa hasil derivasi ini.
+      masterUpdateData.subIndicators =
+        newSubIndicators as unknown as Prisma.InputJsonValue;
+      if (newBobotKm !== master.bobotKm) masterUpdateData.bobotKm = newBobotKm;
+    } else if (
+      patch.bobotKm !== undefined &&
+      patch.bobotKm !== master.bobotKm &&
+      !isComposite
+    ) {
       masterUpdateData.bobotKm = patch.bobotKm;
+    }
     if (
       patch.targetParent !== undefined &&
       patch.targetParent !== master.targetParent
@@ -1078,11 +1250,24 @@ export class KpiMasterService {
         master.kmType,
         itemPatch,
       );
+
+      // Template sub-indikator berubah — sinkronkan (nama/formula/satuan/bobot/polaritas/target
+      // default tiap sub) ke SEMUA dokumen KM yang memuat item ini, digabung dgn override
+      // per-assignment masing2 dokumen (bukan cuma dokumen yang sedang direvisi di payload ini).
+      if (masterUpdateData.subIndicators !== undefined) {
+        syncedDocsCount += await this.syncSubIndicatorsAcrossDocuments(
+          master.id,
+          master.kmType,
+          master.subIndicators as unknown as SubIndicatorInput[],
+        );
+      }
     }
 
-    // ===== Terapkan revisi (holder/target/target2/persenAgregasi) ke SETIAP assignment yang
-    // dikirim (utama + otherAssignments) — tiap satu punya dokumen KM 'rejected' sendiri
-    // (unitCode/bidang berbeda), diproses independen supaya SEMUA ikut ter-update. =====
+    // ===== Terapkan revisi (holder/target/target2/persenAgregasi/subIndicatorTargets) ke
+    // SETIAP assignment yang dikirim (utama + otherAssignments) — tiap satu punya dokumen KM
+    // 'rejected' sendiri (unitCode/bidang berbeda), diproses independen supaya SEMUA ikut
+    // ter-update. `master` di sini sudah mencerminkan subIndicators/bobotKm TERBARU (bila
+    // diubah di atas) — dipakai reviseOneAssignmentDocument utk merge target sub-indikator. =====
     const targets = [
       { assignment: assignment, patch },
       ...otherPatches.map((o) => ({
@@ -1150,6 +1335,7 @@ export class KpiMasterService {
         bobotKm: master.bobotKm,
         targetParent: master.targetParent,
         aggregationMethod: master.aggregationMethod,
+        subIndicators: master.subIndicators,
       },
       syncedDocsCount,
     };

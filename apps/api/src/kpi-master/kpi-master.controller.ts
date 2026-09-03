@@ -51,6 +51,15 @@ class SubIndicatorDto {
   @IsOptional() @IsIn(["positive", "negative"]) polaritas?: string;
 }
 
+// ✅ new — bentuk override target sub-indikator per assignment (dipakai di
+// ReviseRejectedAssignmentDto & OtherAssignmentPersenDto). Sama longgarnya dengan
+// AssignmentDto.subIndicatorTargets di atas — validasi/normalisasi mendalam tetap di service
+// (sanitizeSubIndicatorTargets), di sini hanya terima bentuk {target?, target2?} per elemen.
+class SubIndicatorTargetOverrideDto {
+  @IsOptional() @IsString() target?: string;
+  @IsOptional() @IsString() target2?: string;
+}
+
 class SaveMasterDto {
   @IsOptional() @IsString() id?: string;
   @IsOptional() @IsIn(["draft", "final"]) kmType?: string;
@@ -92,15 +101,28 @@ class OtherAssignmentPersenDto {
   @IsOptional() @IsString() target?: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsNumber() persenAgregasi?: number;
+  // ✅ new — override target sub-indikator (KPI Komposit) utk assignment lain ini, opsional.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubIndicatorTargetOverrideDto)
+  subIndicatorTargets?: SubIndicatorTargetOverrideDto[];
 }
 
 // Patch sempit utk reviseRejectedAssignment() — lihat catatan pembatasan field di service.
 class ReviseRejectedAssignmentDto {
-  // Field assignment UTAMA (holder/target/target2/persenAgregasi) 
+  // Field assignment UTAMA (holder/target/target2/persenAgregasi)
   @IsOptional() @IsString() holder?: string;
   @IsOptional() @IsString() target?: string;
   @IsOptional() @IsString() target2?: string;
   @IsOptional() @IsNumber() persenAgregasi?: number;
+  // ✅ new — override target sub-indikator (KPI Komposit) utk assignment yang sedang direvisi,
+  // opsional. Divalidasi/dinormalisasi lebih lanjut di service (sanitizeSubIndicatorTargets).
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubIndicatorTargetOverrideDto)
+  subIndicatorTargets?: SubIndicatorTargetOverrideDto[];
 
   // Field definisi KpiMaster (SHARED lintas semua assignment KPI ini)
   @IsOptional() @IsString() indikator?: string;
@@ -115,6 +137,14 @@ class ReviseRejectedAssignmentDto {
     | "weighted"
     | "sum";
   @IsOptional() @IsIn(["draft", "final"]) kmType?: string;
+  // ✅ new — redefinisi TEMPLATE sub-indikator (opsional). Hanya berlaku bila KPI ini SUDAH
+  // komposit — lihat validasi di service (reviseRejectedAssignment menolak bila KPI belum
+  // komposit sebelumnya). Mengirim field ini otomatis menurunkan ulang bobotKm (Σ bobot sub).
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubIndicatorDto)
+  subIndicators?: SubIndicatorDto[];
 
   // Assignment lain (unit/bidang lain) pada KPI Master yang sama, direvisi sekaligus -----
   @IsOptional()
