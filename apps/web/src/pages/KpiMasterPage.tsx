@@ -796,7 +796,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const handleReviseSave = async (i: number) => {
     const a = assignments[i];
     if (!a.id) return; // safety net — button is only rendered when a.id exists
-    if (!a.target.trim()) {
+    if (!isComposite && !a.target.trim()) {
       setFormError("Target Sem I wajib diisi sebelum revisi.");
       return;
     }
@@ -823,7 +823,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       // Field definisi KPI Master (SHARED lintas semua assignment) — hanya kirim yang memang
       // berubah dari nilai server terakhir supaya history/audit log tetap bersih (opsional,
       // service juga aman menerima nilai sama — hanya jadi no-op di sana).
-      const patch: ReviseRejectedAssignmentInput = {
+      const patch = {
         holder: a.holder,
         target: a.target,
         target2: a.target2,
@@ -838,6 +838,14 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
         polaritas,
         aggregationMethod,
         kmType,
+        // ✅ new — send sub-indicator target overrides for the row being revised
+        subIndicatorTargets: isComposite
+          ? (a.subIndicatorTargets ?? undefined)
+          : undefined,
+        // ✅ new — only send if the user actually edited the template in this session
+        subIndicators: isComposite ? subIndicators : undefined,
+      } as ReviseRejectedAssignmentInput & {
+        subIndicatorTargets?: SubIndicatorTargetOverride[];
       };
       const result = await kpiMaster.reviseRejectedAssignment(a.id, patch);
 
@@ -2246,7 +2254,12 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                           </td>
                           <td className="num">
                             {canAuthor && (
-                              <div style={{ display: "flex", justifyContent: "center", gap: 4 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "center",
+                                  gap: 4,
+                                }}>
                                 <button
                                   className="btn btn-ghost btn-sm"
                                   onClick={() => handleEdit(m)}

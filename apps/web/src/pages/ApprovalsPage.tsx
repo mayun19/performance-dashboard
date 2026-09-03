@@ -2617,88 +2617,203 @@ export function ApprovalsPage() {
                                               string,
                                               string
                                             >;
+
+                                            const subIndicators =
+                                              (
+                                                it as {
+                                                  subIndicators?: unknown[];
+                                                }
+                                              ).subIndicators ?? [];
+                                            const hasSubIndicators =
+                                              subIndicators.length > 0;
+                                            const countSubsIndicator =
+                                              subIndicators.length;
+
                                             return (
-                                              <tr key={idx}>
-                                                <td>{idx + 1}</td>
-                                                <td>{itStr.indikator}</td>
-                                                <td>{itStr.formula}</td>
-                                                <td>{itStr.satuan}</td>
-                                                <td className="num">
-                                                  {itStr.bobot}
-                                                </td>
-                                                <td
-                                                  style={{
-                                                    fontWeight: editing
-                                                      ? 700
-                                                      : undefined,
-                                                  }}>
-                                                  {editing ? (
-                                                    <input
-                                                      type="text"
-                                                      className="form-input form-input-sm"
-                                                      style={{ width: 90 }}
-                                                      value={String(
-                                                        kmEditItems[idx]
-                                                          ?.target ?? "",
-                                                      )}
-                                                      onChange={(e) =>
-                                                        setKmEditItems(
-                                                          (items) =>
-                                                            items.map(
-                                                              (item, i) =>
-                                                                i === idx
-                                                                  ? {
-                                                                      ...item,
-                                                                      target:
-                                                                        e.target
-                                                                          .value,
-                                                                    }
-                                                                  : item,
-                                                            ),
-                                                        )
-                                                      }
-                                                    />
-                                                  ) : (
-                                                    itStr.target
+                                              <>
+                                                <tr key={idx}>
+                                                  <td>{idx + 1}</td>
+                                                  <td>{itStr.indikator || "—"}</td>
+                                                  <td>{itStr.formula || "—"}</td>
+                                                  <td>{itStr.satuan || "—"}</td>
+                                                  <td className="num">
+                                                    {itStr.bobot || "—"}
+                                                  </td>
+                                                  <td
+                                                    style={{
+                                                      fontWeight: editing
+                                                        ? 700
+                                                        : undefined,
+                                                    }}>
+                                                    {editing ? (
+                                                      <input
+                                                        type="text"
+                                                        className="form-input form-input-sm"
+                                                        style={{ width: 90 }}
+                                                        value={String(
+                                                          kmEditItems[idx]
+                                                            ?.target ?? "",
+                                                        )}
+                                                        onChange={(e) =>
+                                                          setKmEditItems(
+                                                            (items) =>
+                                                              items.map(
+                                                                (item, i) =>
+                                                                  i === idx
+                                                                    ? {
+                                                                        ...item,
+                                                                        target:
+                                                                          e
+                                                                            .target
+                                                                            .value,
+                                                                      }
+                                                                    : item,
+                                                              ),
+                                                          )
+                                                        }
+                                                      />
+                                                    ) : hasSubIndicators ? (
+                                                      <button
+                                                        className="btn btn-ghost btn-sm"
+                                                        onClick={() =>
+                                                          setSubIndicatorsExpanded(
+                                                            subIndicatorsExpanded ===
+                                                              idx
+                                                              ? null
+                                                              : idx,
+                                                          )
+                                                        }
+                                                        title="Lihat target tiap sub-indikator">
+                                                        {countSubsIndicator} sub{" "}
+                                                        <ChevronDown
+                                                          size={12}
+                                                          style={{
+                                                            transform:
+                                                              subIndicatorsExpanded ===
+                                                              idx
+                                                                ? "rotate(180deg)"
+                                                                : "none",
+                                                            transition:
+                                                              "transform .2s",
+                                                          }}
+                                                        />
+                                                      </button>
+                                                    ) : (
+                                                      itStr.target
+                                                    )}
+                                                  </td>
+                                                  <td
+                                                    style={{
+                                                      fontWeight: editing
+                                                        ? 700
+                                                        : undefined,
+                                                    }}>
+                                                    {editing ? (
+                                                      <input
+                                                        type="text"
+                                                        className="form-input form-input-sm"
+                                                        style={{ width: 90 }}
+                                                        value={String(
+                                                          kmEditItems[idx]
+                                                            ?.target2 ?? "",
+                                                        )}
+                                                        onChange={(e) =>
+                                                          setKmEditItems(
+                                                            (items) =>
+                                                              items.map(
+                                                                (item, i) =>
+                                                                  i === idx
+                                                                    ? {
+                                                                        ...item,
+                                                                        target2:
+                                                                          e
+                                                                            .target
+                                                                            .value,
+                                                                      }
+                                                                    : item,
+                                                              ),
+                                                          )
+                                                        }
+                                                      />
+                                                    ) : (
+                                                      itStr.target2 || "-"
+                                                    )}
+                                                  </td>
+                                                </tr>
+                                                {hasSubIndicators &&
+                                                  subIndicatorsExpanded ===
+                                                    idx && (
+                                                    <tr>
+                                                      <td
+                                                        colSpan={7}
+                                                        style={{
+                                                          background:
+                                                            "var(--color-surface-2)",
+                                                          padding: 0,
+                                                        }}>
+                                                        <table
+                                                          className="data-table table-expanded"
+                                                          style={{ margin: 0 }}>
+                                                          <thead>
+                                                            <tr>
+                                                              <th>
+                                                                Sub-Indikator
+                                                              </th>
+                                                              <th>Formula</th>
+                                                              <th>Polaritas</th>
+                                                              <th>Satuan</th>
+
+                                                              <th className="num">
+                                                                Target Sem I
+                                                              </th>
+                                                              <th className="num">
+                                                                Target Tahun 
+                                                                {new Date().getFullYear()}
+                                                              </th>
+                                                            </tr>
+                                                          </thead>
+                                                          <tbody>
+                                                            {subIndicators.map(
+                                                              (
+                                                                sub: any,
+                                                                j: number,
+                                                              ) => (
+                                                                <tr key={j}>
+                                                                  <td>
+                                                                    ↳{" "}
+                                                                    {sub.nama ||
+                                                                      `Sub ${j + 1}`}
+                                                                  </td>
+                                                                  <td>
+                                                                    {sub.formula ||
+                                                                      "—"}
+                                                                  </td>
+                                                                  <td className="num">
+                                                                    {sub.polaritas ||
+                                                                      "—"}
+                                                                  </td>
+                                                                  <td className="num">
+                                                                    {sub.satuan ||
+                                                                      "—"}
+                                                                  </td>
+                                                                  <td className="num">
+                                                                    {sub.target ||
+                                                                      "—"}
+                                                                  </td>
+
+                                                                  <td className="num">
+                                                                    {sub.target2 ||
+                                                                      "—"}
+                                                                  </td>
+                                                                </tr>
+                                                              ),
+                                                            )}
+                                                          </tbody>
+                                                        </table>
+                                                      </td>
+                                                    </tr>
                                                   )}
-                                                </td>
-                                                <td
-                                                  style={{
-                                                    fontWeight: editing
-                                                      ? 700
-                                                      : undefined,
-                                                  }}>
-                                                  {editing ? (
-                                                    <input
-                                                      type="text"
-                                                      className="form-input form-input-sm"
-                                                      style={{ width: 90 }}
-                                                      value={String(
-                                                        kmEditItems[idx]
-                                                          ?.target2 ?? "",
-                                                      )}
-                                                      onChange={(e) =>
-                                                        setKmEditItems(
-                                                          (items) =>
-                                                            items.map(
-                                                              (item, i) =>
-                                                                i === idx
-                                                                  ? {
-                                                                      ...item,
-                                                                      target2:
-                                                                        e.target
-                                                                          .value,
-                                                                    }
-                                                                  : item,
-                                                            ),
-                                                        )
-                                                      }
-                                                    />
-                                                  ) : (
-                                                    itStr.target2
-                                                  )}
-                                                </td>
-                                              </tr>
+                                              </>
                                             );
                                           })}
                                         </tbody>
@@ -4652,7 +4767,7 @@ export function ApprovalsPage() {
                                                         Target Sem I
                                                       </th>
                                                       <th className="num">
-                                                        Target Tahun $
+                                                        Target Tahun 
                                                         {new Date().getFullYear()}
                                                       </th>
                                                     </tr>
