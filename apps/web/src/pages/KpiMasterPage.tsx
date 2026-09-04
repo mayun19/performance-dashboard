@@ -818,6 +818,9 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
           ...(aggregationMethod === "weighted" && !isSingleAssignment
             ? { persenAgregasi: row.persenAgregasi }
             : {}),
+          ...(isComposite && row.subIndicatorTargets
+            ? { subIndicatorTargets: row.subIndicatorTargets }
+            : {}),
         }));
 
       // Field definisi KPI Master (SHARED lintas semua assignment) — hanya kirim yang memang
