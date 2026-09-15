@@ -49,7 +49,7 @@ type SubIndicatorItem = {
   realisasi?: number | string;
   formula?: string;
   polaritas?: "positive" | "negative";
-  capaianSaran?: string; 
+  capaianSaran?: string;
 };
 
 type KpiItem = {
@@ -517,7 +517,13 @@ export function InputRealisasiPage() {
             h.bidang === user.bidang &&
             IN_FLIGHT_STATUSES.includes(String(h.status ?? "")),
         )
-      : undefined;
+      : user?.bidang === null
+        ? (history as Record<string, unknown>[]).find(
+            (h) =>
+              h.unitCode === user.unit &&
+              IN_FLIGHT_STATUSES.includes(String(h.status ?? "")),
+          )
+        : undefined;
   const myActiveStatus = myActivePackage
     ? String(myActivePackage.status ?? "")
     : null;
@@ -812,7 +818,6 @@ export function InputRealisasiPage() {
                     const hasVal = isItemFilled(kpi, i);
                     const lt = livingTargetFor(kpi);
 
-                    console.log("item kpi", kpi);
                     return (
                       <Fragment key={i}>
                         <tr
