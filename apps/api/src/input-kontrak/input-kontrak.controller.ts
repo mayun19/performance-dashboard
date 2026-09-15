@@ -103,7 +103,7 @@ export class InputKontrakController {
       year,
       kmType,
       currentPage ? Number(currentPage) : undefined,
-      perPage ? Number(perPage) : undefined
+      perPage ? Number(perPage) : undefined,
     );
   }
 
@@ -113,8 +113,9 @@ export class InputKontrakController {
     @Query("unitCode") unitCode?: string,
     @Query("year") year?: string,
     @Query("kmType") kmType?: string,
+    @Query("periodId") periodId?: string,
   ) {
-    return this.svc.getForRealisasi(unitCode, year, kmType);
+    return this.svc.getForRealisasi(unitCode, year, kmType, periodId);
   }
 
   @Get("bundle")

@@ -49,6 +49,7 @@ type SubIndicatorItem = {
   realisasi?: number | string;
   formula?: string;
   polaritas?: "positive" | "negative";
+  capaianSaran?: string;
 };
 
 type KpiItem = {
@@ -64,6 +65,7 @@ type KpiItem = {
   masterKpiId?: string; // tautan ke KpiAssignment untuk resolusi living target (KM Sementara)
   subIndicators?: SubIndicatorItem[]; // non-kosong = item ini "komposit" — realisasi diisi per-sub
   polaritas?: "positive" | "negative";
+  capaianSaran?: string;
 };
 
 // Saran Pencapaian (%) murni tampilan — mirror ringkas resolvePolarity+computeCapaian backend
@@ -238,6 +240,10 @@ export function InputRealisasiPage() {
   // periode terpilih — sengaja tak dibatasi user.bidang (lihat catatan di getMyDecisions()
   // backend: reviewer seperti SM RPC memutuskan dokumen lintas-bidang lewat rantai konsolidasi).
   const [myDecisions, setMyDecisions] = useState<MyDecision[]>([]);
+  const [submitProgress, setSubmitProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const reloadHistory = async () => {
     const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
@@ -320,7 +326,12 @@ export function InputRealisasiPage() {
         const kmType = periodObj?.kmReference ?? "draft";
         const [histRes, kmRes, ptRes] = await Promise.allSettled([
           inputRealisasi.history(selectedUnit, selectedPeriodId),
-          inputKontrak.forRealisasi(selectedUnit, selectedYear, kmType),
+          inputKontrak.forRealisasi(
+            selectedUnit,
+            selectedYear,
+            kmType,
+            selectedPeriodId,
+          ),
           periodTarget.list(selectedPeriodId),
         ]);
         if (histRes.status === "fulfilled")
@@ -382,7 +393,7 @@ export function InputRealisasiPage() {
     checkerIds: string[],
     approverIds: string[],
   ) => {
-    if (!user) return;
+    if (!user || submitting) return;
     setSubmitting(true);
     try {
       // Realisasi dipecah per bidang: kelompokkan baris KPI per bidang, kirim satu submit per bidang
@@ -437,6 +448,7 @@ export function InputRealisasiPage() {
       setError(msg);
     } finally {
       setSubmitting(false);
+      setSubmitProgress(null);
     }
   };
 
@@ -505,7 +517,13 @@ export function InputRealisasiPage() {
             h.bidang === user.bidang &&
             IN_FLIGHT_STATUSES.includes(String(h.status ?? "")),
         )
-      : undefined;
+      : user?.bidang === null
+        ? (history as Record<string, unknown>[]).find(
+            (h) =>
+              h.unitCode === user.unit &&
+              IN_FLIGHT_STATUSES.includes(String(h.status ?? "")),
+          )
+        : undefined;
   const myActiveStatus = myActivePackage
     ? String(myActivePackage.status ?? "")
     : null;
@@ -799,6 +817,7 @@ export function InputRealisasiPage() {
                       !!kpi.subIndicators && kpi.subIndicators.length > 0;
                     const hasVal = isItemFilled(kpi, i);
                     const lt = livingTargetFor(kpi);
+
                     return (
                       <Fragment key={i}>
                         <tr
@@ -898,7 +917,11 @@ export function InputRealisasiPage() {
                               )}
                             </td>
                           )}
-                          <td style={{ minWidth: 340 }}>
+                          <td
+                            style={{
+                              minWidth: 340,
+                            }}
+                            className={!formOpen ? "num" : ""}>
                             {formOpen ? (
                               isComposite ? (
                                 <span
@@ -939,13 +962,12 @@ export function InputRealisasiPage() {
                                 />
                               )
                             ) : (
-                              <span
-                                style={{ color: "var(--color-text-subtle)" }}>
-                                —
+                              <span style={{ color: "var(--color-text)" }}>
+                                {isComposite ? "" : kpi.realisasi || "—"}
                               </span>
                             )}
                           </td>
-                          <td style={{ minWidth: 100 }}>
+                          <td style={{ minWidth: 100 }} className="num">
                             {formOpen ? (
                               isComposite ? (
                                 <span
@@ -970,17 +992,17 @@ export function InputRealisasiPage() {
                                 />
                               )
                             ) : (
-                              <span
-                                style={{ color: "var(--color-text-subtle)" }}>
-                                —
+                              <span style={{ color: "var(--color-text)" }}>
+                                {isComposite ? "" : kpi.capaianSaran || "—"}
                               </span>
                             )}
                           </td>
                         </tr>
                         {isComposite &&
                           kpi.subIndicators!.map((si, j) => {
-                            const subVal = values[`${i}.${j}`] ?? "";
-                            const subHasVal = subVal.trim() !== "";
+                            const subVal =
+                              values[`${i}.${j}`] || si.realisasi || "";
+                            const subHasVal = String(subVal).trim() !== "";
                             return (
                               <tr
                                 key={`${i}.${j}`}
@@ -1001,7 +1023,7 @@ export function InputRealisasiPage() {
                                 </td>
                                 <td
                                   style={{
-                                    fontSize: 12,
+                                    fontSize: 14,
                                     color: "var(--color-text-muted)",
                                     maxWidth: 200,
                                   }}>
@@ -1018,7 +1040,9 @@ export function InputRealisasiPage() {
                                 <td className="num">{si.target}</td>
                                 <td className="num">{si.target2 ?? "—"}</td>
                                 {anyLivingTarget && <td />}
-                                <td style={{ minWidth: 340 }}>
+                                <td
+                                  style={{ minWidth: 340 }}
+                                  className={!formOpen ? "num" : ""}>
                                   {formOpen ? (
                                     <input
                                       type="text"
@@ -1051,13 +1075,13 @@ export function InputRealisasiPage() {
                                   ) : (
                                     <span
                                       style={{
-                                        color: "var(--color-text-subtle)",
+                                        color: "var(--color-text)",
                                       }}>
                                       {subVal || "—"}
                                     </span>
                                   )}
                                 </td>
-                                <td style={{ minWidth: 100 }}>
+                                <td style={{ minWidth: 100 }} className="num">
                                   {formOpen ? (
                                     <input
                                       type="text"
@@ -1074,9 +1098,11 @@ export function InputRealisasiPage() {
                                   ) : (
                                     <span
                                       style={{
-                                        color: "var(--color-text-subtle)",
+                                        color: "var(--color-text)",
                                       }}>
-                                      {capaianValues[`${i}.${j}`] || "—"}
+                                      {capaianValues[`${i}.${j}`] ||
+                                        si.capaianSaran ||
+                                        "—"}
                                     </span>
                                   )}
                                 </td>
@@ -1581,6 +1607,11 @@ export function InputRealisasiPage() {
         open={pickerOpen}
         title="Alur Reviewer Realisasi"
         busy={submitting}
+        busyLabel={
+          submitProgress && submitProgress.total > 1
+            ? `Mengirim ${submitProgress.done}/${submitProgress.total} bidang…`
+            : undefined
+        }
         fetchCandidates={() =>
           inputRealisasi.reviewerCandidates(selectedUnit, kpiList[0]?.bidang)
         }

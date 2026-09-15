@@ -75,13 +75,13 @@ export class InputKontrakService {
     // Tak dipaginasi bila currentPage/perPage tak dikirim — pertahankan perilaku lama untuk
     // caller existing (mis. fan-out doc list, bulk-submit readiness check) yang mengharapkan
     // array penuh, bukan { data, pagination }.
-     if (!currentPage && !perPage) {
-       const docs = await this.prisma.kontrakManajemen.findMany({
-         where,
-         orderBy: { submittedAt: "desc" },
-       });
-       return docs.map((d) => this.withHolders(d));
-     }
+    if (!currentPage && !perPage) {
+      const docs = await this.prisma.kontrakManajemen.findMany({
+        where,
+        orderBy: { submittedAt: "desc" },
+      });
+      return docs.map((d) => this.withHolders(d));
+    }
 
     const page = currentPage ?? 1;
     const limit = perPage ?? 10;
@@ -108,10 +108,10 @@ export class InputKontrakService {
   }
 
   async getById(id: string) {
-     const doc = await this.prisma.kontrakManajemen.findUnique({
-       where: { id },
-     });
-     return doc ? this.withHolders(doc) : null;
+    const doc = await this.prisma.kontrakManajemen.findUnique({
+      where: { id },
+    });
+    return doc ? this.withHolders(doc) : null;
   }
 
   // Registri KM yang sudah DISETUJUI penuh (final oleh GM).
@@ -177,7 +177,12 @@ export class InputKontrakService {
   // dengan alur reviewnya sendiri (Staff RPC → Checker → Approver), BUKAN prasyarat serial.
   // Begitu Staff RPC men-submit (keluar dari 'draft'), unit/bidang yang dituju sudah dapat
   // mengisi realisasi terhadapnya; dokumen KM lanjut direview independen di tab Dokumen KM.
-  async getForRealisasi(unitCode?: string, year?: string, kmType?: string) {
+  async getForRealisasi(
+    unitCode?: string,
+    year?: string,
+    kmType?: string,
+    periodId?: string,
+  ) {
     let periodIdsInYear: string[] | undefined;
     if (year) {
       const periods = await this.prisma.period.findMany({
@@ -186,7 +191,7 @@ export class InputKontrakService {
       });
       periodIdsInYear = periods.map((p) => p.id);
     }
-    return this.prisma.kontrakManajemen.findMany({
+    const docs = await this.prisma.kontrakManajemen.findMany({
       where: {
         status: "approved",
         ...(unitCode ? { unitCode } : {}),
@@ -194,6 +199,75 @@ export class InputKontrakService {
         ...(kmType ? { kmType } : {}),
       },
       orderBy: [{ unitCode: "asc" }, { submittedAt: "desc" }],
+    });
+
+    if (!periodId) return docs;
+
+    const realisasiRecords = await this.prisma.inputRealisasi.findMany({
+      where: { periodId, ...(unitCode ? { unitCode } : {}) },
+    });
+    const valuesByBidang = new Map<string, Record<string, unknown>>();
+    for (const r of realisasiRecords) {
+      valuesByBidang.set(
+        r.bidang,
+        (r.values && typeof r.values === "object" ? r.values : {}) as Record<
+          string,
+          unknown
+        >,
+      );
+    }
+    if (valuesByBidang.size === 0) return docs;
+
+    return docs.map((doc) => {
+      const bidangValues = valuesByBidang.get(doc.bidang);
+      if (!bidangValues) return doc;
+
+      const kpiEntries = Object.values(bidangValues) as Record<
+        string,
+        unknown
+      >[];
+      const kpiItems = (
+        Array.isArray(doc.kpiItems) ? doc.kpiItems : []
+      ) as Record<string, unknown>[];
+
+      const mergedItems = kpiItems.map((item) => {
+        const match = kpiEntries.find(
+          (v) =>
+            (item["masterKpiId"] && v["masterKpiId"] === item["masterKpiId"]) ||
+            v["indikator"] === item["indikator"],
+        );
+        if (!match) return item;
+
+        if (
+          Array.isArray(item["subIndicators"]) &&
+          (item["subIndicators"] as unknown[]).length > 0
+        ) {
+          const matchSubs =
+            (match["subIndicators"] as Record<string, unknown>[]) ?? [];
+          const subIndicators = (
+            item["subIndicators"] as Record<string, unknown>[]
+          ).map((si, j) => {
+            const subMatch =
+              matchSubs.find((ms) => ms["nama"] === si["nama"]) ?? matchSubs[j];
+            return subMatch
+              ? {
+                  ...si,
+                  realisasi: subMatch["realisasi"],
+                  capaianSaran: subMatch["capaianSaran"],
+                }
+              : si;
+          });
+          return { ...item, subIndicators };
+        }
+
+        return {
+          ...item,
+          realisasi: match["realisasi"],
+          capaianSaran: match["capaianSaran"],
+        };
+      });
+
+      return { ...doc, kpiItems: mergedItems };
     });
   }
 
