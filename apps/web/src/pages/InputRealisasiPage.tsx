@@ -238,6 +238,11 @@ export function InputRealisasiPage() {
   // periode terpilih — sengaja tak dibatasi user.bidang (lihat catatan di getMyDecisions()
   // backend: reviewer seperti SM RPC memutuskan dokumen lintas-bidang lewat rantai konsolidasi).
   const [myDecisions, setMyDecisions] = useState<MyDecision[]>([]);
+  const [submitProgress, setSubmitProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+
 
   const reloadHistory = async () => {
     const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
@@ -382,7 +387,7 @@ export function InputRealisasiPage() {
     checkerIds: string[],
     approverIds: string[],
   ) => {
-    if (!user) return;
+    if (!user || submitting) return;
     setSubmitting(true);
     try {
       // Realisasi dipecah per bidang: kelompokkan baris KPI per bidang, kirim satu submit per bidang
@@ -437,6 +442,7 @@ export function InputRealisasiPage() {
       setError(msg);
     } finally {
       setSubmitting(false);
+      setSubmitProgress(null);
     }
   };
 
@@ -523,6 +529,8 @@ export function InputRealisasiPage() {
         )
       : undefined;
   const anyLivingTarget = kpiList.some((k) => livingTargetFor(k));
+
+  console.log("status realisasi",{"canInput": canInput}, {"myActivePackage": myActivePackage});
 
   return (
     <div className="page input-realisasi-page">
@@ -1581,6 +1589,11 @@ export function InputRealisasiPage() {
         open={pickerOpen}
         title="Alur Reviewer Realisasi"
         busy={submitting}
+        busyLabel={
+          submitProgress && submitProgress.total > 1
+            ? `Mengirim ${submitProgress.done}/${submitProgress.total} bidang…`
+            : undefined
+        }
         fetchCandidates={() =>
           inputRealisasi.reviewerCandidates(selectedUnit, kpiList[0]?.bidang)
         }
