@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, Fragment } from "react";
+import { useEffect, useRef, useState, Fragment, useCallback } from "react";
 import {
   inputRealisasi,
   inputKontrak,
@@ -245,9 +245,76 @@ export function InputRealisasiPage() {
     total: number;
   } | null>(null);
 
+  // Guard against out-of-order async responses: every loadData() call gets an id, and only
+  // the MOST RECENTLY ISSUED call is allowed to commit state. This protects across ALL callers
+  // (the effect, submit, delete, evidence handlers) — not just the effect racing itself.
+  const loadReqId = useRef(0);
+
+  // Central data loader — fetches history + KPI reference (inputKontrak.forRealisasi) +
+  // period targets TOGETHER, so any caller that needs a refresh after a server-side change
+  // (submit/delete/evidence) gets ALL three back in sync instead of hand-rolling a partial
+  // (and previously bug-prone) history-only refetch.
+  const loadData = useCallback(async () => {
+    if (!selectedPeriodId) return;
+    const reqId = ++loadReqId.current;
+    try {
+      // KM bersifat tahunan → acuan realisasi ditarik per TAHUN dari periode terpilih.
+      // kmReference periode menentukan apakah KPI ditarik dari KM Draft atau KM Final.
+      const periodObj = periods.find((p) => p.id === selectedPeriodId);
+      const selectedYear = periodObj?.yearMonth?.slice(0, 4);
+      const kmType = periodObj?.kmReference ?? "draft";
+      const [histRes, kmRes, ptRes] = await Promise.allSettled([
+        inputRealisasi.history(selectedUnit, selectedPeriodId),
+        inputKontrak.forRealisasi(
+          selectedUnit,
+          selectedYear,
+          kmType,
+          selectedPeriodId,
+        ),
+        periodTarget.list(selectedPeriodId),
+      ]);
+
+      // A newer loadData() call has started (or the effect re-ran) since this one began —
+      // discard this stale result entirely, don't let it clobber newer state.
+      if (reqId !== loadReqId.current) return;
+
+      if (histRes.status === "fulfilled")
+        setHistory(histRes.value as unknown[]);
+      // Living-target: KM Sementara per assignment periode ini (untuk package view).
+      setPeriodTargets(ptRes.status === "fulfilled" ? ptRes.value : []);
+      if (kmRes.status === "fulfilled") {
+        // Acuan realisasi = KPI dari KM yang sudah DISUBMIT Staff RPC (KM Sementara berjalan
+        // paralel dengan alur review-nya sendiri — bukan menunggu approval penuh).
+        const kontrak = kmRes.value as KontrakManajemenItem[];
+        let merged: KpiItem[] = kontrak.flatMap((k) =>
+          (k.kpiItems as KpiItem[]).map((it) => ({
+            ...it,
+            bidang: k.bidang,
+          })),
+        );
+        // Semua role kecuali GM hanya melihat KPI bidangnya sendiri.
+        if (user?.bidang && user?.role !== "GM") {
+          merged = merged.filter((it) => it.bidang === user.bidang);
+        }
+        merged = merged.sort(
+          (a, b) =>
+            (BIDANG_SORT[a.bidang ?? ""] ?? 99) -
+            (BIDANG_SORT[b.bidang ?? ""] ?? 99),
+        );
+        setKpiList(merged);
+        setValues({});
+        setCapaianValues({});
+      }
+    } catch (e) {
+      if (reqId === loadReqId.current)
+        setError((e as Error)?.message ?? "Gagal memuat data");
+    } finally {
+      if (reqId === loadReqId.current) setLoading(false);
+    }
+  }, [selectedUnit, selectedPeriodId, periods, user?.bidang, user?.role]);
+
   const reloadHistory = async () => {
-    const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
-    setHistory(hist as unknown[]);
+    await loadData();
   };
   const handleUploadEvid = async (id: string, files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -315,60 +382,11 @@ export function InputRealisasiPage() {
       .catch(() => setLoading(false));
   }, []);
 
+  // Delegasi penuh ke loadData() — efek ini HANYA bertanggung jawab memicu load saat
+  // dependency berubah; logic fetch & guard staleness sepenuhnya di loadData().
   useEffect(() => {
-    if (!selectedPeriodId) return;
-    const loadData = async () => {
-      try {
-        // KM bersifat tahunan → acuan realisasi ditarik per TAHUN dari periode terpilih.
-        // kmReference periode menentukan apakah KPI ditarik dari KM Draft atau KM Final.
-        const periodObj = periods.find((p) => p.id === selectedPeriodId);
-        const selectedYear = periodObj?.yearMonth?.slice(0, 4);
-        const kmType = periodObj?.kmReference ?? "draft";
-        const [histRes, kmRes, ptRes] = await Promise.allSettled([
-          inputRealisasi.history(selectedUnit, selectedPeriodId),
-          inputKontrak.forRealisasi(
-            selectedUnit,
-            selectedYear,
-            kmType,
-            selectedPeriodId,
-          ),
-          periodTarget.list(selectedPeriodId),
-        ]);
-        if (histRes.status === "fulfilled")
-          setHistory(histRes.value as unknown[]);
-        // Living-target: KM Sementara per assignment periode ini (untuk package view).
-        setPeriodTargets(ptRes.status === "fulfilled" ? ptRes.value : []);
-        if (kmRes.status === "fulfilled") {
-          // Acuan realisasi = KPI dari KM yang sudah DISUBMIT Staff RPC (KM Sementara berjalan
-          // paralel dengan alur review-nya sendiri — bukan menunggu approval penuh).
-          const kontrak = kmRes.value as KontrakManajemenItem[];
-          let merged: KpiItem[] = kontrak.flatMap((k) =>
-            (k.kpiItems as KpiItem[]).map((it) => ({
-              ...it,
-              bidang: k.bidang,
-            })),
-          );
-          // Semua role kecuali GM hanya melihat KPI bidangnya sendiri.
-          if (user?.bidang && user?.role !== "GM") {
-            merged = merged.filter((it) => it.bidang === user.bidang);
-          }
-          merged = merged.sort(
-            (a, b) =>
-              (BIDANG_SORT[a.bidang ?? ""] ?? 99) -
-              (BIDANG_SORT[b.bidang ?? ""] ?? 99),
-          );
-          setKpiList(merged);
-          setValues({});
-          setCapaianValues({});
-        }
-      } catch (e) {
-        setError((e as Error)?.message ?? "Gagal memuat data");
-      } finally {
-        setLoading(false);
-      }
-    };
     loadData();
-  }, [selectedUnit, selectedPeriodId, isStaff, user?.bidang]);
+  }, [loadData]);
 
   // Riwayat Keputusan Saya — hanya reviewer, periode terpilih, TAK terikat selectedUnit/bidang
   // (lihat catatan di getMyDecisions() backend).
@@ -434,10 +452,10 @@ export function InputRealisasiPage() {
       }
       setPickerOpen(false);
       setSubmitted(true);
-      setValues({});
-      setCapaianValues({});
-      const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
-      setHistory(hist as unknown[]);
+      // Refresh SEMUA data terkait (history, kpiList/acuan KM, periodTargets) sekaligus —
+      // sebelumnya hanya history yang di-refetch di sini, sehingga tabel KPI Realisasi bisa
+      // menampilkan data KM/acuan basi sampai selectedPeriodId diubah manual.
+      await loadData();
       setTimeout(() => setSubmitted(false), 3000);
     } catch (e) {
       const msg =
@@ -457,8 +475,7 @@ export function InputRealisasiPage() {
       return;
     try {
       await inputRealisasi.delete(id);
-      const hist = await inputRealisasi.history(selectedUnit, selectedPeriodId);
-      setHistory(hist as unknown[]);
+      await loadData();
     } catch (e) {
       const msg =
         (e as { response?: { data?: { message?: string } } })?.response?.data
