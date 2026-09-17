@@ -2950,7 +2950,7 @@ export function ApprovalsPage() {
                                         color: "var(--color-info)",
                                         fontWeight: 600,
                                       }}>
-                                      Langkah {ci}/{stepCount}:{" "}
+                                      Langkah {csi}/{stepCount}:{" "}
                                       {rr.stepLabel ?? steps[ci]?.label ?? "—"}
                                     </div>
                                   </td>
