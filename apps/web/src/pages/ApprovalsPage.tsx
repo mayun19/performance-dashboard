@@ -2181,8 +2181,6 @@ export function ApprovalsPage() {
 
   const showKmType = trackerType === "all" || trackerType === "km";
 
-  console.log("data query", queueEntries);
-
   return (
     <div className="page approvals-page">
       <div style={{ marginBottom: "var(--space-5)" }}>
@@ -2857,7 +2855,7 @@ export function ApprovalsPage() {
                             const stepCount = steps.length;
                             const isLastStep = ci >= stepCount - 1;
                             const prevLabel = steps[ci - 1]?.label;
-                            
+
                             return (
                               <Fragment key={rl.id}>
                                 <tr>
