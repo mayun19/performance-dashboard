@@ -757,6 +757,9 @@ export function ApprovalsPage() {
   const [subIndicatorsExpanded, setSubIndicatorsExpanded] = useState<
     number | null
   >(null);
+  const [subIndicatorsExpandedRi, setSubIndicatorsExpandedRi] = useState<
+    number | null
+  >(null);
   const [docPagination, setDocPagination] = useState<
     PaginatedDocRows["pagination"]
   >({ currentPage: 1, perPage: 10, totalData: 0, totalPage: 0 });
@@ -852,7 +855,7 @@ export function ApprovalsPage() {
       .then((res: PaginatedDocRows) => {
         setFilteredDocRows(res.data);
         setDocPagination(res.pagination);
-        setDocSummary(res.summary); 
+        setDocSummary(res.summary);
       })
       .catch(() => {});
   }, [trackerType, trackerStatus, trackerPeriod, trackerKmType, docPage]);
@@ -2267,7 +2270,7 @@ export function ApprovalsPage() {
               className="table-wrap"
               style={{ paddingBottom: "var(--space-7)" }}>
               <div
-                className={`table-scroll ${kmList.length > 0 && "able-scroll"}`}>
+                className={`table-scroll ${queueEntries.length > 0 && "able-scroll"}`}>
                 <table className="data-table compact">
                   <thead>
                     <tr>
@@ -2279,7 +2282,7 @@ export function ApprovalsPage() {
                       <th>Jenjang Persetujuan</th>
                       <th>SLA</th>
                       <th>Tanggal</th>
-                      <th style={{ width: 260 }}>Tindakan</th>
+                      <th style={{ width: 260 }} className="num">Tindakan</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2306,7 +2309,7 @@ export function ApprovalsPage() {
                                     <span
                                       className="status-pill"
                                       style={{
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         background: "var(--color-accent-tint)",
                                         color: "var(--color-accent)",
                                         fontWeight: 700,
@@ -2536,6 +2539,7 @@ export function ApprovalsPage() {
                                           display: "flex",
                                           gap: "var(--space-2)",
                                           flexWrap: "wrap",
+                                         justifyContent: "center",
                                         }}>
                                         <button
                                           className="btn btn-secondary btn-sm"
@@ -2840,15 +2844,18 @@ export function ApprovalsPage() {
                             const rl = entry.data;
                             const entries = Object.values(rl.values ?? {});
                             const rr = rl as RealisasiKinerja & {
-                              steps?: { label: string }[];
+                              reviewSteps?: { label: string; kind?: string }[];
+                              reviewStepIndex?: number;
                               currentStepIndex?: number;
                               stepLabel?: string;
                             };
-                            const steps = rr.steps ?? [];
-                            const ci = rr.currentStepIndex ?? 0;
+                            const steps = rr.reviewSteps ?? [];
+                            const ci = rr.reviewStepIndex ?? 0;
+                            const csi = rr.currentStepIndex ?? 0;
                             const stepCount = steps.length;
                             const isLastStep = ci >= stepCount - 1;
                             const prevLabel = steps[ci - 1]?.label;
+
                             return (
                               <Fragment key={rl.id}>
                                 <tr>
@@ -2856,7 +2863,7 @@ export function ApprovalsPage() {
                                     <span
                                       className="status-pill"
                                       style={{
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         background: "var(--color-info-tint)",
                                         color: "var(--color-info)",
                                         fontWeight: 700,
@@ -2867,11 +2874,7 @@ export function ApprovalsPage() {
                                   <td style={{ fontWeight: 600 }}>
                                     {UNIT_NAMES[rl.unitCode] ?? rl.unitCode}
                                   </td>
-                                  <td
-                                    style={{
-                                      fontSize: 13,
-                                      color: "var(--color-text-muted)",
-                                    }}>
+                                  <td>
                                     {(
                                       rl as RealisasiKinerja & {
                                         bidang?: string;
@@ -2886,7 +2889,7 @@ export function ApprovalsPage() {
                                   </td>
                                   <td>
                                     <button
-                                      className="btn btn-ghost btn-sm"
+                                      className="btn btn-ghost btn-sm num"
                                       onClick={() =>
                                         setRealExpanded(
                                           realExpanded === rl.id ? null : rl.id,
@@ -2947,7 +2950,7 @@ export function ApprovalsPage() {
                                         color: "var(--color-info)",
                                         fontWeight: 600,
                                       }}>
-                                      Langkah {ci}/{stepCount - 1}:{" "}
+                                      Langkah {ci}/{stepCount}:{" "}
                                       {rr.stepLabel ?? steps[ci]?.label ?? "—"}
                                     </div>
                                   </td>
@@ -3000,64 +3003,36 @@ export function ApprovalsPage() {
                                             gap: "var(--space-2)",
                                             flexWrap: "wrap",
                                           }}>
-                                          <button
-                                            className="btn btn-sm"
+                                          <div
                                             style={{
-                                              background:
-                                                "var(--color-success)",
-                                              color: "#fff",
-                                            }}
-                                            disabled={realBusy}
-                                            onClick={() =>
-                                              handleRealReview(rl.id, "approve")
-                                            }>
-                                            <CheckCircle size={12} />{" "}
-                                            {isLastStep
-                                              ? "Setujui (Selesai → Bundle)"
-                                              : "Setujui & Teruskan"}
-                                          </button>
-                                          <button
-                                            className="btn btn-sm"
-                                            style={{
-                                              background: "var(--color-danger)",
-                                              color: "#fff",
-                                            }}
-                                            disabled={realBusy}
-                                            onClick={() =>
-                                              handleRealReview(
-                                                rl.id,
-                                                "reject",
-                                                "konseptor",
-                                              )
-                                            }
-                                            title="Masalah pada REALISASI → kembali ke penyusun (PIC)">
-                                            <XCircle size={12} /> Masalah
-                                            Realisasi → Konseptor
-                                          </button>
-                                          <button
-                                            className="btn btn-sm"
-                                            style={{
-                                              background: "var(--color-accent)",
-                                              color: "#fff",
-                                            }}
-                                            disabled={realBusy}
-                                            onClick={() =>
-                                              handleRealReview(
-                                                rl.id,
-                                                "reject",
-                                                "target",
-                                              )
-                                            }
-                                            title="Masalah pada TARGET (KM Sementara) → routing ke PIC REN untuk koreksi target">
-                                            <XCircle size={12} /> Masalah Target
-                                            → PIC REN
-                                          </button>
-                                          {ci >= 2 && (
+                                              display: "flex",
+                                              gap: "var(--space-2)",
+                                              flexDirection: "row",
+                                            }}>
                                             <button
                                               className="btn btn-sm"
                                               style={{
                                                 background:
-                                                  "var(--color-warning)",
+                                                  "var(--color-success)",
+                                                color: "#fff",
+                                              }}
+                                              disabled={realBusy}
+                                              onClick={() =>
+                                                handleRealReview(
+                                                  rl.id,
+                                                  "approve",
+                                                )
+                                              }>
+                                              <CheckCircle size={12} />{" "}
+                                              {isLastStep
+                                                ? "Setujui (Selesai → Bundle)"
+                                                : "Setujui & Teruskan"}
+                                            </button>
+                                            <button
+                                              className="btn btn-sm"
+                                              style={{
+                                                background:
+                                                  "var(--color-danger)",
                                                 color: "#fff",
                                               }}
                                               disabled={realBusy}
@@ -3065,23 +3040,85 @@ export function ApprovalsPage() {
                                                 handleRealReview(
                                                   rl.id,
                                                   "reject",
-                                                  "previous",
+                                                  "konseptor",
                                                 )
-                                              }>
-                                              <XCircle size={12} /> Kembalikan
-                                              ke{" "}
-                                              {prevLabel ??
-                                                "langkah sebelumnya"}
+                                              }
+                                              title="Masalah pada REALISASI → kembali ke penyusun (PIC)">
+                                              <XCircle size={12} /> Masalah
+                                              Realisasi → Konseptor
                                             </button>
+                                          </div>
+                                          {csi >= 2 ? (
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                flexDirection: "row",
+                                                gap: "var(--space-2)",
+                                              }}>
+                                              <button
+                                                className="btn btn-sm"
+                                                style={{
+                                                  background:
+                                                    "var(--color-warning)",
+                                                  color: "#fff",
+                                                }}
+                                                disabled={realBusy}
+                                                onClick={() =>
+                                                  handleRealReview(
+                                                    rl.id,
+                                                    "reject",
+                                                    "previous",
+                                                  )
+                                                }>
+                                                <XCircle size={12} /> Kembalikan
+                                                ke{" "}
+                                                {prevLabel ??
+                                                  "langkah sebelumnya"}
+                                              </button>
+                                              <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => {
+                                                  setRealTarget(null);
+                                                  setRealNote("");
+                                                }}>
+                                                Batal
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div
+                                              style={{
+                                                display: "flex",
+                                                gap: "var(--space-2)",
+                                              }}>
+                                              <button
+                                                className="btn btn-sm"
+                                                style={{
+                                                  background:
+                                                    "var(--color-accent)",
+                                                  color: "#fff",
+                                                }}
+                                                disabled={realBusy}
+                                                onClick={() =>
+                                                  handleRealReview(
+                                                    rl.id,
+                                                    "reject",
+                                                    "target",
+                                                  )
+                                                }
+                                                title="Masalah pada TARGET (KM Sementara) → routing ke PIC REN untuk koreksi target">
+                                                <XCircle size={12} /> Masalah
+                                                Target → PIC REN
+                                              </button>
+                                              <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => {
+                                                  setRealTarget(null);
+                                                  setRealNote("");
+                                                }}>
+                                                Batal
+                                              </button>
+                                            </div>
                                           )}
-                                          <button
-                                            className="btn btn-ghost btn-sm"
-                                            onClick={() => {
-                                              setRealTarget(null);
-                                              setRealNote("");
-                                            }}>
-                                            Batal
-                                          </button>
                                         </div>
                                       </div>
                                     ) : (
@@ -3090,6 +3127,7 @@ export function ApprovalsPage() {
                                           display: "flex",
                                           gap: "var(--space-2)",
                                           flexWrap: "wrap",
+                                          justifyContent: "center",
                                         }}>
                                         <button
                                           className="btn btn-secondary btn-sm"
@@ -3134,25 +3172,155 @@ export function ApprovalsPage() {
                                                 target?: unknown;
                                                 realisasi?: unknown;
                                               };
+
+                                              const subIndicators =
+                                                (
+                                                  it as {
+                                                    subIndicators?: unknown[];
+                                                  }
+                                                ).subIndicators ?? [];
+                                              const hasSubIndicators =
+                                                subIndicators.length > 0;
+                                              const countSubsIndicator =
+                                                subIndicators.length;
+
+          
                                               return (
-                                                <tr key={key}>
-                                                  <td>{idx + 1}</td>
-                                                  <td>{it.indikator ?? "—"}</td>
-                                                  <td>{it.satuan ?? "—"}</td>
-                                                  <td className="num">
-                                                    {String(it.bobot ?? "—")}
-                                                  </td>
-                                                  <td className="num">
-                                                    {String(it.target ?? "—")}
-                                                  </td>
-                                                  <td
-                                                    className="num"
-                                                    style={{ fontWeight: 700 }}>
-                                                    {String(
-                                                      it.realisasi ?? "—",
+                                                <>
+                                                  <tr key={key}>
+                                                    <td>{idx + 1}</td>
+                                                    <td>
+                                                      {it.indikator ?? "—"}
+                                                    </td>
+                                                    <td>{it.satuan ?? "—"}</td>
+                                                    <td className="num">
+                                                      {String(it.bobot ?? "—")}
+                                                    </td>
+                                                    <td className="num">
+                                                      {hasSubIndicators ? (
+                                                        <button
+                                                          className="btn btn-ghost btn-sm"
+                                                          onClick={() =>
+                                                            setSubIndicatorsExpandedRi(
+                                                              subIndicatorsExpandedRi ===
+                                                                idx
+                                                                ? null
+                                                                : idx,
+                                                            )
+                                                          }
+                                                          title="Lihat target tiap sub-indikator">
+                                                          {countSubsIndicator}{" "}
+                                                          sub{" "}
+                                                          <ChevronDown
+                                                            size={12}
+                                                            style={{
+                                                              transform:
+                                                                subIndicatorsExpandedRi ===
+                                                                idx
+                                                                  ? "rotate(180deg)"
+                                                                  : "none",
+                                                              transition:
+                                                                "transform .2s",
+                                                            }}
+                                                          />
+                                                        </button>
+                                                      ) : (
+                                                        String(it.target ?? "—")
+                                                      )}
+                                                    </td>
+                                                    <td
+                                                      className="num"
+                                                      style={{
+                                                        fontWeight: 700,
+                                                      }}>
+                                                      {String(
+                                                        it.realisasi ?? "—",
+                                                      )}
+                                                    </td>
+                                                  </tr>
+                                                  {hasSubIndicators &&
+                                                    subIndicatorsExpandedRi ===
+                                                      idx && (
+                                                      <tr>
+                                                        <td
+                                                          colSpan={7}
+                                                          style={{
+                                                            background:
+                                                              "var(--color-surface-2)",
+                                                            padding: 0,
+                                                          }}>
+                                                          <table
+                                                            className="data-table table-expanded"
+                                                            style={{
+                                                              margin: 0,
+                                                            }}>
+                                                            <thead>
+                                                              <tr>
+                                                                <th>
+                                                                  Sub-Indikator
+                                                                </th>
+                                                                <th>Formula</th>
+                                                                <th>
+                                                                  Polaritas
+                                                                </th>
+                                                                <th>Satuan</th>
+                                                                <th>Bobot</th>
+
+                                                                <th className="num">
+                                                                  Target Sem I
+                                                                </th>
+                                                                <th className="num">
+                                                                  Target Tahun
+                                                                  {new Date().getFullYear()}
+                                                                </th>
+                                                              </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                              {subIndicators.map(
+                                                                (
+                                                                  sub: any,
+                                                                  j: number,
+                                                                ) => (
+                                                                  <tr key={j}>
+                                                                    <td>
+                                                                      ↳{" "}
+                                                                      {sub.nama ||
+                                                                        `Sub ${j + 1}`}
+                                                                    </td>
+                                                                    <td>
+                                                                      {sub.formula ||
+                                                                        "—"}
+                                                                    </td>
+                                                                    <td className="num">
+                                                                      {sub.polaritas ||
+                                                                        "—"}
+                                                                    </td>
+                                                                    <td className="num">
+                                                                      {sub.satuan ||
+                                                                        "—"}
+                                                                    </td>
+                                                                    <td className="num">
+                                                                      {sub.bobot ||
+                                                                        "—"}
+                                                                    </td>
+                                                                    <td className="num">
+                                                                      {sub.target ||
+                                                                        "—"}
+                                                                    </td>
+
+                                                                    <td className="num">
+                                                                      {sub.target2 ||
+                                                                        "—"}
+                                                                    </td>
+                                                                  </tr>
+                                                                ),
+                                                              )}
+                                                            </tbody>
+                                                          </table>
+                                                        </td>
+                                                      </tr>
                                                     )}
-                                                  </td>
-                                                </tr>
+                                                </>
                                               );
                                             },
                                           )}
