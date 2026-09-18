@@ -560,10 +560,6 @@ export class InputKontrakService {
       );
     }
 
-    // Hapus juga KpiAssignment terkait (unit/bidang dokumen ini) untuk tiap masterKpiId yang
-    // ada di kpiItems — tanpa ini, KPI Master masih menganggap unit/bidang ini "di-assign",
-    // sehingga fanOut() (dipicu KpiMasterService.save() berikutnya) akan membuat ulang dokumen
-    // yang baru saja dihapus manual.
     const items = (
       Array.isArray(kontrak.kpiItems) ? kontrak.kpiItems : []
     ) as Record<string, unknown>[];
@@ -574,26 +570,50 @@ export class InputKontrakService {
           .filter((v): v is string => typeof v === "string"),
       ),
     ];
-    if (masterIds.length > 0) {
-      await this.prisma.kpiAssignment.deleteMany({
-        where: {
-          kpiMasterId: { in: masterIds },
-          unitCode: kontrak.unitCode,
-          bidang: kontrak.bidang,
+
+    await this.prisma.$transaction(async (tx) => {
+      if (masterIds.length > 0) {
+        await tx.kpiAssignment.deleteMany({
+          where: {
+            kpiMasterId: { in: masterIds },
+            unitCode: kontrak.unitCode,
+            bidang: kontrak.bidang,
+          },
+        });
+
+        // Cascade: any master left with zero assignments is orphaned — remove it too,
+        // so it doesn't linger in Definisi KPI with assignments: [].
+        const remaining = await tx.kpiAssignment.groupBy({
+          by: ["kpiMasterId"],
+          where: { kpiMasterId: { in: masterIds } },
+          _count: { _all: true },
+        });
+        const stillHasAssignments = new Set(
+          remaining.map((r) => r.kpiMasterId),
+        );
+        const orphanedMasterIds = masterIds.filter(
+          (mid) => !stillHasAssignments.has(mid),
+        );
+
+        if (orphanedMasterIds.length > 0) {
+          await tx.kpiMaster.deleteMany({
+            where: { id: { in: orphanedMasterIds } },
+          });
+        }
+      }
+
+      await tx.kontrakManajemen.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: {
+          actor: user.name,
+          userId: user.id,
+          action: "kontrak.delete",
+          entity: "KontrakManajemen",
+          targetId: id,
         },
       });
-    }
-
-    await this.prisma.kontrakManajemen.delete({ where: { id } });
-    await this.prisma.auditLog.create({
-      data: {
-        actor: user.name,
-        userId: user.id,
-        action: "kontrak.delete",
-        entity: "KontrakManajemen",
-        targetId: id,
-      },
     });
+
     await this.cache.del(`kontrak:${kontrak.unitCode}`);
     return { success: true };
   }
