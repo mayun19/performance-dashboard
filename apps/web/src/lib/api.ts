@@ -1,5 +1,9 @@
 import axios from "axios";
-import { KontrakManajemen, ReviseRejectedAssignmentInput, ReviseRejectedAssignmentResult } from "./types";
+import {
+  KontrakManajemen,
+  ReviseRejectedAssignmentInput,
+  ReviseRejectedAssignmentResult,
+} from "./types";
 
 const api = axios.create({
   baseURL: "/api",
@@ -393,6 +397,33 @@ export type SubIndicatorInput = {
   // Polaritas eksplisit sub ini (hanya berlaku sub bobot>0) — lihat catatan di kpi-master.service.ts.
   polaritas?: "positive" | "negative";
 };
+
+export type SaveMasterPayload = {
+  id?: string;
+  kmType?: "draft" | "final";
+  indikator: string;
+  formula?: string;
+  satuan?: string;
+  bobotKm?: string;
+  targetParent?: string;
+  assignments: KpiAssignmentInput[];
+  defaultCheckerIds?: string[];
+  defaultApproverId?: string;
+  aggregationMethod?: "weighted" | "sum";
+  subIndicators?: SubIndicatorInput[];
+  polaritas?: "positive" | "negative";
+};
+
+// Same shape, but the id comes from the URL path.
+export type UpdateMasterPayload = Omit<SaveMasterPayload, "id">;
+
+// Envelope returned by PUT /kpi-master/:id
+export type UpdateMasterResponse = {
+  success: boolean;
+  message: string;
+  data: unknown; // the master with assignments, plus docsAffected
+};
+
 export const kpiMaster = {
   list: (
     year?: string,
@@ -404,21 +435,10 @@ export const kpiMaster = {
       .get("/kpi-master", { params: { year, kmType, currentPage, perPage } })
       .then((r) => r.data),
   getById: (id: string) => api.get(`/kpi-master/${id}`).then((r) => r.data),
-  save: (dto: {
-    id?: string;
-    kmType?: "draft" | "final";
-    indikator: string;
-    formula?: string;
-    satuan?: string;
-    bobotKm?: string;
-    targetParent?: string;
-    assignments: KpiAssignmentInput[];
-    defaultCheckerIds?: string[];
-    defaultApproverId?: string;
-    aggregationMethod?: "weighted" | "sum";
-    subIndicators?: SubIndicatorInput[];
-    polaritas?: "positive" | "negative";
-  }) => api.post("/kpi-master/save", dto).then((r) => r.data),
+  save: (dto: SaveMasterPayload) =>
+    api.post("/kpi-master/save", dto).then((r) => r.data),
+  update: async (id: string, body: UpdateMasterPayload) =>
+    (await api.put(`/kpi-master/${id}`, body)).data,
   reviseRejectedAssignment: (
     assignmentId: string,
     patch: ReviseRejectedAssignmentInput,
