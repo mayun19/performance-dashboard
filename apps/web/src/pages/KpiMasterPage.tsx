@@ -324,6 +324,9 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [continuePrompt, setContinuePrompt] = useState(false);
+  const [savedMode, setSavedMode] = useState<"create" | "update" | "revise">(
+    "create",
+  );
   // Modal blocking — target belum diisi (assignment biasa ATAU sub-indikator komposit). Diisi
   // dengan daftar item yang bermasalah; null = modal tertutup.
   const [missingTargetItems, setMissingTargetItems] = useState<string[] | null>(
@@ -769,9 +772,11 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       if (editingId) {
         // PUT /kpi-master/:id: updates in place, no new version, no duplicate documents.
         await kpiMaster.update(editingId, payload);
+        setSavedMode("update");
       } else {
         // POST /kpi-master/save: creates a new KPI Master.
         await kpiMaster.save(payload);
+        setSavedMode("create");
       }
 
       resetForm();
@@ -901,6 +906,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       if (result.allDone) {
         // Seluruh dokumen yang direvisi di aksi ini sudah kembali draft — saatnya arahkan ke
         // Dokumen KM untuk dikirim ulang.
+        setSavedMode("revise");
         setContinuePrompt(true);
       } else {
         const pending = result.results.filter((r) => !r.allItemsRevised);
@@ -991,7 +997,13 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                   color: "var(--color-success)",
                 }}>
                 <CheckCircle size={20} />{" "}
-                <strong>KM Sementara tersimpan</strong>
+                <strong>
+                  {savedMode === "update"
+                    ? "KM Sementara berhasil diperbarui"
+                    : savedMode === "revise"
+                      ? "Revisi KM berhasil disimpan"
+                      : "KM Sementara tersimpan"}
+                </strong>
               </div>
               <p
                 style={{
@@ -2177,6 +2189,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
 
                     const isCompositeIndikator =
                       m.subIndicators && m.subIndicators.length > 0;
+
+                    const hasApproved = m.assignments.some(
+                      (a) => a.status === "approved",
+                    );
                     return (
                       <Fragment key={m.id}>
                         <tr>
@@ -2277,12 +2293,14 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                   justifyContent: "center",
                                   gap: 4,
                                 }}>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => handleEdit(m)}
-                                  title="Edit">
-                                  <Edit2 size={13} />
-                                </button>
+                                {!hasApproved && (
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => handleEdit(m)}
+                                    title="Edit">
+                                    <Edit2 size={13} />
+                                  </button>
+                                )}
 
                                 {!result && (
                                   <button
