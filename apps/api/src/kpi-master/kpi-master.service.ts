@@ -1936,6 +1936,7 @@ export class KpiMasterService {
   }
 
   // 409 if any document containing this KPI has left 'draft'.
+  // 409 only if a document containing this KPI is already approved.
   private async assertDocumentsEditable(
     db: Prisma.TransactionClient,
     masterId: string,
@@ -1943,24 +1944,20 @@ export class KpiMasterService {
     periodId: string,
   ) {
     const docs = await db.kontrakManajemen.findMany({
-      where: { periodId, kmType },
-      select: { unitCode: true, bidang: true, status: true, kpiItems: true },
+      where: { periodId, kmType, status: "approved" },
+      select: { unitCode: true, bidang: true, kpiItems: true },
     });
-    const locked = docs.filter(
+    const approved = docs.filter(
       (d) =>
-        d.status !== "draft" &&
         Array.isArray(d.kpiItems) &&
         (d.kpiItems as Record<string, unknown>[]).some(
           (it) => it?.["masterKpiId"] === masterId,
         ),
     );
-    if (locked.length > 0) {
+    if (approved.length > 0) {
       throw new ConflictException(
-        `KPI tidak dapat diperbarui karena dokumen KM berikut sudah diproses/dikembalikan: ` +
-          locked
-            .map((d) => `${d.unitCode} — ${d.bidang} (${d.status})`)
-            .join(", ") +
-          `. Gunakan revisi untuk dokumen berstatus 'Dikembalikan'.`,
+        `KPI tidak dapat diperbarui karena sudah disetujui pada: ` +
+          approved.map((d) => `${d.unitCode} — ${d.bidang}`).join(", "),
       );
     }
   }
@@ -2385,7 +2382,12 @@ export class KpiMasterService {
         const fresh = await tx.kpiAssignment.findMany({
           where: { kpiMasterId: id },
         });
-        const fan = await this.fanOut(master, fresh, period.id, tx);
+        const fan = await this.fanOut(master, fresh, period.id, tx, [
+          "draft",
+          "submitted",
+          "ready",
+          "rejected",
+        ]);
 
         await tx.auditLog.create({
           data: {
@@ -2477,7 +2479,8 @@ export class KpiMasterService {
       subIndicatorTargets?: Prisma.JsonValue | null;
     }>,
     periodId: string,
-    db: Prisma.TransactionClient = this.prisma, // ← new
+    db: Prisma.TransactionClient = this.prisma,
+    editableStatuses: string[] = ["draft"],
   ): Promise<{ docsAffected: number }> {
     const subIndicatorsTemplate = Array.isArray(master.subIndicators)
       ? (master.subIndicators as unknown as SubIndicatorInput[])
@@ -2489,10 +2492,17 @@ export class KpiMasterService {
 
     // 1. Remove this KPI from draft documents whose (unit,bidang) is no longer assigned.
     const draftKms = await db.kontrakManajemen.findMany({
-      where: { periodId, kmType: master.kmType, status: "draft" },
+      where: {
+        periodId,
+        kmType: master.kmType,
+        status: { in: editableStatuses },
+      },
     });
     for (const km of draftKms) {
-      const items = (Array.isArray(km.kpiItems) ? km.kpiItems : []) as Record<string, unknown>[];
+      const items = (Array.isArray(km.kpiItems) ? km.kpiItems : []) as Record<
+        string,
+        unknown
+      >[];
       const hasMaster = items.some((it) => it["masterKpiId"] === master.id);
       const key = `${km.unitCode}||${km.bidang}`;
       if (hasMaster && !assignedKeys.has(key)) {
@@ -2539,7 +2549,7 @@ export class KpiMasterService {
           unitCode: a.unitCode,
           bidang: a.bidang,
           kmType: master.kmType,
-          status: "draft",
+          status: { in: editableStatuses },
         },
         orderBy: { updatedAt: "desc" },
       });

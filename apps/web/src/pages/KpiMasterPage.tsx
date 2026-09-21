@@ -2189,6 +2189,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
 
                     const isCompositeIndikator =
                       m.subIndicators && m.subIndicators.length > 0;
+
+                    const hasApproved = m.assignments.some(
+                      (a) => a.status === "approved",
+                    );
                     return (
                       <Fragment key={m.id}>
                         <tr>
@@ -2289,12 +2293,14 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                   justifyContent: "center",
                                   gap: 4,
                                 }}>
-                                <button
-                                  className="btn btn-ghost btn-sm"
-                                  onClick={() => handleEdit(m)}
-                                  title="Edit">
-                                  <Edit2 size={13} />
-                                </button>
+                                {!hasApproved && (
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => handleEdit(m)}
+                                    title="Edit">
+                                    <Edit2 size={13} />
+                                  </button>
+                                )}
 
                                 {!result && (
                                   <button
