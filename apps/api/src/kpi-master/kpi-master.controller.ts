@@ -7,6 +7,9 @@ import {
   Param,
   Query,
   UseGuards,
+  Put,
+  HttpCode,
+  HttpStatus,
 } from "@nestjs/common";
 import { KpiMasterService } from "./kpi-master.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -60,8 +63,8 @@ class SubIndicatorTargetOverrideDto {
   @IsOptional() @IsString() target2?: string;
 }
 
-class SaveMasterDto {
-  @IsOptional() @IsString() id?: string;
+// Shared payload fields for create/save and update.
+class MasterFieldsDto {
   @IsOptional() @IsIn(["draft", "final"]) kmType?: string;
   @IsString() indikator!: string;
   @IsOptional() @IsString() formula?: string;
@@ -84,9 +87,19 @@ class SaveMasterDto {
   @ValidateNested({ each: true })
   @Type(() => SubIndicatorDto)
   subIndicators?: SubIndicatorDto[];
-  // Polaritas indikator induk non-komposit ('positive'|'negative') — lihat catatan di service.
+  // Polaritas indikator induk non-komposit ('positive'|'negative').
   @IsOptional() @IsIn(["positive", "negative"]) polaritas?: string;
 }
+
+// Existing endpoint (POST /kpi-master/save): base + optional id.
+class SaveMasterDto extends MasterFieldsDto {
+  @IsOptional() @IsString() id?: string;
+}
+
+// New endpoint (PUT /kpi-master/:id): base only. The id comes from the URL, so a body `id`
+// is rejected if your ValidationPipe uses `forbidNonWhitelisted: true`, and silently
+// stripped if it uses `whitelist: true`.
+class UpdateMasterDto extends MasterFieldsDto {}
 
 class ConsolidationReviewDto {
   @IsString() kpiMasterId!: string;
@@ -216,6 +229,17 @@ export class KpiMasterController {
   @Post("save")
   save(@CurrentUser() user: User, @Body() dto: SaveMasterDto) {
     return this.svc.save(user, dto);
+  }
+
+  @Put(":id")
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @CurrentUser() user: User,
+    @Param("id") id: string,
+    @Body() dto: UpdateMasterDto,
+  ) {
+    const data = await this.svc.update(user, id, dto);
+    return { success: true, message: "KPI Master berhasil diperbarui", data };
   }
 
   // Revisi cepat 1 assignment yang dokumen KM-nya baru saja ditolak — lihat catatan

@@ -4,6 +4,7 @@ import type {
   ReviewerSlots,
   SubIndicatorInput,
   SubIndicatorTargetOverride,
+  UpdateMasterPayload,
 } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { usePeriod } from "../context/PeriodContext";
@@ -750,8 +751,9 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
         // upstream, so `assignments` state keeps carrying them for the table's own bookkeeping.
         ({ id: _id, status: _status, ...rest }) => rest,
       );
-      await kpiMaster.save({
-        id: editingId ?? undefined,
+
+      // Same payload for create and update. On update the id travels in the URL, not the body.
+      const payload: UpdateMasterPayload = {
         kmType,
         aggregationMethod,
         indikator: indikator.trim(),
@@ -762,7 +764,16 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
         assignments: assignmentsToSave,
         subIndicators: isComposite ? subIndicators : undefined,
         polaritas,
-      });
+      };
+
+      if (editingId) {
+        // PUT /kpi-master/:id: updates in place, no new version, no duplicate documents.
+        await kpiMaster.update(editingId, payload);
+      } else {
+        // POST /kpi-master/save: creates a new KPI Master.
+        await kpiMaster.save(payload);
+      }
+
       resetForm();
       load();
       setContinuePrompt(true);
@@ -1977,54 +1988,57 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {subIndicators.map((si, j) => (
-                                        <tr key={j}>
-                                          <td
-                                            style={{
-                                              color: "var(--color-text-muted)",
-                                            }}>
-                                            ↳ {si.nama || `Sub ${j + 1}`}
-                                          </td>
-                                          <td>
-                                            <input
-                                              className="form-input form-input-sm"
-                                              placeholder={si.target || "—"}
-                                              value={
-                                                a.subIndicatorTargets?.[j]
-                                                  ?.target ?? ""
-                                              }
-                                              disabled={isLocked}
-                                              onChange={(e) =>
-                                                updateAssignmentSubTarget(
-                                                  i,
-                                                  j,
-                                                  "target",
-                                                  e.target.value,
-                                                )
-                                              }
-                                            />
-                                          </td>
-                                          <td>
-                                            <input
-                                              className="form-input form-input-sm"
-                                              placeholder={si.target2 || "—"}
-                                              value={
-                                                a.subIndicatorTargets?.[j]
-                                                  ?.target2 ?? ""
-                                              }
-                                              disabled={isLocked}
-                                              onChange={(e) =>
-                                                updateAssignmentSubTarget(
-                                                  i,
-                                                  j,
-                                                  "target2",
-                                                  e.target.value,
-                                                )
-                                              }
-                                            />
-                                          </td>
-                                        </tr>
-                                      ))}
+                                      {subIndicators.map((si, j) => {
+                                        return (
+                                          <tr key={j}>
+                                            <td
+                                              style={{
+                                                color:
+                                                  "var(--color-text-muted)",
+                                              }}>
+                                              ↳ {si.nama || `Sub ${j + 1}`}
+                                            </td>
+                                            <td>
+                                              <input
+                                                className="form-input form-input-sm"
+                                                placeholder={si.target || "—"}
+                                                value={
+                                                  a.subIndicatorTargets?.[j]
+                                                    ?.target ?? ""
+                                                }
+                                                disabled={isLocked}
+                                                onChange={(e) =>
+                                                  updateAssignmentSubTarget(
+                                                    i,
+                                                    j,
+                                                    "target",
+                                                    e.target.value,
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td>
+                                              <input
+                                                className="form-input form-input-sm"
+                                                placeholder={si.target2 || "—"}
+                                                value={
+                                                  a.subIndicatorTargets?.[j]
+                                                    ?.target2 ?? ""
+                                                }
+                                                disabled={isLocked}
+                                                onChange={(e) =>
+                                                  updateAssignmentSubTarget(
+                                                    i,
+                                                    j,
+                                                    "target2",
+                                                    e.target.value,
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
                                     </tbody>
                                   </table>
                                   <p
