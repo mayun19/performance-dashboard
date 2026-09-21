@@ -1989,7 +1989,6 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                                     </thead>
                                     <tbody>
                                       {subIndicators.map((si, j) => {
-                                        console.log("data si", si);
                                         return (
                                           <tr key={j}>
                                             <td
