@@ -2190,7 +2190,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                     const isCompositeIndikator =
                       m.subIndicators && m.subIndicators.length > 0;
 
-                    const hasApproved = m.assignments.some(
+                    const hasApproved = m.assignments.every(
                       (a) => a.status === "approved",
                     );
                     return (
