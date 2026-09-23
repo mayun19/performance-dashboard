@@ -56,29 +56,17 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const token = req.cookies?.["refresh_token"] as string | undefined;
+    if (!token) throw new UnauthorizedException();
 
-    // Safety net: whatever AuthService.refresh() does internally (verify
-    // JWT, look up a stored/hashed token, rotate it), a missing/invalid/
-    // expired refresh token is an auth failure, never a server error. This
-    // is what's most likely turning into your 500 today — find and fix the
-    // actual throw inside AuthService.refresh() too; this is a backstop,
-    // not a substitute for that.
-    if (!token) {
-      throw new UnauthorizedException();
-    }
-
-    let result;
+    let result: Awaited<ReturnType<AuthService["refresh"]>>;
     try {
       result = await this.auth.refresh(token);
     } catch (err) {
       if (err instanceof UnauthorizedException) throw err;
-      // Any other error (JWT verify error, Prisma error, etc.) still means
-      // "this refresh attempt failed" from the client's point of view —
-      // normalize it to 401 instead of letting it become a 500.
       throw new UnauthorizedException();
     }
 
-    const { accessToken, refreshToken, user } = await this.auth.refresh(token);
+    const { accessToken, refreshToken, user } = result;
     res.cookie("access_token", accessToken, {
       ...COOKIE_OPTS,
       maxAge: 15 * 60 * 1000,
@@ -95,7 +83,7 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.["refresh_token"] as string;
-        if (token) {
+    if (token) {
       // Logging out with an already-invalid/expired token should still
       // succeed from the client's perspective — it's ending a session that,
       // one way or another, is now over. Don't let a lookup failure here

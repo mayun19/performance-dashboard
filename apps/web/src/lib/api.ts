@@ -11,7 +11,10 @@ const api = axios.create({
 });
 
 let refreshing: Promise<void> | null = null;
-const queue: Array<() => void> = [];
+let queue: Array<{
+  resolve: () => void;
+  reject: (reason?: unknown) => void;
+}> = [];
 
 // Auth endpoints that should never trigger the refresh-and-retry logic
 const AUTH_ENDPOINTS = [
@@ -23,35 +26,16 @@ const AUTH_ENDPOINTS = [
 
 api.interceptors.response.use(
   (r) => r,
-  async (err) => {
-    const original = err.config;
-    const url: string = original?.url ?? "";
-
-    // Skip refresh logic for auth endpoints — just let them fail
-    if (AUTH_ENDPOINTS.some((e) => url.includes(e))) {
-      return Promise.reject(err);
-    }
-
-    if (err.response?.status === 401 && !original._retry) {
-      original._retry = true;
-      if (!refreshing) {
-        refreshing = api
-          .post("/auth/refresh")
-          .then(() => {
-            queue.forEach((r) => r());
-            queue.length = 0;
-          })
-          .catch(() => {
-            queue.length = 0;
-            // Dispatch an event so the app can react without a hard reload
-            window.dispatchEvent(new CustomEvent("auth:expired"));
-          })
-          .finally(() => {
-            refreshing = null;
-          });
-      }
-      await new Promise<void>((res) => queue.push(res));
-      return api(original);
+  (err) => {
+    const url: string = err.config?.url ?? "";
+    if (
+      err.response?.status === 401 &&
+      !AUTH_ENDPOINTS.some((e) => url.includes(e))
+    ) {
+      // No reactive refresh-and-retry. Session renewal is handled proactively
+      // by the scheduler (see lib/authScheduler.ts), on a timer — never as a
+      // side effect of a request happening to fail on page load or otherwise.
+      window.dispatchEvent(new CustomEvent("auth:expired"));
     }
     return Promise.reject(err);
   },
@@ -62,6 +46,7 @@ export const auth = {
     api.post("/auth/login", { email, password }).then((r) => r.data),
   logout: () => api.post("/auth/logout"),
   me: () => api.get("/auth/me").then((r) => r.data),
+  refresh: () => api.post("/auth/refresh").then((r) => r.data),
 };
 
 export const meta = {
