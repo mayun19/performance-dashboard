@@ -937,6 +937,10 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const hasRejectedAssignment = rejectedAssignmentIndex >= 0;
   const hasRejectedRow = assignments.some((x) => x.status === "rejected");
 
+  const formCallbackRef = (node: HTMLDivElement | null) => {
+    if (node) node.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   if (loading) return <SkeletonTable rows={4} cols={5} />;
   if (error && totalDataMaster === 0 && !showForm)
     return <ErrorState title="Gagal memuat data" message={error} />;
@@ -1117,6 +1121,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       {/* Form */}
       {canAuthor && showForm && (
         <div
+          ref={formCallbackRef}
           className="card"
           style={{
             marginBottom: "var(--space-6)",
