@@ -15,6 +15,8 @@ import {
   APPROVER_ROLES,
   RPC_BIDANG,
   stepRecipientWhere,
+  KM_STATUS_PRIORITY,
+  resolveKmItemStatus,
 } from "../common/workflow-steps";
 
 // Slot alur reviewer per-assignment (Kombinasi A+B): peran + opsi override orang.
@@ -228,16 +230,6 @@ export class KpiMasterService {
     } as const;
     if (masters.length === 0) return masters;
 
-    const STATUS_PRIORITY: Record<string, number> = {
-      rejected: 0,
-      revised: 0,
-      submitted: 1,
-      ready: 2,
-      approved: 3,
-      draft: 4,
-      none: 5,
-    };
-
     // ini — dibatasi hops utk jaga-jaga siklus data yang tak terduga.
     const ancestorIds = new Set<string>();
     {
@@ -352,14 +344,8 @@ export class KpiMasterService {
 
         // Gating per-item hanya relevan utk dokumen yang sedang dalam alur revisi
         // ('rejected'/'revised') — status lain berlaku apa adanya ke semua item.
-        let itemStatus = doc.status;
-        if (doc.status === "rejected" || doc.status === "revised") {
-          const revisedAt = it["revisedAt"];
-          const isRevised =
-            typeof revisedAt === "string" &&
-            new Date(revisedAt).getTime() > reviewedAtMs;
-          itemStatus = isRevised ? "draft" : "rejected";
-        }
+
+        const itemStatus = resolveKmItemStatus(doc, it);
 
         const key = `${masterId}|${doc.periodId}|${doc.kmType}|${doc.unitCode}|${doc.bidang}`;
         const candidate: PrimaryDocInfo = {
@@ -368,10 +354,10 @@ export class KpiMasterService {
           reviewer: stepLabel,
           updatedAt: doc.updatedAt,
         };
-        const candidatePriority = STATUS_PRIORITY[itemStatus] ?? 99;
+        const candidatePriority = KM_STATUS_PRIORITY[itemStatus] ?? 99;
         const existing = infoByMasterKey.get(key);
         const currentPriority = existing
-          ? (STATUS_PRIORITY[existing.status] ?? 99)
+          ? (KM_STATUS_PRIORITY[existing.status] ?? 99)
           : Infinity;
         // Prioritas lebih rendah menang; seri prioritas → dokumen ter-update lebih baru menang.
         // Perbandingan eksplisit (bukan cuma andalkan orderBy) supaya urutan iterasi docs tak
@@ -405,27 +391,38 @@ export class KpiMasterService {
     return masters.map((m) => ({
       ...m,
       assignments: m.assignments.map((a) => {
+        // `own` = status from the document that actually belongs to this assignment's
+        // current period — EXACTLY what input-kontrak/list shows for that document.
+        // This is what we report as `status`; it must never be overwritten by history.
         const own = getInfo(m.id, a.unitCode, a.bidang) ?? emptyInfo;
-        // Susuri rantai versi lama mencari status paling mendesak utk (unitCode,bidang)
-        // yang sama — assignment versi baru yang tampak 'draft' bersih semestinya tetap
-        // menampilkan isu yang belum selesai dari versi sebelumnya (mis. 'rejected').
-        let best: AssignmentDocInfo = own;
+
+        // Walk prior versions ONLY to surface an unresolved issue as a separate signal
+        // (`historicalIssue`) — never to replace the current, real status.
+        let historicalIssue: AssignmentDocInfo | null = null;
         let ancestorId = m.previousVersionId ?? null;
         let hops = 0;
         while (ancestorId && hops < 20) {
           const ancInfo = getInfo(ancestorId, a.unitCode, a.bidang);
+          const ancPriority = ancInfo
+            ? (KM_STATUS_PRIORITY[ancInfo.status] ?? 99)
+            : 99;
+          const ownPriority = KM_STATUS_PRIORITY[own.status] ?? 99;
+          const bestPriority = historicalIssue
+            ? (KM_STATUS_PRIORITY[historicalIssue.status] ?? 99)
+            : Infinity;
           if (
             ancInfo &&
-            (STATUS_PRIORITY[ancInfo.status] ?? 99) <
-              (STATUS_PRIORITY[best.status] ?? 99)
+            ancPriority < ownPriority &&
+            ancPriority < bestPriority
           ) {
-            best = ancInfo;
+            historicalIssue = ancInfo;
           }
           const anc = masterById.get(ancestorId);
           ancestorId = anc?.previousVersionId ?? null;
           hops++;
         }
-        return { ...a, ...best };
+
+        return { ...a, ...own, historicalIssue };
       }),
     }));
   }

@@ -380,3 +380,32 @@ export interface KpiItemForNotif {
   indikator?: string;
   masterKpiId?: string;
 }
+
+// ===== KM item/document status resolution =====
+// Single source of truth used by BOTH KpiMasterService (status per assignment) and
+// InputKontrakService (status per item in a document), so the two endpoints can never
+// disagree about what "status" means for the same KPI item.
+export const KM_STATUS_PRIORITY: Record<string, number> = {
+  rejected: 0,
+  revised: 0,
+  submitted: 1,
+  ready: 2,
+  approved: 3,
+  draft: 4,
+  none: 5,
+};
+
+export function resolveKmItemStatus(
+  doc: { status: string; reviewedAt: Date | null },
+  item: Record<string, unknown>,
+): string {
+  // Gating per-item hanya relevan utk dokumen yang sedang dlm alur revisi — status lain
+  // berlaku apa adanya ke semua item di dokumen tsb.
+  if (doc.status !== "rejected" && doc.status !== "revised") return doc.status;
+  const reviewedAtMs = doc.reviewedAt ? doc.reviewedAt.getTime() : 0;
+  const revisedAt = item["revisedAt"];
+  const isRevised =
+    typeof revisedAt === "string" &&
+    new Date(revisedAt).getTime() > reviewedAtMs;
+  return isRevised ? "draft" : "rejected";
+}

@@ -937,6 +937,11 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const hasRejectedAssignment = rejectedAssignmentIndex >= 0;
   const hasRejectedRow = assignments.some((x) => x.status === "rejected");
 
+  //handle scroll to form when edit or add new
+  const formCallbackRef = (node: HTMLDivElement | null) => {
+    if (node) node.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   if (loading) return <SkeletonTable rows={4} cols={5} />;
   if (error && totalDataMaster === 0 && !showForm)
     return <ErrorState title="Gagal memuat data" message={error} />;
@@ -1117,6 +1122,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
       {/* Form */}
       {canAuthor && showForm && (
         <div
+          ref={formCallbackRef}
           className="card"
           style={{
             marginBottom: "var(--space-6)",
@@ -2190,7 +2196,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
                     const isCompositeIndikator =
                       m.subIndicators && m.subIndicators.length > 0;
 
-                    const hasApproved = m.assignments.some(
+                    const hasApproved = m.assignments.every(
                       (a) => a.status === "approved",
                     );
                     return (
