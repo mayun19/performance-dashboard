@@ -937,6 +937,7 @@ function DefinisiKpiTab({ onGoToDokumen }: { onGoToDokumen: () => void }) {
   const hasRejectedAssignment = rejectedAssignmentIndex >= 0;
   const hasRejectedRow = assignments.some((x) => x.status === "rejected");
 
+  //handle scroll to form when edit or add new
   const formCallbackRef = (node: HTMLDivElement | null) => {
     if (node) node.scrollIntoView({ behavior: "smooth", block: "start" });
   };
